@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# LeadHunter Banco de Dados Local e Arquivos Temporários
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Exports gerados (mantém apenas o .gitkeep)
+exports/*
+!exports/.gitkeep
+
+# Credenciais e segredos locais (mantém apenas .gitkeep e exemplo)
+credentials/*
+!credentials/.gitkeep
+!credentials/credentials.example.json
+
+# Logs
+*.log
+errors.log
+
+# Scripts de teste/scratch temporários
+test*.py
+create_v4.py
+update_flow.py
+update_v4.py
+
+# IDE / Sistema Operacional
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

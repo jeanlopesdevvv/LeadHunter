@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="escuro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeadHunter — Prospecção Inteligente de Leads</title>
+  <meta name="description" content="Extraia leads do Google Maps de forma profissional. Nome, telefone, email, redes sociais e muito mais." />
+  <link rel="icon" type="image/png" href="/static/favicon.png" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- UX 7: data-theme inicial definido como fallback; o servidor sobrescreve via script inline injetado -->
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ═══════════════════════════════════════
+       TOPBAR
+  ═══════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <img src="/static/logo.png" class="logo-icon-img" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover; box-shadow: var(--shadow); background: transparent; border: 2px solid rgba(255,255,255,0.1);" alt="LeadHunter" />
+      <span class="logo-text">lead<span>hunter</span></span>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="server-status">
+        <div class="dot"></div>
+        <span>Servidor Online</span>
+      </div>
+
+      <button class="btn btn-secondary" id="btn-tema" title="Alternar tema" style="padding: 6px 12px; font-size: 16px;">
+        🌙
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════
+       SIDEBAR
+  ═══════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="nav-label">Menu</div>
+
+    <div class="nav-item active" data-page="busca">
+      <span class="icon">🔍</span>
+      <span>Nova Busca</span>
+    </div>
+
+    <!-- UX 8: título dinâmico via span#nav-resultados-label -->
+    <div class="nav-item" data-page="resultados">
+      <span class="icon">📋</span>
+      <span id="nav-resultados-label">Resultados</span>
+      <span id="results-badge" style="display:none; margin-left:auto; background:var(--brand); color:#fff; border-radius:20px; padding:1px 7px; font-size:11px; font-weight:700;"></span>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-label">Dados</div>
+
+    <div class="nav-item" data-page="historico">
+      <span class="icon">🕐</span>
+      <span>Histórico</span>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-label">Sistema</div>
+
+    <div class="nav-item" data-page="configuracoes">
+      <span class="icon">⚙️</span>
+      <span>Configurações</span>
+    </div>
+
+    <div class="nav-item" data-page="ajuda">
+      <span class="icon">❓</span>
+      <span>Ajuda</span>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════
+       CONTEÚDO PRINCIPAL
+  ═══════════════════════════════════════ -->
+  <main class="main-content">
+
+    <!-- ─── PÁGINA: BUSCA ─── -->
+    <section class="page active" id="page-busca">
+      <div class="page-header">
+        <h1 class="page-title">🎯 Nova Busca de Leads</h1>
+        <p class="page-subtitle">Configure os parâmetros e extraia leads do Google Maps em tempo real</p>
+      </div>
+
+      <!-- Formulário -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-title">⚙️ Parâmetros da Busca</div>
+
+        <div class="search-grid">
+          <div class="form-group">
+            <label class="form-label" for="input-tipo">
+              Tipo de Negócio
+              <span style="font-size:11px; color:var(--text-muted); font-weight:400; margin-left:6px;">
+                (vários termos = mais leads)
+              </span>
+            </label>
+            <textarea
+              class="form-input"
+              id="input-tipo"
+              rows="3"
+              placeholder="Lava Jato&#10;Car Wash&#10;Estética Automotiva"
+              autocomplete="off"
+              style="resize:vertical; min-height:72px; font-family:inherit;"
+            ></textarea>
+          </div>
+
+          <!-- UX 10: textarea para múltiplas cidades (uma por linha) -->
+          <div class="form-group">
+            <label class="form-label" for="input-cidade">
+              Cidade / Região
+              <span style="font-size:11px; color:var(--text-muted); font-weight:400; margin-left:6px;">
+                (pode digitar várias, uma por linha)
+              </span>
+            </label>
+            <textarea
+              class="form-input"
+              id="input-cidade"
+              rows="3"
+              placeholder="Ex: Belo Horizonte - MG&#10;São Paulo - SP&#10;Contagem - MG"
+              autocomplete="off"
+              style="resize:vertical; min-height:72px; font-family:inherit;"
+            ></textarea>
+          </div>
+
+          <div class="form-group slider-container">
+            <div class="slider-header">
+              <label class="form-label">Número máximo de resultados</label>
+              <span class="slider-value" id="slider-label">500</span>
+            </div>
+            <input
+              type="range"
+              id="slider-max"
+              min="10"
+              max="1000"
+              step="10"
+              value="500"
+            />
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
+              <span>10</span><span>500</span><span>1000</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature 6: Toggle "Modo Rápido" -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px; background:var(--bg-dark); border-radius:var(--radius-sm);">
+          <label class="toggle">
+            <input type="checkbox" id="toggle-modo-rapido" />
+            <div class="toggle-track"></div>
+          </label>
+          <div>
+            <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px;">
+              ⚡ Modo Rápido
+              <span id="badge-rapido" class="badge-rapido" style="display:none;">RÁPIDO</span>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted);">Não visita sites (sem email/redes sociais), mas 3–5× mais veloz</div>
+          </div>
+        </div>
+
+        <!-- Botões de controle -->
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-primary btn-lg" id="btn-buscar">
+            🔍 Iniciar Busca
+          </button>
+          <!-- UX 5: botão Parar com estado "Parando..." -->
+          <button class="btn btn-danger" id="btn-parar" style="display:none; flex:0; white-space:nowrap;">
+            ⏹ Parar Busca
+          </button>
+        </div>
+      </div>
+
+      <!-- Progresso em tempo real -->
+      <div class="card progress-section" id="progress-section">
+        <div class="card-title">⚡ Busca em Andamento</div>
+
+        <div class="progress-header">
+          <div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Leads encontrados</div>
+            <div class="lead-counter" id="lead-counter">0</div>
+          </div>
+          <div style="text-align:right;">
+            <!-- Feature 4: Contador de duplicatas -->
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;" id="duplicados-info" style="display:none;">
+              <span id="duplicados-count">0</span> duplicados ignorados
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Progresso</div>
+            <div style="font-size:20px; font-weight:700;" id="progress-pct">0%</div>
+          </div>
+        </div>
+
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progress-bar" style="width: 0%;"></div>
+        </div>
+
+        <div class="progress-log" id="progress-log">Aguardando início...</div>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: RESULTADOS ─── -->
+    <section class="page" id="page-resultados">
+      <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h1 class="page-title">📋 Resultados</h1>
+          <p class="page-subtitle" id="results-subtitle">Nenhuma busca realizada ainda</p>
+        </div>
+        <!-- UX 11: Botão "Nova busca" -->
+        <button class="btn btn-secondary" id="btn-nova-busca" style="white-space:nowrap; align-self:center;">
+          🔍 Nova Busca
+        </button>
+      </div>
+
+      <!-- Barra de exportação -->
+      <div class="export-bar">
+        <span class="export-count">
+          <strong id="export-total">0</strong> leads disponíveis
+          <span id="export-selected-info" style="display:none;"> · <strong id="export-selected-count">0</strong> selecionados</span>
+        </span>
+        <button class="btn btn-secondary" id="btn-select-all" style="font-size:12px; padding:6px 12px;">
+          ☐ Selecionar Todos
+        </button>
+        <!-- UX 4: texto do botão muda com seleção ativa -->
+        <button class="btn btn-secondary" id="btn-export-csv" style="font-size:12px; padding:6px 12px;">
+          ⬇️ Exportar CSV
+        </button>
+        <button class="btn btn-secondary" id="btn-export-excel" style="font-size:12px; padding:6px 12px; color: #107c41; border-color: #3bb273;">
+          📗 Exportar Excel
+        </button>
+        <button class="btn btn-primary" id="btn-export-sheets" style="font-size:12px; padding:6px 12px;">
+          📊 Google Sheets
+        </button>
+      </div>
+
+      <!-- Filtro da tabela -->
+      <div class="table-toolbar">
+        <input
+          type="text"
+          class="search-filter"
+          id="table-filter"
+          placeholder="🔍 Filtrar por nome, telefone, cidade..."
+        />
+        <button class="btn btn-secondary" id="btn-cols" style="font-size:12px; padding:7px 12px; white-space:nowrap;">
+          👁 Colunas
+        </button>
+      </div>
+
+      <!-- Tabela de leads -->
+      <div class="table-wrapper">
+        <table class="leads-table" id="leads-table">
+          <thead id="table-head">
+            <tr>
+              <th style="width:40px;"><input type="checkbox" id="check-all" /></th>
+              <th data-col="nome">Nome <span class="sort-icon">↕</span></th>
+              <th data-col="telefone">Telefone <span class="sort-icon">↕</span></th>
+              <th data-col="email">E-mail <span class="sort-icon">↕</span></th>
+              <th data-col="site">Site <span class="sort-icon">↕</span></th>
+              <th data-col="social">Redes Sociais</th>
+              <th data-col="avaliacao_nota">Avaliação <span class="sort-icon">↕</span></th>
+              <th data-col="categoria">Categoria <span class="sort-icon">↕</span></th>
+              <!-- UX 1: coluna endereço com classe para CSS ellipsis -->
+              <th data-col="endereco" class="col-endereco">Endereço <span class="sort-icon">↕</span></th>
+              <!-- Feature 1: coluna Status -->
+              <th data-col="status_contato">Status <span class="sort-icon">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr>
+              <td colspan="10">
+                <div class="empty-table">
+                  <div class="empty-icon">🎯</div>
+                  <div>Realize uma busca para ver os leads aqui</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Perf 4: Controles de paginação -->
+      <div class="paginacao" id="paginacao" style="display:none;">
+        <button class="btn btn-secondary" id="btn-pag-anterior" style="padding:6px 14px; font-size:12px;">
+          ← Anterior
+        </button>
+        <span id="pag-info" style="font-size:13px; color:var(--text-muted); padding:0 12px;">Página 1 de 1</span>
+        <button class="btn btn-secondary" id="btn-pag-proximo" style="padding:6px 14px; font-size:12px;">
+          Próximo →
+        </button>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: HISTÓRICO ─── -->
+    <section class="page" id="page-historico">
+      <div class="page-header">
+        <h1 class="page-title">🕐 Histórico de Buscas</h1>
+        <p class="page-subtitle">Últimas 20 buscas realizadas</p>
+      </div>
+
+      <!-- Feature 5: Cards de estatísticas no topo -->
+      <div id="stats-cards" class="stats-grid" style="margin-bottom:24px;">
+        <div class="stat-card" id="stat-total-buscas">
+          <div class="stat-icon">🔍</div>
+          <div class="stat-valor" id="stat-val-buscas">—</div>
+          <div class="stat-label">Total de Buscas</div>
+        </div>
+        <div class="stat-card" id="stat-total-leads">
+          <div class="stat-icon">👥</div>
+          <div class="stat-valor" id="stat-val-leads">—</div>
+          <div class="stat-label">Leads Coletados</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📧</div>
+          <div class="stat-valor" id="stat-val-email">—</div>
+          <div class="stat-label">Com E-mail</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📱</div>
+          <div class="stat-valor" id="stat-val-social">—</div>
+          <div class="stat-label">Com Redes Sociais</div>
+        </div>
+      </div>
+
+      <div class="history-list" id="history-list">
+        <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+          <div style="font-size:48px; margin-bottom:12px; opacity:0.4;">📂</div>
+          <div>Nenhuma busca no histórico ainda</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: CONFIGURAÇÕES ─── -->
+    <section class="page" id="page-configuracoes">
+      <div class="page-header">
+        <h1 class="page-title">⚙️ Configurações</h1>
+        <p class="page-subtitle">Personalize campos, comportamento e exportação</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+
+        <!-- Campos de extração -->
+        <div class="card">
+          <div class="card-title">📋 Campos de Extração</div>
+          <div class="fields-list" id="fields-list">
+            Carregando...
+          </div>
+        </div>
+
+        <!-- Configurações do scraper -->
+        <div class="card">
+          <div class="card-title">🕷️ Comportamento do Scraper</div>
+
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label">Delay mínimo entre leads (segundos)</label>
+            <input class="form-input" type="number" id="cfg-delay-min" value="1.5" min="0.5" max="10" step="0.5" />
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label">Delay máximo entre leads (segundos)</label>
+            <input class="form-input" type="number" id="cfg-delay-max" value="3.0" min="1" max="30" step="0.5" />
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label">Timeout por lead (segundos)</label>
+            <input class="form-input" type="number" id="cfg-timeout" value="15" min="5" max="60" />
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+            <label class="toggle">
+              <input type="checkbox" id="cfg-headless" checked />
+              <div class="toggle-track"></div>
+            </label>
+            <div>
+              <div style="font-size:13px; font-weight:500;">Modo Headless</div>
+              <div style="font-size:11px; color:var(--text-muted);">Rodar sem abrir janela do browser</div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+            <label class="toggle">
+              <input type="checkbox" id="cfg-visitar-site" checked />
+              <div class="toggle-track"></div>
+            </label>
+            <div>
+              <div style="font-size:13px; font-weight:500;">Visitar Site do Lead</div>
+              <div style="font-size:11px; color:var(--text-muted);">Extrai email e redes sociais (mais lento)</div>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-primary" id="btn-salvar-config" style="flex:1;">
+              💾 Salvar
+            </button>
+            <button class="btn btn-danger" id="btn-resetar-config">
+              🔄 Restaurar Padrão
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: AJUDA ─── -->
+    <section class="page" id="page-ajuda">
+      <div class="page-header">
+        <h1 class="page-title">❓ Como Usar o LeadHunter</h1>
+      </div>
+
+      <div class="card">
+        <div style="line-height: 1.8; color: var(--text-secondary);">
+          <h2 style="color:var(--text-primary); margin-bottom:12px; font-size:15px;">🔍 Realizando uma Busca</h2>
+          <ol style="padding-left:20px; margin-bottom:24px;">
+            <li>Vá em <strong style="color:var(--brand);">Nova Busca</strong></li>
+            <li>Digite o tipo de negócio (ex: <em>"clínicas odontológicas"</em>)</li>
+            <li>Digite a cidade (ex: <em>"Belo Horizonte - MG"</em>) — pode digitar várias, uma por linha</li>
+            <li>Escolha entre Modo Normal (com email) ou <strong>Modo Rápido</strong> (sem email, 3–5× mais veloz)</li>
+            <li>Ajuste o número de resultados com o slider</li>
+            <li>Clique em <strong style="color:var(--brand);">Iniciar Busca</strong> e acompanhe em tempo real</li>
+          </ol>
+
+          <h2 style="color:var(--text-primary); margin-bottom:12px; font-size:15px;">⬇️ Exportando os Leads</h2>
+          <ul style="padding-left:20px; margin-bottom:24px;">
+            <li><strong>CSV:</strong> Clique em "Exportar CSV" — o arquivo abre direto no Excel (UTF-8)</li>
+            <li><strong>Excel:</strong> Exporta com formatação profissional (cores, hiperlinks, estrelas de avaliação)</li>
+            <li><strong>Google Sheets:</strong> Clique em "Google Sheets" — siga as instruções de autenticação na primeira vez</li>
+            <li>Você pode selecionar apenas alguns leads antes de exportar</li>
+          </ul>
+
+          <h2 style="color:var(--text-primary); margin-bottom:12px; font-size:15px;">📊 Google Sheets — Primeira Configuração</h2>
+          <ol style="padding-left:20px; margin-bottom:24px;">
+            <li>Acesse: <a href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a></li>
+            <li>Crie um projeto → Ative <em>Google Sheets API</em> e <em>Google Drive API</em></li>
+            <li>Crie uma credencial OAuth 2.0 (App para Computador)</li>
+            <li>Baixe o JSON e salve como <code style="background:var(--bg-dark); padding:2px 6px; border-radius:4px;">credentials.json</code> na pasta <code style="background:var(--bg-dark); padding:2px 6px; border-radius:4px;">credentials/</code></li>
+            <li>Na próxima exportação, uma janela abrirá para autorizar — é só uma vez!</li>
+          </ol>
+
+          <h2 style="color:var(--text-primary); margin-bottom:12px; font-size:15px;">⚠️ Dicas Importantes</h2>
+          <ul style="padding-left:20px;">
+            <li>Seja específico na busca: <em>"lava-jatos"</em> em <em>"Contagem - MG"</em> traz melhores resultados</li>
+            <li>Limite de 500 leads por busca para evitar bloqueio do Google</li>
+            <li>Se aparecer CAPTCHA, o scraper pausa automaticamente</li>
+            <li>Use o <strong>Modo Rápido</strong> quando não precisar de email/redes sociais</li>
+            <li>O campo "Status" em cada lead ajuda a controlar o pipeline de contatos</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════
+     MODAL: GOOGLE SHEETS
+═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-sheets">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📊 Exportar para Google Sheets</span>
+      <button class="modal-close" id="modal-sheets-close">✕</button>
+    </div>
+
+    <div id="sheets-form">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label">Criar nova planilha ou adicionar a uma existente?</label>
+        <select class="form-input" id="sheets-mode">
+          <option value="nova">Criar Nova Planilha</option>
+          <option value="existente">Adicionar a Planilha Existente</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="sheets-id-group" style="margin-bottom:16px; display:none;">
+        <label class="form-label">ID da Planilha Existente</label>
+        <input class="form-input" type="text" id="sheets-id" placeholder="Cole o ID da planilha aqui..." />
+        <small style="color:var(--text-muted); font-size:11px; margin-top:4px; display:block;">
+          O ID fica na URL: docs.google.com/spreadsheets/d/<strong>[ID AQUI]</strong>/edit
+        </small>
+      </div>
+
+      <div style="background:var(--bg-dark); border-radius:var(--radius-sm); padding:12px; margin-bottom:20px; font-size:12px; color:var(--text-secondary); line-height:1.6;" id="sheets-cred-status">
+        Verificando credenciais...
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" id="btn-confirmar-sheets" style="flex:1;">
+          📤 Exportar Agora
+        </button>
+        <button class="btn btn-secondary" id="sheets-cancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

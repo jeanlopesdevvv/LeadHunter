@@ -1,0 +1,118 @@
+{
+  "campos": [
+    {
+      "id": "nome",
+      "label": "Nome da Empresa",
+      "tipo": "texto",
+      "habilitado": true,
+      "ordem": 1
+    },
+    {
+      "id": "endereco",
+      "label": "Endereço",
+      "tipo": "texto",
+      "habilitado": true,
+      "ordem": 2
+    },
+    {
+      "id": "telefone",
+      "label": "Telefone",
+      "tipo": "texto",
+      "habilitado": true,
+      "ordem": 3
+    },
+    {
+      "id": "email",
+      "label": "E-mail",
+      "tipo": "texto",
+      "habilitado": true,
+      "ordem": 4
+    },
+    {
+      "id": "site",
+      "label": "Site",
+      "tipo": "link",
+      "habilitado": true,
+      "ordem": 5
+    },
+    {
+      "id": "instagram",
+      "label": "Instagram",
+      "tipo": "link",
+      "habilitado": true,
+      "ordem": 6
+    },
+    {
+      "id": "facebook",
+      "label": "Facebook",
+      "tipo": "link",
+      "habilitado": true,
+      "ordem": 7
+    },
+    {
+      "id": "linkedin",
+      "label": "LinkedIn",
+      "tipo": "link",
+      "habilitado": false,
+      "ordem": 8
+    },
+    {
+      "id": "whatsapp",
+      "label": "WhatsApp",
+      "tipo": "link",
+      "habilitado": true,
+      "ordem": 9
+    },
+    {
+      "id": "avaliacao_nota",
+      "label": "Nota",
+      "tipo": "numero",
+      "habilitado": true,
+      "ordem": 10
+    },
+    {
+      "id": "avaliacao_total",
+      "label": "Qtd. Avaliações",
+      "tipo": "numero",
+      "habilitado": true,
+      "ordem": 11
+    },
+    {
+      "id": "categoria",
+      "label": "Categoria",
+      "tipo": "texto",
+      "habilitado": true,
+      "ordem": 12
+    },
+    {
+      "id": "horario",
+      "label": "Horário",
+      "tipo": "texto",
+      "habilitado": false,
+      "ordem": 13
+    },
+    {
+      "id": "latitude",
+      "label": "Latitude",
+      "tipo": "numero",
+      "habilitado": false,
+      "ordem": 14
+    },
+    {
+      "id": "longitude",
+      "label": "Longitude",
+      "tipo": "numero",
+      "habilitado": false,
+      "ordem": 15
+    }
+  ],
+  "campos_customizados": [],
+  "delay_min_segundos": 0.1,
+  "delay_max_segundos": 0.5,
+  "timeout_por_lead_segundos": 15,
+  "modo_headless": true,
+  "visitar_site_do_lead": false,
+  "tema": "escuro",
+  "max_resultados_padrao": 50,
+  "ultimo_diretorio_export": "C:\\Gaveta 2\\Projetos Vidas\\Vendas Outbound\\leadhunter\\exports"
+}
