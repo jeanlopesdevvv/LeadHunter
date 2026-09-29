@@ -35,7 +35,7 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
     <form onSubmit={entrar} className="mt-8 space-y-4">
       {semSenha && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          A senha ainda não foi configurada. Defina <b>APP_PASSWORD</b> nas variáveis de ambiente da Vercel e faça um novo deploy.
+          A senha ainda não foi configurada. Defina <b>APP_PASSWORD</b> no arquivo .env do servidor e reinicie o app.
         </div>
       )}
       <div className="relative">

@@ -6,7 +6,7 @@ import { createSessionToken, passwordMatches, SESSION_COOKIE, SESSION_DAYS } fro
 
 export async function POST(request: Request) {
   if (!process.env.APP_PASSWORD?.trim()) {
-    return jsonError("A senha do app ainda não foi definida. Configure APP_PASSWORD nas variáveis da Vercel.", 503);
+    return jsonError("A senha do app ainda não foi definida. Configure APP_PASSWORD no .env do servidor.", 503);
   }
   const ip = ipDe(request);
   if (bloqueado(ip)) return jsonError("Muitas tentativas. Aguarde 10 minutos e tente de novo.", 429);

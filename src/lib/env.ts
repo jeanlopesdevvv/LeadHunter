@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Configuração vinda das variáveis de ambiente (Vercel → Settings → Environment Variables).
+ * Configuração vinda das variáveis de ambiente (.env do servidor ou painel da hospedagem).
  * Nada de segredo vai para o navegador.
  */
 
@@ -41,9 +41,12 @@ function parseServiceAccount(): ServiceAccount | null {
   return null;
 }
 
-/** Modo simulação: só fora da produção da Vercel, para nunca "fingir" envios reais. */
+/**
+ * Modo simulação: só em desenvolvimento, para nunca "fingir" envios reais.
+ * A imagem Docker define LEADHUNTER_PRODUCAO=1 e a Vercel define VERCEL_ENV=production.
+ */
 export function isMockMode(): boolean {
-  return str("MOCK_MODE") === "1" && process.env.VERCEL_ENV !== "production";
+  return str("MOCK_MODE") === "1" && process.env.VERCEL_ENV !== "production" && str("LEADHUNTER_PRODUCAO") !== "1";
 }
 
 export function getConfig() {

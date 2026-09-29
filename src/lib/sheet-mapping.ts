@@ -213,7 +213,7 @@ export function buildRow(
     avaliacoes: lead.avaliacoes != null ? String(lead.avaliacoes) : "",
     categoria: lead.categoria ?? "",
     place_id: lead.placeId ?? "",
-    origem: "LeadHunter",
+    origem: "Radar Lavacar",
     capturado_em: formatSaoPaulo(opts.now),
     termo: lead.termo ?? "",
   };

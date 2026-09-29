@@ -80,11 +80,11 @@ function explainGoogleError(status: number, body: string): string {
   }
   const r = reason.toLowerCase();
   if (r.includes("api key not valid") || r.includes("api_key_invalid"))
-    return "Chave do Google inválida. Confira GOOGLE_MAPS_API_KEY na Vercel.";
+    return "Chave do Google inválida. Confira GOOGLE_MAPS_API_KEY no .env do servidor.";
   if (r.includes("billing")) return "O projeto do Google Cloud está sem faturamento ativo. Ative o faturamento para usar a Places API.";
   if (r.includes("has not been used") || r.includes("is disabled") || r.includes("service_disabled"))
     return "A Places API (New) não está ativada no projeto do Google Cloud.";
-  if (status === 403) return `O Google recusou a chave (restrição de API/referenciador?). Detalhe: ${reason}`;
+  if (status === 403) return `O Google recusou a chave (restrição de API ou de IP na chave?). Detalhe: ${reason}`;
   if (status === 429 || r.includes("resource_exhausted")) return "Cota da Places API esgotada por hoje. Tente mais tarde ou aumente a cota no Google Cloud.";
   return `Erro do Google (${status}): ${reason || "sem detalhes"}`;
 }

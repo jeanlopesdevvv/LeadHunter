@@ -1,6 +1,6 @@
-# LeadHunter v3 · by Lavacar
+# Radar Lavacar (LeadHunter v3)
 
-Prospecção de lava-jatos para o Lavacar. Busca estabelecimentos no Google (Places API oficial),
+**https://radar.lavacar.app** — prospecção de lava-jatos para o Lavacar. Busca estabelecimentos no Google (Places API oficial),
 remove repetidos, confere na planilha **Leads Lava-jatos** quem já recebeu mensagem e envia os novos
 para a aba `leads` com um clique, no formato que a Carol usa para disparar a primeira mensagem no WhatsApp.
 
@@ -31,7 +31,9 @@ telefone        nome              tipo       cidade           status    mensagem
 
 ## Tecnologia
 
-- Next.js 16 (App Router) + TypeScript + Tailwind CSS 4, pronto para a Vercel.
+- Next.js 16 (App Router) + TypeScript + Tailwind CSS 4.
+- Roda como container Docker no EasyPanel do servidor do Lavacar; a imagem é montada pelo GitHub Actions
+  (`ghcr.io/jeanlopesdevvv/leadhunter`). Também roda na Vercel sem mudanças.
 - Google Places API (New) — Text Search.
 - Google Sheets API com conta de serviço.
 - Acesso por senha única (cookie assinado, `httpOnly`).
@@ -39,7 +41,8 @@ telefone        nome              tipo       cidade           status    mensagem
 
 ## Implantação
 
-Siga **[docs/SETUP.md](docs/SETUP.md)** (Google Cloud, planilha e Vercel, passo a passo).
+Siga **[docs/SETUP.md](docs/SETUP.md)**: Google Cloud do Lavacar, DNS na Hostinger e serviço no EasyPanel,
+passo a passo. A cada push na `main`, o GitHub Actions roda os testes e publica uma imagem nova.
 
 ## Desenvolvimento local
 
@@ -51,7 +54,9 @@ npm test                     # testes automatizados
 npm run lint && npm run typecheck
 ```
 
-Com `MOCK_MODE=1` o app usa dados falsos e uma planilha em memória (nunca é ativado na produção da Vercel).
+Com `MOCK_MODE=1` o app usa dados falsos e uma planilha em memória (ignorado na imagem Docker e na produção da Vercel).
+
+Imagem local: `docker build -t radar-lavacar . && docker run -p 3000:3000 --env-file .env.local radar-lavacar`.
 
 ## Estrutura
 
@@ -68,6 +73,8 @@ src/
   proxy.ts              exige a senha em todas as páginas e APIs
 tests/                  testes automatizados
 docs/                   AUDITORIA.md (v2 → v3) e SETUP.md
+Dockerfile              imagem de produção (servidor Node enxuto, ~50 MB de RAM)
+.github/workflows/      testes + publicação da imagem no GitHub Container Registry
 ```
 
 A versão anterior (Python + Playwright, local) está preservada na tag `legacy-python-v2`.

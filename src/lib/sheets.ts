@@ -218,7 +218,7 @@ export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
         { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: rows }) },
       );
 
-      // Rede de segurança: se outro envio (outra instância da Vercel) gravou o mesmo telefone
+      // Rede de segurança: se outro envio (outra instância/servidor) gravou o mesmo telefone
       // um instante antes, a nossa linha repetida vira "duplicado" e a Carol não a dispara.
       const faixa = parseUpdatedRows(res.updates?.updatedRange);
       const statusIdx = existing.tab.map.status;

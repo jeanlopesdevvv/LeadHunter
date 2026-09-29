@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
-/** Tudo exige a senha, exceto a tela de login e a rota que faz o login. */
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+/** Tudo exige a senha, exceto a tela de login, a rota que faz o login e o healthcheck. */
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

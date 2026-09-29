@@ -50,7 +50,7 @@ describe("linha gerada", () => {
     const headers = [...HEADERS, "site", "origem", "link_maps"];
     const map = buildHeaderMap(headers);
     const row = buildRow(headers.length, map, { telefone: "1", nome: "A", tipo: "Empresa", cidade: "BH", site: "https://a.com", mapsUrl: "https://maps" }, { status: "pendente", now: new Date() });
-    expect(row.slice(7)).toEqual(["https://a.com", "LeadHunter", "https://maps"]);
+    expect(row.slice(7)).toEqual(["https://a.com", "Radar Lavacar", "https://maps"]);
   });
 });
 

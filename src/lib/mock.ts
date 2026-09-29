@@ -110,6 +110,11 @@ export function mockSheet(): MockSheet {
           ["5531982999779", "Jean Lopes", "Autônomo", "Belo Horizonte", "pendente", "", ""],
           ["5531991112233", "Lava Jato Teste Opt-out", "Empresa", "Belo Horizonte", "enviado", "10/09/2026 10:00", "sim"],
         ],
+        historico_carol: [
+          ["data", "remote_jid", "mensagem"],
+          ["20/09/2026 14:00", "5531988776655@s.whatsapp.net", "Oi! Aqui é a Carol, do Lavacar."],
+        ],
+        historico_sofia: [["data", "telefone", "mensagem"]],
       },
     };
   }

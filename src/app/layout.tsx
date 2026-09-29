@@ -1,15 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 
 import { ToastProvider } from "@/components/toast";
 
 import "./globals.css";
 
-const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
+// Inter servida pelo próprio app (pacote @fontsource-variable/inter): o build não depende do Google Fonts.
+const inter = localFont({
+  // Subconjunto "latin" (U+0000–00FF): cobre todos os acentos do português.
+  src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+  weight: "100 900",
+  style: "normal",
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "LeadHunter · Lavacar",
-  description: "Prospecção de lava-jatos para o Lavacar: busca no Google, deduplica e envia para a planilha da Carol.",
+  title: "Radar · Lavacar",
+  description: "Radar Lavacar: encontra lava-jatos no Google, remove repetidos e envia os novos para a planilha da Carol.",
   robots: { index: false, follow: false },
 };
 

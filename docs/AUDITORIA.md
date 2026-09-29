@@ -1,6 +1,7 @@
 # Auditoria do LeadHunter v2 (Python) — 29/09/2026
 
 Auditoria feita sobre o commit `bc198f2` (código Python original, preservado na tag `legacy-python-v2`).
+Hospedagem escolhida para a v3: **radar.lavacar.app**, no EasyPanel do servidor do Lavacar (ver SETUP.md).
 Objetivo do produto: captar lava-jatos para o Lavacar e colocar cada lead na aba `leads` da planilha
 "Leads Lava-jatos", de onde a Carol dispara a primeira mensagem no WhatsApp.
 
@@ -33,7 +34,7 @@ Autônomo/Empresa, seleção de leads, normalização de telefone para WhatsApp 
 | A1 | Crítico | Raspagem com Playwright/Chromium: o navegador não existe na Vercel, e IP de servidor recebe CAPTCHA/bloqueio do Google. Raspar o Maps também viola os Termos do Google. | `scraper.py` | Substituído pela **Google Places API (New)** oficial. |
 | A2 | Crítico | Busca roda numa `threading.Thread` e os eventos ficam numa fila em memória (`_sse_queues`). Em serverless a execução termina junto com a resposta e cada requisição pode cair numa instância diferente: o SSE nunca receberia os leads. | `main.py` | Sem estado no servidor: o navegador comanda a busca em passos curtos (uma página de resultados por chamada) e mostra o progresso real. |
 | A3 | Crítico | Banco SQLite (`leadhunter.db`) e configuração (`leadhunter_config.json`) gravados em disco. Na Vercel o disco é somente leitura (só `/tmp`, que é apagado). | `database.py`, `config.py` | A **planilha é a fonte da verdade** para deduplicação. Histórico de buscas fica no navegador. Configuração vem das variáveis de ambiente. |
-| A4 | Crítico | Google Sheets com OAuth de "App para computador" (`run_local_server`) e `webbrowser.open`: abre uma janela de login **no servidor**. `token.json` gravado em disco. | `exporter.py` | **Conta de serviço** do Google; chave nas variáveis da Vercel. |
+| A4 | Crítico | Google Sheets com OAuth de "App para computador" (`run_local_server`) e `webbrowser.open`: abre uma janela de login **no servidor**. `token.json` gravado em disco. | `exporter.py` | **Conta de serviço** do Google; chave nas variáveis de ambiente do servidor. |
 | A5 | Alto | CSV/Excel gravados em `exports/` e baixados por outra requisição (que pode cair em outra instância). | `main.py`, `exporter.py` | CSV gerado no próprio navegador. |
 | A6 | Médio | Sem testes, sem lint, sem versão fixa das dependências; `openpyxl` faltando no `requirements.txt` (exportar Excel falhava). | `requirements.txt` | Testes automatizados (Vitest), TypeScript estrito, lint, versões travadas no `package-lock.json`. |
 | A7 | Baixo | `leadhunter_config.json` versionado com caminho absoluto de outra máquina (`C:\Gaveta 2\...`). Logo e favicon são o mesmo PNG de 427 KB, carregado duas vezes. | raiz, `frontend/` | Configuração só por variável de ambiente; logo em SVG (< 1 KB). |
@@ -74,8 +75,8 @@ Autônomo/Empresa, seleção de leads, normalização de telefone para WhatsApp 
   limite `MAX_REQUESTS_PER_SEARCH`. Recomendado também definir uma cota diária no Google Cloud.
 - **Limite do Google:** no máximo 60 resultados por termo e área. Para cidades grandes, use a
   **varredura ampla/máxima** (divide a cidade em 4 ou 9 áreas) ou liste bairros.
-- **Vercel:** cada chamada ao servidor é curta (uma página de resultados), bem abaixo do limite de
-  300 s do plano Hobby.
+- **Servidor:** cada chamada é curta (uma página de resultados), sem risco de tempo limite em proxy ou na
+  Vercel. No EasyPanel o app usa ~50 MB de RAM; a imagem é montada no GitHub, não no servidor.
 
 ## 6. O que ficou para uma próxima etapa (opcional)
 

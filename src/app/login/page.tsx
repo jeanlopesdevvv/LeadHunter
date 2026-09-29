@@ -4,7 +4,7 @@ import { Logo } from "@/components/Logo";
 
 import { LoginForm } from "./LoginForm";
 
-export const metadata = { title: "Entrar · LeadHunter" };
+export const metadata = { title: "Entrar · Radar Lavacar" };
 
 /** Só aceita caminhos deste próprio site (bloqueia "/\\evil.com", "/<tab>/evil.com" etc.). */
 function safeNext(raw: string): string {
@@ -64,7 +64,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
             <Logo />
           </div>
           <p className="eyebrow">Acesso restrito</p>
-          <h2 className="display mt-3 text-4xl text-navy">Entre no LeadHunter</h2>
+          <h2 className="display mt-3 text-4xl text-navy">Entre no Radar</h2>
           <p className="mt-3 text-[15px] text-muted">Use a senha da equipe comercial.</p>
           <LoginForm next={next} semSenha={semSenha} />
         </div>

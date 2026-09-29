@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+coverage
+tests
+docs
+deploy
+*.md
+Dockerfile
+.dockerignore
+vercel.json
+.github

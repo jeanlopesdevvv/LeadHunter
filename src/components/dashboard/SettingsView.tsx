@@ -84,7 +84,7 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
           <h1 className="display mt-3 text-4xl text-navy">
             Conexões <span className="text-brand">do sistema</span>
           </h1>
-          <p className="mt-2 text-sm text-muted">Tudo é configurado nas variáveis de ambiente da Vercel. Veja o passo a passo em docs/SETUP.md.</p>
+          <p className="mt-2 text-sm text-muted">Tudo é configurado no arquivo .env do servidor. Veja o passo a passo em docs/SETUP.md.</p>
         </div>
         <Button variant="outline" onClick={recarregar} loading={carregando} icon={<RefreshCw className="size-4" />}>
           Testar de novo
@@ -96,7 +96,7 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
           <FlaskConical className="mt-0.5 size-4 shrink-0" />
           <span>
             <b>Modo simulação ligado (MOCK_MODE=1).</b> Buscas e envios usam dados falsos e uma planilha em memória. Esse modo é desligado
-            automaticamente na produção da Vercel.
+            automaticamente em produção.
           </span>
         </div>
       )}
@@ -106,7 +106,7 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
       ) : (
         <Card className="divide-y divide-line p-5 sm:p-7">
           <Linha ok icon={<KeyRound className="size-5" />} titulo="Senha de acesso">
-            <p>Ativa. Para trocar, altere APP_PASSWORD na Vercel (todas as sessões são encerradas).</p>
+            <p>Ativa. Para trocar, altere APP_PASSWORD no .env do servidor e reinicie (todas as sessões são encerradas).</p>
           </Linha>
 
           <Linha ok={status.places.configurada} icon={<Map className="size-5" />} titulo="Google Places API">
@@ -118,7 +118,7 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
             ) : (
               <p>
                 Falta <code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_MAPS_API_KEY</code>. Ative a &quot;Places API (New)&quot;
-                no Google Cloud, crie a chave e cole na Vercel.
+                no Google Cloud, crie a chave e coloque no .env do servidor.
               </p>
             )}
           </Linha>

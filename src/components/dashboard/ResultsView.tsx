@@ -178,7 +178,7 @@ export function ResultsView({
 
   function exportar() {
     const base = meta ? `${meta.termos[0]}-${meta.cidades[0]}` : "leads";
-    const nome = `leadhunter-${base.normalize("NFD").replace(/[^\w-]+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const nome = `radar-lavacar-${base.normalize("NFD").replace(/[^\w-]+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
     downloadCsv(filtrados, nome);
   }
 

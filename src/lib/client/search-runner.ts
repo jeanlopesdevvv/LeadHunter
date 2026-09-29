@@ -23,7 +23,7 @@ const CONCURRENCY = 3;
 
 /**
  * O navegador comanda a busca em passos curtos (uma página por chamada),
- * assim nenhuma função da Vercel passa perto do tempo limite e o progresso é real.
+ * assim nenhuma requisição fica longa (nem estoura tempo limite de proxy) e o progresso é real.
  */
 export async function runSearch(opts: {
   termos: string[];
