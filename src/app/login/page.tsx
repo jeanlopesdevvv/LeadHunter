@@ -37,24 +37,25 @@ export default async function LoginPage(props: PageProps<"/login">) {
             <span className="text-brand">Venda mais.</span>
           </h1>
           <p className="mt-6 max-w-md text-[17px] leading-relaxed text-white/65">
-            Busca lava-jatos no Google, remove quem já está na planilha e entrega os novos direto para a Carol, com um clique.
+            Procura lava-jatos no Google Maps, tira quem já está na planilha e manda os novos para a Carol chamar no WhatsApp. Tudo com um
+            clique.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-6 border-t border-white/10 pt-8 text-sm">
           <div>
             <Sparkles className="mb-2 size-5 text-brand" />
-            <div className="font-bold">Google oficial</div>
-            <div className="text-white/50">dados limpos, sem bloqueio</div>
+            <div className="font-bold">Direto do Google</div>
+            <div className="text-white/50">telefone, nota e endereço</div>
           </div>
           <div>
             <ShieldCheck className="mb-2 size-5 text-brand" />
-            <div className="font-bold">Zero repetidos</div>
+            <div className="font-bold">Sem repetir</div>
             <div className="text-white/50">ninguém recebe duas vezes</div>
           </div>
           <div>
             <Table2 className="mb-2 size-5 text-brand" />
             <div className="font-bold">Direto na planilha</div>
-            <div className="text-white/50">aba leads, status pendente</div>
+            <div className="text-white/50">pronto para a Carol</div>
           </div>
         </div>
       </section>
@@ -66,7 +67,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
           </div>
           <p className="eyebrow">Acesso restrito</p>
           <h2 className="display mt-3 text-4xl text-navy">Entre no Radar</h2>
-          <p className="mt-3 text-[15px] text-muted">Use a senha da equipe comercial.</p>
+          <p className="mt-3 text-[15px] text-muted">Digite a senha da equipe.</p>
           <LoginForm next={next} semSenha={semSenha} />
         </div>
       </section>

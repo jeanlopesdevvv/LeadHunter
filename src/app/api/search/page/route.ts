@@ -2,7 +2,9 @@ import { getConfig } from "@/lib/env";
 import { handleError, isString, jsonError, readJson } from "@/lib/http";
 import { mockSearchPage } from "@/lib/mock";
 import { searchPage } from "@/lib/places";
-import type { Rect } from "@/lib/types";
+import { existingKeysCached } from "@/lib/sheets";
+import type { Lead, Rect } from "@/lib/types";
+import { obterUso, reservarConsulta } from "@/lib/usage";
 
 export const maxDuration = 60;
 
@@ -25,11 +27,11 @@ function parseRect(value: unknown): Rect | undefined | null {
 export async function POST(request: Request) {
   const cfg = getConfig();
   if (!cfg.mock && !cfg.placesApiKey) {
-    return jsonError("Chave da Google Places API não configurada (GOOGLE_MAPS_API_KEY).", 503);
+    return jsonError("A chave do Google Maps ainda não foi configurada (GOOGLE_MAPS_API_KEY).", 503);
   }
   const body = await readJson<Body>(request);
   if (!body || !isString(body.textQuery) || !body.textQuery.trim() || !isString(body.termo) || !isString(body.cidade)) {
-    return jsonError("Consulta inválida.");
+    return jsonError("Pedido de busca inválido.");
   }
   const rect = parseRect(body.rect);
   if (rect === null) return jsonError("Área inválida.");
@@ -40,10 +42,33 @@ export async function POST(request: Request) {
     rect,
     pageToken: isString(body.pageToken) ? body.pageToken : null,
   };
+
+  // Confere a cota do mês antes de gastar (com o bloqueio ligado).
+  const reserva = await reservarConsulta();
+  if (!reserva.ok) return Response.json({ erro: reserva.mensagem, cota: true, uso: reserva.uso }, { status: 429 });
+
   try {
     const result = cfg.mock ? await mockSearchPage(input) : await searchPage(input, cfg.placesApiKey);
-    return Response.json(result);
+    reserva.concluir(true);
+    const [leads, uso] = await Promise.all([marcarPlanilha(result.leads), obterUso()]);
+    return Response.json({ ...result, leads, uso });
   } catch (e) {
+    reserva.concluir(false);
     return handleError(e);
+  }
+}
+
+/** Marca cada lead como novo / já na planilha (leitura guardada por alguns segundos). */
+async function marcarPlanilha(leads: Lead[]): Promise<Lead[]> {
+  try {
+    const { keys, optout } = await existingKeysCached();
+    return leads.map((l): Lead => {
+      if (!l.telefoneKey) return { ...l, planilha: "novo" };
+      if (optout.has(l.telefoneKey)) return { ...l, planilha: "optout" };
+      if (keys.has(l.telefoneKey)) return { ...l, planilha: "existente" };
+      return { ...l, planilha: "novo" };
+    });
+  } catch {
+    return leads; // planilha indisponível: fica "desconhecido" e o painel avisa depois
   }
 }

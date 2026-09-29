@@ -1,113 +1,255 @@
 "use client";
 
-import type { Depth } from "@/lib/geo";
-import type { Lead, PageResult, SearchTask } from "@/lib/types";
+import { LUGARES_POR_PAGINA, MAX_DIVISOES, PAGINAS_POR_CONSULTA, splitRect } from "@/lib/geo";
+import type { Lead, PageResult, PlanResult, Rect, SearchTask, Uso } from "@/lib/types";
 
 import { api, ApiError } from "./api";
 
-export interface PlanResponse {
-  tasks: SearchTask[];
-  estimativa: number;
-  cidades: { entrada: string; nome: string; erro: string }[];
-}
+/** Por que a busca parou. */
+export type MotivoFim = "alvo" | "limite" | "esgotado" | "parado" | "cota" | "erro";
 
-export interface Progress {
-  feitas: number;
-  previstas: number;
+export interface Progresso {
+  /** Quantos contatos novos foram pedidos. */
+  alvo: number;
+  /** Contatos novos com celular (fora da planilha) encontrados até agora. */
+  novos: number;
+  /** Consultas gastas nesta busca (somando as continuações). */
+  consultas: number;
+  /** Máximo de consultas desta busca. */
+  limite: number;
+  /** Estabelecimentos recebidos do Google (com repetidos). */
+  vistos: number;
+  unicos: number;
+  repetidos: number;
+  fechados: number;
+  jaNaPlanilha: number;
+  semCelular: number;
   etapa: string;
-  erros: string[];
+  avisos: string[];
+  rodando: boolean;
+  fim: MotivoFim | null;
+  erro?: string;
 }
 
-const PAGES_PER_TASK = 3;
-const CONCURRENCY = 3;
+interface Item extends SearchTask {
+  paginas: number;
+  pageToken: string | null;
+  recebidos: number;
+}
+
+const PARALELO = 3;
+/** Uma consulta que chegou perto de 60 lugares ainda tem mais para achar: divide o mapa. */
+const CHEIA = PAGINAS_POR_CONSULTA * LUGARES_POR_PAGINA - 5;
+
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Conta como "novo" para o alvo: celular e fora da planilha. */
+export function contaComoNovo(lead: Lead): boolean {
+  return lead.telefoneTipo === "celular" && (lead.planilha === "novo" || lead.planilha === "desconhecido");
+}
 
 /**
- * O navegador comanda a busca em passos curtos (uma página por chamada),
- * assim nenhuma requisição fica longa (nem estoura tempo limite de proxy) e o progresso é real.
+ * Uma busca em andamento. O navegador comanda a busca em passos curtos (uma página
+ * de 20 lugares por chamada), por rodadas: primeiro a 1ª página de cada termo × cidade,
+ * depois as seguintes. Quando o Google esgota os 60 resultados de uma consulta,
+ * o mapa daquela cidade é dividido em 4 (e de novo, até 64 pedaços) para achar mais.
+ * Para ao chegar na quantidade pedida, no limite de consultas ou quando acabam os resultados.
  */
-export async function runSearch(opts: {
-  termos: string[];
-  cidades: string[];
-  profundidade: Depth;
-  signal: AbortSignal;
-  onPlan: (plan: PlanResponse) => void;
-  onLeads: (leads: Lead[]) => void;
-  onProgress: (p: Progress) => void;
-}) {
-  const plan = await api<PlanResponse>(
-    "/api/search/plan",
-    { termos: opts.termos, cidades: opts.cidades, profundidade: opts.profundidade },
-    { signal: opts.signal },
-  );
-  opts.onPlan(plan);
+export class SessaoDeBusca {
+  private fila: Item[];
+  private areas: Record<string, Rect | null>;
+  private porId = new Map<string, Lead>();
+  private porTelefone = new Set<string>();
+  private semArea = new Set<string>();
+  readonly ignorarFechados: boolean;
+  readonly progresso: Progresso;
+  ultimoUso: Uso | null;
 
-  const progress: Progress = {
-    feitas: plan.cidades.some((c) => c.nome !== c.entrada) ? plan.cidades.length : 0,
-    previstas: plan.tasks.length * PAGES_PER_TASK,
-    etapa: "Iniciando…",
-    erros: plan.cidades.filter((c) => c.erro).map((c) => `${c.entrada}: ${c.erro}`),
-  };
-  progress.previstas += progress.feitas;
-  opts.onProgress({ ...progress });
+  constructor(plano: PlanResult, opts: { ignorarFechados: boolean }) {
+    this.fila = plano.tarefas.map((t) => ({ ...t, paginas: 0, pageToken: null, recebidos: 0 }));
+    this.areas = plano.areas;
+    this.ignorarFechados = opts.ignorarFechados;
+    this.ultimoUso = plano.uso;
+    this.progresso = {
+      alvo: 0,
+      novos: 0,
+      consultas: 0,
+      limite: 0,
+      vistos: 0,
+      unicos: 0,
+      repetidos: 0,
+      fechados: 0,
+      jaNaPlanilha: 0,
+      semCelular: 0,
+      etapa: "",
+      avisos: plano.cidades.filter((c) => c.erro).map((c) => `${c.entrada}: ${c.erro}`),
+      rodando: false,
+      fim: null,
+    };
+  }
 
-  const queue = [...plan.tasks];
-  let fatal: Error | null = null;
+  get leads(): Lead[] {
+    return [...this.porId.values()];
+  }
 
-  async function runTask(task: SearchTask) {
-    let pageToken: string | null = null;
-    for (let page = 0; page < PAGES_PER_TASK; page++) {
-      if (opts.signal.aborted || fatal) return;
-      progress.etapa = `${task.termo} · ${task.cidade}${task.areas > 1 ? ` · área ${task.area}/${task.areas}` : ""} · página ${page + 1}`;
-      opts.onProgress({ ...progress });
-      let result: PageResult | null = null;
-      for (let tentativa = 0; tentativa < 2 && !result; tentativa++) {
-        try {
-          result = await api<PageResult>(
-            "/api/search/page",
-            { textQuery: task.textQuery, termo: task.termo, cidade: task.cidade, rect: task.rect, pageToken },
-            { signal: opts.signal },
-          );
-        } catch (e) {
-          if ((e as Error).name === "AbortError") return;
-          const status = e instanceof ApiError ? e.status : 0;
-          // Chave inválida, API desligada, sem faturamento: não adianta continuar.
-          if (status === 503 || (status === 502 && /chave|faturamento|ativada|recusou/i.test((e as Error).message))) {
-            fatal = e as Error;
-            return;
-          }
-          if (tentativa === 1 || status === 400) {
-            progress.erros.push(`${task.termo} · ${task.cidade}: ${(e as Error).message}`);
-            progress.previstas -= PAGES_PER_TASK - page - 1;
-            progress.feitas++;
-            opts.onProgress({ ...progress });
-            return;
-          }
-          await new Promise((r) => setTimeout(r, 1500));
+  /** Ainda há consultas na fila (dá para continuar). */
+  get temMais(): boolean {
+    return this.fila.length > 0;
+  }
+
+  async executar(opts: { alvo: number; limite: number; signal: AbortSignal; onUpdate: (leads: Lead[], p: Progresso) => void }) {
+    const p = this.progresso;
+    p.alvo = opts.alvo;
+    p.limite = opts.limite;
+    p.fim = null;
+    p.erro = undefined;
+    p.rodando = true;
+    let emAndamento = 0;
+    let fatal: { motivo: MotivoFim; mensagem: string } | null = null;
+    const emitir = () => opts.onUpdate(this.leads, { ...p, avisos: [...p.avisos] });
+    const parar = () => opts.signal.aborted || fatal !== null || p.novos >= opts.alvo;
+
+    const trabalhador = async () => {
+      while (!parar()) {
+        if (p.consultas + emAndamento >= opts.limite || !this.fila.length) {
+          if (emAndamento === 0) return;
+          await dormir(120); // outra consulta em andamento pode liberar vaga ou trazer mais trabalho
+          continue;
         }
+        const item = this.fila.shift()!;
+        emAndamento++;
+        p.etapa = descrever(item);
+        emitir();
+        try {
+          const f = await this.buscarPagina(item, opts.signal);
+          if (f && !fatal) fatal = f;
+        } finally {
+          emAndamento--;
+        }
+        emitir();
       }
-      if (!result) return;
-      progress.feitas++;
-      opts.onLeads(result.leads);
-      if (!result.nextPageToken) {
-        progress.previstas -= PAGES_PER_TASK - page - 1;
-        opts.onProgress({ ...progress });
-        return;
-      }
-      pageToken = result.nextPageToken;
-      opts.onProgress({ ...progress });
-    }
+    };
+
+    await Promise.all(Array.from({ length: PARALELO }, trabalhador));
+
+    p.rodando = false;
+    if (fatal) {
+      const f = fatal as { motivo: MotivoFim; mensagem: string };
+      p.fim = f.motivo;
+      p.erro = f.mensagem;
+    } else if (opts.signal.aborted) p.fim = "parado";
+    else if (p.novos >= opts.alvo) p.fim = "alvo";
+    else if (!this.fila.length) p.fim = "esgotado";
+    else p.fim = "limite";
+    p.etapa = "";
+    emitir();
   }
 
-  async function worker() {
-    while (queue.length && !opts.signal.aborted && !fatal) {
-      const task = queue.shift();
-      if (task) await runTask(task);
+  /** Busca uma página. Devolve um erro fatal (para a busca inteira) ou null. */
+  private async buscarPagina(item: Item, signal: AbortSignal): Promise<{ motivo: MotivoFim; mensagem: string } | null> {
+    let result: PageResult | null = null;
+    for (let tentativa = 0; tentativa < 2 && !result; tentativa++) {
+      try {
+        result = await api<PageResult>(
+          "/api/search/page",
+          { textQuery: item.textQuery, termo: item.termo, cidade: item.cidade, rect: item.rect, pageToken: item.pageToken },
+          { signal },
+        );
+      } catch (e) {
+        if ((e as Error).name === "AbortError") {
+          this.fila.unshift(item); // dá para continuar depois
+          return null;
+        }
+        const status = e instanceof ApiError ? e.status : 0;
+        const mensagem = (e as Error).message;
+        if (e instanceof ApiError && e.dados.cota) {
+          if (e.dados.uso) this.ultimoUso = e.dados.uso as Uso;
+          this.fila.unshift(item);
+          return { motivo: "cota", mensagem };
+        }
+        // Chave errada, API desligada, sem faturamento, limite do Google: não adianta insistir.
+        if (status === 503 || status === 429 || status === 401) {
+          this.fila.unshift(item);
+          return { motivo: "erro", mensagem };
+        }
+        if (status === 400 || tentativa === 1) {
+          this.progresso.avisos.push(`"${item.termo}" em ${item.cidade}: ${mensagem}`);
+          return null;
+        }
+        await dormir(1500);
+      }
     }
+    if (!result) return null;
+
+    const p = this.progresso;
+    p.consultas++;
+    if (result.uso) this.ultimoUso = result.uso;
+    item.paginas++;
+    item.recebidos += result.bruto;
+    this.receber(result.leads);
+
+    if (result.nextPageToken && item.paginas < PAGINAS_POR_CONSULTA) {
+      this.fila.push({ ...item, pageToken: result.nextPageToken });
+    } else if (item.recebidos >= CHEIA) {
+      this.dividir(item);
+    }
+    return null;
   }
 
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
-  if (fatal) throw fatal;
-  progress.etapa = opts.signal.aborted ? "Busca interrompida" : "Concluída";
-  progress.previstas = Math.max(progress.feitas, opts.signal.aborted ? progress.feitas : progress.previstas);
-  opts.onProgress({ ...progress });
+  private dividir(item: Item) {
+    if (item.nivel >= MAX_DIVISOES) return;
+    const rect = item.rect ?? this.areas[item.cidade];
+    if (!rect) {
+      if (!this.semArea.has(item.cidade)) {
+        this.semArea.add(item.cidade);
+        this.progresso.avisos.push(`${item.cidade}: o Google mostra no máximo 60 por busca e não deu para dividir o mapa desta cidade.`);
+      }
+      return;
+    }
+    splitRect(rect, 2).forEach((r, i) =>
+      this.fila.push({
+        id: `${item.id}/${i + 1}`,
+        termo: item.termo,
+        cidade: item.cidade,
+        textQuery: item.termo,
+        rect: r,
+        nivel: item.nivel + 1,
+        paginas: 0,
+        pageToken: null,
+        recebidos: 0,
+      }),
+    );
+  }
+
+  private receber(leads: Lead[]) {
+    const p = this.progresso;
+    for (const lead of leads) {
+      p.vistos++;
+      if (this.ignorarFechados && lead.situacaoNegocio !== "OPERATIONAL") {
+        p.fechados++;
+        continue;
+      }
+      if (this.porId.has(lead.id) || (lead.telefoneKey && this.porTelefone.has(lead.telefoneKey))) {
+        p.repetidos++;
+        continue;
+      }
+      this.porId.set(lead.id, lead);
+      if (lead.telefoneKey) this.porTelefone.add(lead.telefoneKey);
+      p.unicos++;
+      if (lead.planilha === "existente" || lead.planilha === "optout") p.jaNaPlanilha++;
+      else if (lead.telefoneTipo !== "celular") p.semCelular++;
+      else p.novos++;
+    }
+  }
+}
+
+function descrever(item: Item): string {
+  const onde = `"${item.termo}" em ${item.cidade}`;
+  const mapa = item.nivel > 0 ? ` · mapa dividido em ${4 ** item.nivel} partes` : "";
+  return `${onde}${mapa} · página ${item.paginas + 1}`;
+}
+
+/** Pede ao servidor o plano da busca (consultas iniciais e contorno de cada cidade). */
+export function planejarBusca(termos: string[], cidades: string[], signal: AbortSignal) {
+  return api<PlanResult>("/api/search/plan", { termos, cidades }, { signal });
 }

@@ -1,16 +1,15 @@
 import { getConfig } from "@/lib/env";
-import { DEPTHS, estimateRequests, splitRect, type Depth } from "@/lib/geo";
 import { handleError, isString, jsonError, readJson } from "@/lib/http";
 import { mockResolveCityArea } from "@/lib/mock";
 import { resolveCityArea } from "@/lib/places";
-import type { SearchTask } from "@/lib/types";
+import type { PlanResult, Rect, SearchTask } from "@/lib/types";
+import { mensagemCotaEsgotada, obterUso, registrarConsulta } from "@/lib/usage";
 
 export const maxDuration = 60;
 
 interface Body {
   termos?: unknown;
   cidades?: unknown;
-  profundidade?: unknown;
 }
 
 function cleanList(value: unknown, max: number): string[] | null {
@@ -19,54 +18,52 @@ function cleanList(value: unknown, max: number): string[] | null {
   return list.length && list.length <= max ? [...new Set(list)] : null;
 }
 
+/**
+ * Prepara a busca: uma consulta por termo × cidade (a cidade inteira) e o retângulo de cada
+ * cidade, usado só se o Google esgotar os 60 resultados e for preciso dividir o mapa.
+ */
 export async function POST(request: Request) {
   const cfg = getConfig();
   if (!cfg.mock && !cfg.placesApiKey) {
-    return jsonError("Chave da Google Places API não configurada (GOOGLE_MAPS_API_KEY).", 503);
+    return jsonError("A chave do Google Maps ainda não foi configurada (GOOGLE_MAPS_API_KEY).", 503);
   }
   const body = await readJson<Body>(request);
   const termos = cleanList(body?.termos, 15);
   const cidades = cleanList(body?.cidades, 30);
-  const profundidade = (isString(body?.profundidade) && body.profundidade in DEPTHS ? body.profundidade : "rapida") as Depth;
-  if (!termos) return jsonError("Informe de 1 a 15 termos de busca.");
-  if (!cidades) return jsonError("Informe de 1 a 30 cidades ou regiões.");
-
-  const estimativa = estimateRequests(termos.length, cidades.length, profundidade);
-  if (estimativa > cfg.maxRequestsPerSearch) {
-    return jsonError(
-      `Esta busca pode usar até ${estimativa} consultas, acima do limite de ${cfg.maxRequestsPerSearch} por busca. ` +
-        "Reduza termos, cidades ou a profundidade (ou aumente MAX_REQUESTS_PER_SEARCH).",
-    );
-  }
+  if (!termos) return jsonError("Escreva de 1 a 15 coisas para procurar (uma por linha).");
+  if (!cidades) return jsonError("Escreva de 1 a 30 cidades ou bairros (um por linha).");
 
   try {
-    const grid = DEPTHS[profundidade].grid;
-    const areas = await Promise.all(
+    const uso = await obterUso();
+    if (uso.bloquear && uso.restantes <= 0) return jsonError(mensagemCotaEsgotada(uso), 429);
+
+    const resolvidas = await Promise.all(
       cidades.map(async (cidade) => {
-        if (grid === 1) return { entrada: cidade, nome: cidade, viewport: null, erro: "" };
         try {
-          const area = cfg.mock ? await mockResolveCityArea(cidade) : await resolveCityArea(cidade, cfg.placesApiKey);
-          return { ...area, erro: area.viewport ? "" : "área não encontrada; usando busca simples" };
+          const area = cfg.mock
+            ? await mockResolveCityArea(cidade)
+            : await resolveCityArea(cidade, cfg.placesApiKey, () => registrarConsulta("area"));
+          return { ...area, erro: area.viewport ? "" : "não achei o contorno no mapa; a busca fica só na cidade inteira" };
         } catch (e) {
           return { entrada: cidade, nome: cidade, viewport: null, erro: (e as Error).message };
         }
       }),
     );
 
-    const tasks: SearchTask[] = [];
-    for (const area of areas) {
-      const cells = area.viewport ? splitRect(area.viewport, grid) : [];
-      for (const termo of termos) {
-        if (!cells.length) {
-          tasks.push({ id: `${termo}|${area.entrada}|1`, termo, cidade: area.entrada, textQuery: `${termo} em ${area.entrada}`, area: 1, areas: 1 });
-          continue;
-        }
-        cells.forEach((rect, i) =>
-          tasks.push({ id: `${termo}|${area.entrada}|${i + 1}`, termo, cidade: area.entrada, textQuery: termo, rect, area: i + 1, areas: cells.length }),
-        );
+    const tarefas: SearchTask[] = [];
+    for (const termo of termos) {
+      for (const area of resolvidas) {
+        tarefas.push({ id: `${termo}|${area.entrada}`, termo, cidade: area.entrada, textQuery: `${termo} em ${area.entrada}`, nivel: 0 });
       }
     }
-    return Response.json({ tasks, estimativa, cidades: areas.map(({ entrada, nome, erro }) => ({ entrada, nome, erro })) });
+    const areas: Record<string, Rect | null> = Object.fromEntries(resolvidas.map((a) => [a.entrada, a.viewport]));
+    const result: PlanResult = {
+      tarefas,
+      areas,
+      cidades: resolvidas.map(({ entrada, nome, erro }) => ({ entrada, nome, erro })),
+      uso,
+    };
+    return Response.json(result);
   } catch (e) {
     return handleError(e);
   }

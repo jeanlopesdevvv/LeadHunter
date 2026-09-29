@@ -6,7 +6,7 @@ import { createSessionToken, passwordMatches, senhaDoApp, SESSION_COOKIE, SESSIO
 
 export async function POST(request: Request) {
   const senhaApp = senhaDoApp();
-  if (!senhaApp.ok) return jsonError(`${senhaApp.motivo} Ajuste nas variáveis do servidor.`, 503);
+  if (!senhaApp.ok) return jsonError(`${senhaApp.motivo} Ajuste no EasyPanel e clique em Implantar.`, 503);
   const ip = ipDe(request);
   if (bloqueado(ip)) return jsonError("Muitas tentativas. Aguarde 10 minutos e tente de novo.", 429);
   const body = await readJson<{ senha?: unknown }>(request);

@@ -33,10 +33,10 @@ function toLead(v: unknown): LeadForSheet | null {
 
 export async function POST(request: Request) {
   const body = await readJson<{ leads?: unknown }>(request);
-  if (!Array.isArray(body?.leads) || !body.leads.length) return jsonError("Nenhum lead selecionado.");
-  if (body.leads.length > 1000) return jsonError("Envie no máximo 1.000 leads por vez.");
+  if (!Array.isArray(body?.leads) || !body.leads.length) return jsonError("Nenhum contato marcado.");
+  if (body.leads.length > 1000) return jsonError("Envie no máximo 1.000 contatos por vez.");
   const leads = body.leads.map(toLead);
-  if (leads.some((l) => !l)) return jsonError("Há leads com dados inválidos (telefone, nome, tipo ou cidade).");
+  if (leads.some((l) => !l)) return jsonError("Algum contato está com dados inválidos (telefone, nome, tipo ou cidade).");
   try {
     return Response.json(await appendLeads(leads as LeadForSheet[]));
   } catch (e) {

@@ -5,11 +5,14 @@ import type { ReactNode } from "react";
 
 import { Logo } from "@/components/Logo";
 import { cx } from "@/components/ui";
+import type { Uso } from "@/lib/types";
+
+import { UsoMini } from "./UsoCota";
 
 export type View = "buscar" | "resultados" | "historico" | "config";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
-  { id: "buscar", label: "Buscar leads", icon: Search },
+  { id: "buscar", label: "Nova busca", icon: Search },
   { id: "resultados", label: "Resultados", icon: ListChecks },
   { id: "historico", label: "Histórico", icon: History },
   { id: "config", label: "Configuração", icon: Settings2 },
@@ -22,6 +25,7 @@ export function Shell({
   rodando,
   simulacao,
   planilhaUrl,
+  uso,
   onSair,
   children,
 }: {
@@ -31,6 +35,7 @@ export function Shell({
   rodando: boolean;
   simulacao: boolean;
   planilhaUrl?: string;
+  uso: Uso | null;
   onSair: () => void;
   children: ReactNode;
 }) {
@@ -65,7 +70,10 @@ export function Shell({
             </button>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-1 border-t border-white/10 pt-4">
+        <div className="mt-auto mb-4">
+          <UsoMini uso={uso} />
+        </div>
+        <div className="flex flex-col gap-1 border-t border-white/10 pt-4">
           {simulacao && (
             <div className="mb-2 flex items-center gap-2 rounded-xl bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-300">
               <FlaskConical className="size-4" /> Modo simulação

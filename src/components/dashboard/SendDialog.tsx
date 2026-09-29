@@ -10,9 +10,9 @@ import type { CheckResult, Lead, SendResult } from "@/lib/types";
 
 const MOTIVOS: Record<string, string> = {
   ja_na_planilha: "já estavam na planilha",
-  optout: "pediram opt-out",
-  repetido_no_lote: "repetidos no envio",
-  telefone_invalido: "telefone inválido",
+  optout: "pediram para não receber mensagens",
+  repetido_no_lote: "apareciam duas vezes nesta lista",
+  telefone_invalido: "tinham telefone inválido",
 };
 
 export function SendDialog({
@@ -65,7 +65,7 @@ export function SendDialog({
       });
       setResultado(r);
       onEnviado(r);
-      toast(`${r.adicionados.length} leads adicionados à planilha.`, "success");
+      toast(`${r.adicionados.length} contatos foram para a planilha.`, "success");
     } catch (e) {
       toast((e as Error).message, "error");
     } finally {
@@ -83,19 +83,19 @@ export function SendDialog({
     : [];
 
   return (
-    <Modal open={aberto} onClose={fechar} title={resultado ? "Envio concluído" : `Enviar ${leads.length} leads para a planilha`} wide>
+    <Modal open={aberto} onClose={fechar} title={resultado ? "Pronto!" : `Enviar ${leads.length} contato${leads.length === 1 ? "" : "s"} para a planilha`} wide>
       {!resultado ? (
         <div className="space-y-5">
           <div className="flex gap-3 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800">
             <Info className="mt-0.5 size-4 shrink-0" />
             <p>
-              As linhas entram no fim da aba <b>{aba}</b> com status <b>{status}</b>. A Carol usa esse status para mandar a primeira mensagem no
-              WhatsApp. Antes de gravar, a planilha é conferida de novo: quem já estiver lá é ignorado.
+              Eles entram no fim da aba <b>{aba}</b> com status <b>{status}</b>: é assim que a Carol sabe quem chamar no WhatsApp. Na hora de
+              gravar, o Radar confere a planilha mais uma vez e pula quem já estiver lá.
             </p>
           </div>
 
           <div>
-            <p className="mb-2 text-xs font-bold tracking-wider text-muted uppercase">Como vai ficar na planilha</p>
+            <p className="mb-2 text-xs font-bold tracking-wider text-muted uppercase">Como as linhas vão ficar</p>
             <div className="overflow-x-auto rounded-xl border border-line">
               <table className="w-full text-left text-[13px]">
                 <thead className="bg-surface text-xs text-muted">
@@ -122,12 +122,12 @@ export function SendDialog({
                 </tbody>
               </table>
             </div>
-            {leads.length > 6 && <p className="mt-2 text-xs text-muted">+ {leads.length - 6} linhas</p>}
+            {leads.length > 6 && <p className="mt-2 text-xs text-muted">e mais {leads.length - 6} linhas</p>}
           </div>
 
           <div className="flex flex-wrap gap-2">
             <Badge tone="green">{leads.length - fixos} celulares</Badge>
-            {fixos > 0 && <Badge tone="amber">{fixos} fixos (podem não ter WhatsApp)</Badge>}
+            {fixos > 0 && <Badge tone="amber">{fixos} fixos (quase nunca têm WhatsApp)</Badge>}
             <Badge tone="gray">{leads.filter((l) => l.tipo === "Autônomo").length} autônomos</Badge>
             <Badge tone="gray">{leads.filter((l) => l.tipo === "Empresa").length} empresas</Badge>
           </div>
@@ -137,7 +137,7 @@ export function SendDialog({
               Cancelar
             </Button>
             <Button onClick={enviar} loading={enviando} icon={<Send className="size-4" />} disabled={!leads.length}>
-              Confirmar envio
+              Enviar agora
             </Button>
           </div>
         </div>
@@ -149,12 +149,13 @@ export function SendDialog({
           <div>
             <p className="display text-5xl text-navy tabular-nums">{resultado.adicionados.length}</p>
             <p className="mt-1 text-sm text-muted">
-              leads adicionados na aba <b>{resultado.aba}</b> como <b>{status}</b>
+              contato{resultado.adicionados.length === 1 ? "" : "s"} na aba <b>{resultado.aba}</b> com status <b>{status}</b>. A Carol já pode
+              chamar.
             </p>
           </div>
           {agrupados.length > 0 && (
             <div className="mx-auto max-w-sm rounded-xl bg-surface px-4 py-3 text-left text-sm">
-              <p className="mb-1 font-semibold text-ink">Ignorados para não repetir mensagem:</p>
+              <p className="mb-1 font-semibold text-ink">Pulados para ninguém receber mensagem repetida:</p>
               <ul className="space-y-0.5 text-muted">
                 {agrupados.map(([motivo, n]) => (
                   <li key={motivo}>

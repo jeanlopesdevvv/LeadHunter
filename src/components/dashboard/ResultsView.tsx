@@ -10,6 +10,7 @@ import {
   Loader2,
   MapPinned,
   MessageCircle,
+  Play,
   RefreshCw,
   Search,
   Send,
@@ -20,6 +21,7 @@ import { useMemo, useState } from "react";
 
 import { Badge, Button, Card, Stat, Toggle, cx, inputClass } from "@/components/ui";
 import { downloadCsv } from "@/lib/client/csv";
+import type { Progresso } from "@/lib/client/search-runner";
 import { PHONE_KIND_LABEL, whatsappLink } from "@/lib/phone";
 import type { Lead, LeadTipo } from "@/lib/types";
 
@@ -41,17 +43,25 @@ function situacaoBadge(lead: Lead) {
         </Badge>
       );
     case "existente":
-      return <Badge tone="gray">Já na planilha</Badge>;
+      return (
+        <Badge tone="gray" title="Este telefone já está na planilha: não é enviado de novo">
+          Já na planilha
+        </Badge>
+      );
     case "optout":
       return (
-        <Badge tone="red" title="Pediu para não receber mensagens">
-          Opt-out
+        <Badge tone="red" title="Na planilha, pediu para não receber mensagens (optout)">
+          Não quer contato
         </Badge>
       );
     case "novo":
       return <Badge tone="brand">Novo</Badge>;
     default:
-      return <Badge tone="gray">Não conferido</Badge>;
+      return (
+        <Badge tone="gray" title="Ainda não deu para conferir na planilha">
+          Não conferido
+        </Badge>
+      );
   }
 }
 
@@ -61,11 +71,11 @@ function foneBadge(lead: Lead) {
 }
 
 function motivoBloqueio(lead: Lead, incluirFixos: boolean): string {
-  if (!lead.telefone) return "Sem telefone válido";
-  if (lead.telefoneTipo === "fixo" && !incluirFixos) return "Telefone fixo (ative 'Incluir fixos')";
+  if (!lead.telefone) return "Sem telefone que dê para usar";
+  if (lead.telefoneTipo === "fixo" && !incluirFixos) return "Telefone fixo: ligue 'Permitir telefone fixo' para escolher";
   if (lead.planilha === "existente") return "Já está na planilha";
   if (lead.planilha === "optout") return "Pediu para não receber mensagens";
-  if (lead.planilha === "enviado") return "Já enviado";
+  if (lead.planilha === "enviado") return "Já foi enviado agora";
   return "";
 }
 
@@ -75,6 +85,9 @@ export function ResultsView({
   meta,
   stats,
   rodando,
+  progresso,
+  podeContinuar,
+  onContinuar,
   check,
   selecionados,
   onSelecionados,
@@ -92,6 +105,9 @@ export function ResultsView({
   meta: SearchMeta | null;
   stats: SearchStats;
   rodando: boolean;
+  progresso: Progresso | null;
+  podeContinuar: boolean;
+  onContinuar: () => void;
   check: CheckState;
   selecionados: Set<string>;
   onSelecionados: (s: Set<string>) => void;
@@ -188,9 +204,9 @@ export function ResultsView({
         <div className="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand">
           {rodando ? <Loader2 className="size-7 animate-spin" /> : <Search className="size-7" />}
         </div>
-        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Buscando…" : "Nenhum resultado ainda"}</h1>
+        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Buscando…" : "Nenhuma lista ainda"}</h1>
         <p className="mt-2 max-w-sm text-sm text-muted">
-          {rodando ? "Os estabelecimentos aparecem aqui conforme a busca avança." : "Faça uma busca para ver os lava-jatos encontrados."}
+          {rodando ? "Os estabelecimentos aparecem aqui conforme a busca avança." : "Faça uma busca e os lava-jatos encontrados aparecem aqui."}
         </p>
         {!rodando && (
           <Button className="mt-6" onClick={onNovaBusca} icon={<Search className="size-4" />}>
@@ -207,23 +223,23 @@ export function ResultsView({
     <div className="space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="eyebrow">Resultados</p>
+          <p className="eyebrow">Resultado da busca</p>
           <h1 className="display mt-3 text-4xl text-navy">
             {leads.length} <span className="text-brand">estabelecimentos</span>
           </h1>
           {meta && (
             <p className="mt-2 truncate text-sm text-muted">
               {meta.termos.join(", ")} · {meta.cidades.join(", ")} · {quando}
-              {stats.repetidos > 0 && ` · ${stats.repetidos} repetidos removidos`}
+              {stats.repetidos > 0 && ` · ${stats.repetidos} repetido${stats.repetidos === 1 ? "" : "s"} tirado${stats.repetidos === 1 ? "" : "s"}`}
             </p>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={onReconferir} disabled={rodando || check.estado === "checando"} icon={<RefreshCw className="size-4" />}>
-            Reconferir planilha
+            Conferir planilha de novo
           </Button>
-          <Button variant="outline" onClick={exportar} icon={<Download className="size-4" />}>
-            CSV
+          <Button variant="outline" onClick={exportar} icon={<Download className="size-4" />} title="Baixa a lista (com os filtros atuais) para abrir no Excel">
+            Baixar lista
           </Button>
           <Button variant="dark" onClick={onNovaBusca} icon={<Search className="size-4" />}>
             Nova busca
@@ -231,9 +247,13 @@ export function ResultsView({
         </div>
       </header>
 
+      {progresso && !rodando && progresso.fim && (
+        <ResumoBusca p={progresso} marcados={paraEnviar} podeContinuar={podeContinuar} onContinuar={onContinuar} />
+      )}
+
       {check.estado === "checando" && (
         <div className="flex items-center gap-2.5 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-800">
-          <Loader2 className="size-4 animate-spin" /> Conferindo na planilha quem já recebeu mensagem…
+          <Loader2 className="size-4 animate-spin" /> Conferindo na planilha quem já está lá…
         </div>
       )}
       {check.estado === "erro" && (
@@ -241,7 +261,8 @@ export function ResultsView({
           <span className="flex items-start gap-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
-              <b>Não deu para conferir a planilha.</b> {check.erro} O envio fica bloqueado até isso ser resolvido.
+              <b>Não deu para conferir a planilha.</b> {check.erro} Para ninguém receber mensagem repetida, o envio fica travado até isso
+              ser resolvido.
             </span>
           </span>
           <Button size="sm" variant="danger" onClick={onConfig}>
@@ -251,13 +272,13 @@ export function ResultsView({
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Únicos" value={leads.length} hint={`${stats.brutos} resultados brutos`} />
-        <Stat label="Com celular" value={celulares} hint="WhatsApp provável" tone="green" />
-        <Stat label="Novos para enviar" value={novos} hint={incluirFixos ? "celular + fixo, fora da planilha" : "celular, fora da planilha"} tone="brand" />
+        <Stat label="Encontrados" value={leads.length} hint={`sem repetidos (${stats.brutos} vistos no Google)`} />
+        <Stat label="Com celular" value={celulares} hint="provável WhatsApp" tone="green" />
+        <Stat label="Prontos para enviar" value={novos} hint={incluirFixos ? "celular ou fixo, fora da planilha" : "celular e fora da planilha"} tone="brand" />
         <Stat
           label="Já na planilha"
           value={naPlanilha}
-          hint={enviados ? `+ ${enviados} enviados agora` : check.info ? `${check.info.totalNaPlanilha} linhas na aba ${check.info.aba}` : "não reenviados"}
+          hint={enviados ? `+ ${enviados} enviados agora` : "não recebem de novo"}
           tone="amber"
         />
       </div>
@@ -272,7 +293,7 @@ export function ResultsView({
                 setQ(e.target.value);
                 setPagina(1);
               }}
-              placeholder="Filtrar por nome, telefone, bairro…"
+              placeholder="Procurar na lista por nome, telefone, bairro…"
               className={cx(inputClass, "pl-10")}
             />
             {q && (
@@ -282,32 +303,32 @@ export function ResultsView({
             )}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex">
-            <select value={fone} onChange={(e) => (setFone(e.target.value as FiltroFone), setPagina(1))} className={cx(inputClass, "lg:w-36")} aria-label="Telefone">
+            <select value={fone} onChange={(e) => (setFone(e.target.value as FiltroFone), setPagina(1))} className={cx(inputClass, "lg:w-auto")} aria-label="Telefone">
               <option value="todos">Todo telefone</option>
-              <option value="celular">Celular</option>
-              <option value="fixo">Fixo</option>
+              <option value="celular">Só celular</option>
+              <option value="fixo">Só fixo</option>
               <option value="sem">Sem telefone</option>
             </select>
-            <select value={tipo} onChange={(e) => (setTipo(e.target.value as "todos" | LeadTipo), setPagina(1))} className={cx(inputClass, "lg:w-36")} aria-label="Tipo">
-              <option value="todos">Todo tipo</option>
-              <option value="Empresa">Empresa</option>
-              <option value="Autônomo">Autônomo</option>
+            <select value={tipo} onChange={(e) => (setTipo(e.target.value as "todos" | LeadTipo), setPagina(1))} className={cx(inputClass, "lg:w-auto")} aria-label="Tipo">
+              <option value="todos">Empresa e autônomo</option>
+              <option value="Empresa">Só empresa</option>
+              <option value="Autônomo">Só autônomo</option>
             </select>
             <select
               value={situacao}
               onChange={(e) => (setSituacao(e.target.value as FiltroSituacao), setPagina(1))}
-              className={cx(inputClass, "lg:w-40")}
+              className={cx(inputClass, "lg:w-auto")}
               aria-label="Situação"
             >
-              <option value="todos">Toda situação</option>
-              <option value="novos">Novos</option>
-              <option value="planilha">Já na planilha</option>
-              <option value="enviados">Enviados agora</option>
+              <option value="todos">Todos</option>
+              <option value="novos">Só novos</option>
+              <option value="planilha">Só já na planilha</option>
+              <option value="enviados">Só enviados agora</option>
             </select>
             <div className="relative">
               <ArrowDownUp className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted" />
-              <select value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)} className={cx(inputClass, "pl-8 lg:w-44")} aria-label="Ordenar">
-                <option value="relevancia">Relevância</option>
+              <select value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)} className={cx(inputClass, "pl-8 lg:w-auto")} aria-label="Ordenar">
+                <option value="relevancia">Ordem do Google</option>
                 <option value="avaliacoes">Mais avaliações</option>
                 <option value="nota">Melhor nota</option>
                 <option value="nome">Nome (A–Z)</option>
@@ -329,9 +350,9 @@ export function ResultsView({
               onChange={marcarTodos}
               disabled={!elegiveisFiltrados.length}
             />
-            Selecionar {elegiveisFiltrados.length} elegíveis {filtrados.length !== leads.length && "do filtro"}
+            Marcar todos os {elegiveisFiltrados.length} que podem ser enviados{filtrados.length !== leads.length && " (com este filtro)"}
           </label>
-          <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Incluir fixos" />
+          <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Permitir telefone fixo" hint="Fixo quase nunca tem WhatsApp." />
         </div>
 
         {/* Tabela (desktop) */}
@@ -345,7 +366,7 @@ export function ResultsView({
                 <th className="py-3 pr-4">Tipo</th>
                 <th className="py-3 pr-4">Cidade</th>
                 <th className="py-3 pr-4">Avaliação</th>
-                <th className="py-3 pr-4">Situação</th>
+                <th className="py-3 pr-4">Planilha</th>
                 <th className="py-3 pr-4 text-right">Links</th>
               </tr>
             </thead>
@@ -485,7 +506,7 @@ export function ResultsView({
           })}
         </ul>
 
-        {!filtrados.length && <p className="px-4 py-12 text-center text-sm text-muted">Nenhum lead com esses filtros.</p>}
+        {!filtrados.length && <p className="px-4 py-12 text-center text-sm text-muted">Ninguém na lista com esses filtros.</p>}
 
         {totalPaginas > 1 && (
           <div className="flex items-center justify-between border-t border-line px-4 py-3 text-sm">
@@ -510,14 +531,14 @@ export function ResultsView({
           <div className="min-w-0 text-sm leading-tight">
             <span className="font-bold tabular-nums">{paraEnviar}</span>{" "}
             <span className="text-white/60">
-              selecionados<span className="hidden sm:inline"> para a planilha</span>
+              marcados<span className="hidden sm:inline"> para ir à planilha</span>
             </span>
             {!podeEnviarParaPlanilha && check.estado === "erro" && <span className="block text-xs text-red-300">Planilha indisponível</span>}
           </div>
           <div className="flex gap-2">
             {paraEnviar > 0 && (
               <Button variant="ghost" className="hidden text-white/60 hover:bg-white/10 hover:text-white sm:inline-flex" onClick={() => onSelecionados(new Set())}>
-                Limpar
+                Desmarcar
               </Button>
             )}
             <Button onClick={onEnviar} disabled={!paraEnviar || !podeEnviarParaPlanilha || rodando} icon={<Send className="size-4" />}>
@@ -527,6 +548,52 @@ export function ResultsView({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ResumoBusca({ p, marcados, podeContinuar, onContinuar }: { p: Progresso; marcados: number; podeContinuar: boolean; onContinuar: () => void }) {
+  const n = (v: number) => v.toLocaleString("pt-BR");
+  const faltam = Math.max(0, p.alvo - p.novos);
+  const completo = p.novos >= p.alvo;
+  const continuar = podeContinuar && !completo && p.fim !== "esgotado" && p.fim !== "cota";
+  return (
+    <div
+      className={cx(
+        "flex flex-col gap-3 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+        completo ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900",
+      )}
+    >
+      <p className="flex items-start gap-2.5">
+        {completo ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
+        <span>
+          {completo ? (
+            <>
+              Você pediu <b>{n(p.alvo)}</b> contatos novos e eles já estão marcados ({n(marcados)} marcados). Confira e clique em{" "}
+              <b>Enviar para a planilha</b>.
+            </>
+          ) : p.fim === "esgotado" ? (
+            <>
+              Achamos <b>{n(p.novos)}</b> dos {n(p.alvo)} pedidos: o Google não tem mais resultados para esses termos e lugares. Tente
+              outras cidades, bairros ou termos.
+            </>
+          ) : p.fim === "cota" ? (
+            <>
+              Achamos <b>{n(p.novos)}</b> dos {n(p.alvo)} pedidos. {p.erro}
+            </>
+          ) : (
+            <>
+              Achamos <b>{n(p.novos)}</b> dos {n(p.alvo)} pedidos
+              {p.fim === "limite" ? ` (a busca parou no máximo de ${n(p.limite)} consultas)` : ""}. Faltam {n(faltam)}.
+            </>
+          )}
+        </span>
+      </p>
+      {continuar && (
+        <Button size="sm" variant="outline" onClick={onContinuar} icon={<Play className="size-3.5" />}>
+          Continuar buscando
+        </Button>
+      )}
     </div>
   );
 }

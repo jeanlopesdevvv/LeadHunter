@@ -46,8 +46,26 @@ O projeto já tem faturamento, Sheets API e Places API. Falta:
    - Guarde o arquivo com cuidado: é uma senha. Nunca coloque no GitHub nem mande no chat.
 4. **Compartilhar a planilha** "Leads Lava-jatos" com o e-mail da conta
    (`radar-planilha@...iam.gserviceaccount.com`) como **Editor**, sem notificar.
-5. (Recomendado) *Places API (New) → Cotas e limites do sistema*: limite **por dia** de *Text Search*
-   (ex.: 300). Referência: 1.000 consultas grátis/mês; depois US$ 35 por 1.000 (cada consulta traz até 20 lugares).
+5. **Contador de consultas grátis**: *IAM e administrador → IAM → Conceder acesso*.
+   Novos principais: o e-mail da conta de serviço. Papel: **Visualizador de monitoramento**
+   (`roles/monitoring.viewer`). Salvar. Com isso o Radar lê no Google Cloud quantas buscas o projeto já fez
+   no mês e mostra o número exato de consultas restantes. Sem esse papel, o Radar conta sozinho
+   (só as buscas feitas por ele desde o último reinício) e avisa na tela.
+   Se aparecer "Cloud Monitoring API desativada", ative-a em *APIs e serviços → Biblioteca*.
+6. (Opcional) *Places API (New) → Cotas e limites do sistema*: limite **por dia** de *Text Search*
+   (ex.: 300), como segunda trava além da do próprio Radar.
+
+### Cota grátis do Google
+
+- A busca usa o *Text Search* com telefone, site e nota: SKU **Enterprise**, **1.000 consultas grátis por mês**;
+  depois disso cerca de US$ 35 a cada 1.000. Cada consulta traz até 20 estabelecimentos.
+- O mês do Google fecha no horário do Pacífico (EUA): as consultas voltam no **dia 1º às 04:00 de Brasília**
+  (05:00 nas renovações de dezembro a março, quando os EUA estão fora do horário de verão).
+- Descobrir o contorno da cidade (para dividir o mapa) usa Autocomplete + Place Details, com cota grátis própria
+  (5.000/mês), e não gasta as 1.000 da busca.
+- Com `BLOQUEAR_NO_LIMITE=1` (padrão) o Radar para de buscar quando as grátis acabam.
+- A cota grátis é por conta de faturamento: se outro sistema do mesmo projeto também usar *Text Search*,
+  o contador do Radar inclui essas buscas.
 
 ## 3. DNS na Hostinger
 
@@ -74,6 +92,8 @@ Não mexa nos outros registros (o `lavacar.app` principal aponta para o Lovable)
    SHEET_DEFAULT_STATUS=pendente
    DEDUP_EXTRA_TABS=historico_carol,historico_sofia
    MAX_REQUESTS_PER_SEARCH=200
+   LIMITE_MENSAL_CONSULTAS=1000
+   BLOQUEAR_NO_LIMITE=1
    ```
 
    O `.env` do EasyPanel não aceita valores em várias linhas, então o JSON da conta de serviço vai em
@@ -95,9 +115,9 @@ Não mexa nos outros registros (o `lavacar.app` principal aponta para o Lovable)
 ## 5. Conferir
 
 1. Abra <https://radar.lavacar.app> (o certificado HTTPS pode levar 1–2 minutos na primeira vez) e entre com a senha.
-2. Menu **Configuração**: senha, Places API e Planilha devem ficar verdes, com as colunas da aba `leads` em verde
-   e as abas `historico_carol` e `historico_sofia` lidas.
-3. Faça uma busca **Rápida** com 1 termo e 1 cidade, selecione **um** lead e envie.
+2. Menu **Configuração**: senha, busca no Google Maps, contador de consultas e planilha devem ficar verdes, com as
+   colunas da aba `leads` em verde e as abas `historico_carol` e `historico_sofia` lidas.
+3. Faça uma busca de **20** contatos com 1 termo e 1 cidade, deixe marcado só **um** e envie.
 4. Confira a nova linha no fim da aba `leads` com `status = pendente` e veja se a Carol dispara a mensagem.
 5. Envie o mesmo lead de novo: ele deve aparecer como *Já na planilha* e ser ignorado.
 
@@ -118,7 +138,8 @@ Não mexa nos outros registros (o `lavacar.app` principal aponta para o Lovable)
 | "A conta de serviço não tem acesso à planilha" | Passo 2.4: compartilhe a planilha com o e-mail da conta como **Editor**. |
 | "GOOGLE_SERVICE_ACCOUNT_JSON está inválido" | Gere de novo a linha base64 (passo 4.3) e cole sem espaços extras. |
 | "Faltam colunas na linha 1 da aba leads" | A linha 1 precisa ter `telefone, nome, tipo, cidade, status`. |
-| "Esta busca pode usar até N consultas…" | Reduza termos/cidades/profundidade ou aumente `MAX_REQUESTS_PER_SEARCH`. |
+| Contador amarelo: "Contando só as buscas feitas pelo Radar…" | Passo 2.5: papel **Visualizador de monitoramento** para a conta de serviço. |
+| "As 1.000 consultas grátis deste mês acabaram" | Espere a renovação (dia 1º, 04:00) ou, se aceitar pagar o excedente, `BLOQUEAR_NO_LIMITE=0`. |
 
 Trocar a senha: altere `APP_PASSWORD` no *Ambiente* do EasyPanel e clique **Implantar** (todas as sessões abertas caem).
 

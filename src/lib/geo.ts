@@ -26,19 +26,22 @@ export function splitRect(rect: Rect, n: number): Rect[] {
   return cells;
 }
 
-export const DEPTHS = {
-  rapida: { label: "Rápida", grid: 1, descricao: "1 área · até 60 por termo" },
-  ampla: { label: "Ampla", grid: 2, descricao: "4 áreas · até 240 por termo" },
-  maxima: { label: "Máxima", grid: 3, descricao: "9 áreas · até 540 por termo" },
-} as const;
+/** O Google entrega no máximo 60 lugares por consulta (3 páginas de 20). */
+export const PAGINAS_POR_CONSULTA = 3;
+export const LUGARES_POR_PAGINA = 20;
+/** Quantas vezes uma área cheia pode ser dividida em 4 (3 níveis = até 64 pedaços). */
+export const MAX_DIVISOES = 3;
 
-export type Depth = keyof typeof DEPTHS;
+export const QUANTIDADES = [20, 50, 100, 200, 500] as const;
 
-/** Pior caso de consultas: 3 páginas por área + 1 consulta para achar a área da cidade. */
-export function estimateRequests(termos: number, cidades: number, depth: Depth): number {
-  const grid = DEPTHS[depth].grid;
-  const areas = grid * grid;
-  return termos * cidades * areas * 3 + (grid > 1 ? cidades : 0);
+/**
+ * Limite de consultas sugerido para achar `alvo` contatos novos.
+ * Em média cada consulta (20 lugares) rende de 3 a 8 contatos novos com celular;
+ * a sugestão cobre o caso mais fraco. A busca para antes se chegar ao alvo.
+ */
+export function sugerirLimite(alvo: number, combinacoes: number, maximo: number): number {
+  const base = Math.max(5, Math.ceil(alvo / 2.5), combinacoes);
+  return Math.max(1, Math.min(base, maximo));
 }
 
 export function splitLines(text: string): string[] {

@@ -71,10 +71,10 @@ Autônomo/Empresa, seleção de leads, normalização de telefone para WhatsApp 
 
 - **Google Places API (Text Search, SKU Enterprise, por causa de telefone/site/nota):** 1.000 consultas
   grátis por mês; depois US$ 35 por 1.000 consultas. Cada consulta devolve até 20 estabelecimentos
-  (até 20 mil leads/mês sem custo). O app mostra a estimativa de consultas antes de buscar e respeita o
-  limite `MAX_REQUESTS_PER_SEARCH`. Recomendado também definir uma cota diária no Google Cloud.
-- **Limite do Google:** no máximo 60 resultados por termo e área. Para cidades grandes, use a
-  **varredura ampla/máxima** (divide a cidade em 4 ou 9 áreas) ou liste bairros.
+  (até 20 mil leads/mês sem custo). O app mostra quantas consultas grátis restam no mês e quando renovam
+  (lido do Cloud Monitoring), mostra o máximo que cada busca pode gastar e para de buscar quando as grátis acabam.
+- **Limite do Google:** no máximo 60 resultados por termo e área. Quando isso acontece, o Radar divide o mapa
+  da cidade em 4 (até 64 pedaços) automaticamente, só onde for preciso.
 - **Servidor:** cada chamada é curta (uma página de resultados), sem risco de tempo limite em proxy ou na
   Vercel. No EasyPanel o app usa ~50 MB de RAM; a imagem é montada no GitHub, não no servidor.
 

@@ -4,15 +4,16 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useToast } from "@/components/toast";
-import { splitLines, type Depth } from "@/lib/geo";
+import { splitLines, sugerirLimite } from "@/lib/geo";
 import { api } from "@/lib/client/api";
 import { loadHistory, removeHistory, upsertHistory, type HistoryEntry } from "@/lib/client/history";
-import { runSearch, type Progress } from "@/lib/client/search-runner";
-import type { CheckResult, Lead, SendResult } from "@/lib/types";
+import { planejarBusca, SessaoDeBusca, type Progresso } from "@/lib/client/search-runner";
+import { formatarRenovacaoCurta } from "@/lib/periodo";
+import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
 
 import { HistoryView } from "./HistoryView";
 import { ResultsView } from "./ResultsView";
-import { SearchView, type SearchForm } from "./SearchView";
+import { calcularLimite, SearchView, type SearchForm } from "./SearchView";
 import { SendDialog } from "./SendDialog";
 import { SettingsView, type StatusResponse } from "./SettingsView";
 import { Shell, type View } from "./Shell";
@@ -22,7 +23,7 @@ export interface SearchMeta {
   criadoEm: string;
   termos: string[];
   cidades: string[];
-  profundidade: Depth;
+  alvo?: number;
 }
 
 export interface SearchStats {
@@ -43,9 +44,20 @@ export function podeEnviar(lead: Lead, incluirFixos: boolean): boolean {
 const FORM_INICIAL: SearchForm = {
   termos: "lava jato\nestética automotiva",
   cidades: "Belo Horizonte - MG",
-  profundidade: "rapida",
+  alvo: 50,
+  limite: null,
   ignorarFechados: true,
 };
+
+/** Marca os primeiros `max` que podem ir para a planilha (celular, fora da planilha). */
+function primeirosElegiveis(lista: Lead[], max: number): Set<string> {
+  const ids = new Set<string>();
+  for (const l of lista) {
+    if (ids.size >= max) break;
+    if (podeEnviar(l, false)) ids.add(l.id);
+  }
+  return ids;
+}
 
 export function Dashboard() {
   const toast = useToast();
@@ -53,46 +65,78 @@ export function Dashboard() {
   const [view, setView] = useState<View>("buscar");
   const [form, setForm] = useState<SearchForm>(FORM_INICIAL);
   const [rodando, setRodando] = useState(false);
-  const [progress, setProgress] = useState<Progress | null>(null);
+  const [progresso, setProgresso] = useState<Progresso | null>(null);
+  const [temMais, setTemMais] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stats, setStats] = useState<SearchStats>({ brutos: 0, repetidos: 0, fechados: 0 });
   const [meta, setMeta] = useState<SearchMeta | null>(null);
   const [check, setCheck] = useState<CheckState>({ estado: "idle" });
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [incluirFixos, setIncluirFixos] = useState(false);
-  const [historico, setHistorico] = useState<HistoryEntry[]>([]);
+  // O histórico só aparece na aba Histórico (nunca no primeiro desenho), então pode ser lido já na criação.
+  const [historico, setHistorico] = useState<HistoryEntry[]>(() => (typeof window === "undefined" ? [] : loadHistory()));
   const [status, setStatus] = useState<StatusResponse | null>(null);
+  const [uso, setUso] = useState<Uso | null>(null);
+  const [atualizandoUso, setAtualizandoUso] = useState(false);
   const [enviarAberto, setEnviarAberto] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
-  const porId = useRef(new Map<string, Lead>());
-  const porTelefone = useRef(new Set<string>());
+  const sessaoRef = useRef<SessaoDeBusca | null>(null);
   /** Sempre a lista mais recente (inclui o "tipo" editado pelo usuário). */
   const leadsRef = useRef<Lead[]>([]);
   /** Cada conferência/busca nova invalida respostas antigas que cheguem atrasadas. */
   const geracao = useRef(0);
+
+  const maxPorBusca = status?.limites.maxConsultasPorBusca ?? 200;
 
   const atualizarLeads = useCallback((lista: Lead[]) => {
     leadsRef.current = lista;
     setLeads(lista);
   }, []);
 
-  useEffect(() => {
-    // Lido depois de montar para não divergir do HTML do servidor.
-    setHistorico(loadHistory());
-  }, []);
-
   const carregarStatus = useCallback(async () => {
     try {
-      setStatus(await api<StatusResponse>("/api/status"));
+      const s = await api<StatusResponse>("/api/status");
+      setStatus(s);
+      if (s.uso) setUso(s.uso);
     } catch (e) {
       toast((e as Error).message, "error");
     }
   }, [toast]);
 
+  const carregarUso = useCallback(async (forcar = false) => {
+    if (forcar) setAtualizandoUso(true);
+    try {
+      setUso(await api<Uso>(`/api/uso${forcar ? "?atualizar=1" : ""}`));
+    } catch {
+      /* o contador não é essencial; tenta de novo depois */
+    } finally {
+      if (forcar) setAtualizandoUso(false);
+    }
+  }, []);
+
   useEffect(() => {
-    void carregarStatus();
-  }, [carregarStatus]);
+    let ativo = true;
+    api<StatusResponse>("/api/status")
+      .then((s) => {
+        if (!ativo) return;
+        setStatus(s);
+        if (s.uso) setUso(s.uso);
+      })
+      .catch((e: Error) => ativo && toast(e.message, "error"));
+    return () => {
+      ativo = false;
+    };
+  }, [toast]);
+
+  // Mantém o contador de consultas em dia enquanto a tela está aberta.
+  useEffect(() => {
+    if (rodando) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void carregarUso();
+    }, 120_000);
+    return () => window.clearInterval(id);
+  }, [rodando, carregarUso]);
 
   const irPara = useCallback(
     (v: View) => {
@@ -107,15 +151,15 @@ export function Dashboard() {
   }, [view]);
 
   /**
-   * Confere na planilha quem já existe e pré-seleciona os novos com celular.
+   * Confere na planilha quem já existe e marca os primeiros `selecionar` novos com celular.
    * Retorna null se, enquanto conferia, o usuário começou outra busca.
    */
   const conferirPlanilha = useCallback(
-    async (selecionar = true): Promise<Lead[] | null> => {
+    async (selecionar: number | false = Number.POSITIVE_INFINITY): Promise<Lead[] | null> => {
       const minha = geracao.current;
       const keys = [...new Set(leadsRef.current.map((l) => l.telefoneKey).filter(Boolean))];
       const aplicarSelecao = (lista: Lead[]) => {
-        if (selecionar) setSelecionados(new Set(lista.filter((l) => podeEnviar(l, false)).map((l) => l.id)));
+        if (selecionar !== false) setSelecionados(primeirosElegiveis(lista, selecionar));
       };
       if (!keys.length) {
         setCheck({ estado: "ok" });
@@ -147,89 +191,141 @@ export function Dashboard() {
     [atualizarLeads],
   );
 
+  /** Roda (ou continua) a sessão de busca até o alvo ou o limite de consultas. */
+  const executar = useCallback(
+    async (sessao: SessaoDeBusca, alvo: number, limite: number, controller: AbortController, minha: number) => {
+      await sessao.executar({
+        alvo,
+        limite,
+        signal: controller.signal,
+        onUpdate: (lista, p) => {
+          if (minha !== geracao.current) return;
+          // Mantém edições feitas durante a busca (ex.: tipo trocado, lead já enviado).
+          const atuais = new Map(leadsRef.current.map((l) => [l.id, l]));
+          atualizarLeads(lista.map((l) => atuais.get(l.id) ?? l));
+          setProgresso(p);
+          setStats({ brutos: p.vistos, repetidos: p.repetidos, fechados: p.fechados });
+          if (sessao.ultimoUso) setUso(sessao.ultimoUso);
+        },
+      });
+    },
+    [atualizarLeads],
+  );
+
+  const finalizar = useCallback(
+    async (minha: number, metaBusca: SearchMeta, sessao: SessaoDeBusca | null, falhou: boolean) => {
+      setRodando(false);
+      abortRef.current = null;
+      setTemMais(Boolean(sessao?.temMais));
+      void carregarUso();
+      if (minha !== geracao.current) return;
+      if (!leadsRef.current.length) {
+        if (!falhou) toast("O Google não achou nenhum estabelecimento. Tente outros termos ou uma cidade maior.", "info");
+        return;
+      }
+      const conferidos = await conferirPlanilha(metaBusca.alvo ?? Number.POSITIVE_INFINITY);
+      if (!conferidos) return;
+      const anterior = loadHistory().find((h) => h.id === metaBusca.id);
+      setHistorico(upsertHistory({ ...metaBusca, total: conferidos.length, enviados: anterior?.enviados ?? 0, leads: conferidos }));
+      const novos = conferidos.filter((l) => podeEnviar(l, false)).length;
+      toast(
+        novos
+          ? `${novos} contato${novos === 1 ? "" : "s"} novo${novos === 1 ? "" : "s"} com celular pronto${novos === 1 ? "" : "s"} para enviar.`
+          : "Nenhum contato novo desta vez: quem apareceu já está na planilha ou não tem celular.",
+        novos ? "success" : "info",
+      );
+      setView("resultados");
+    },
+    [toast, conferirPlanilha, carregarUso],
+  );
+
   const buscar = useCallback(async () => {
     const termos = splitLines(form.termos);
     const cidades = splitLines(form.cidades);
-    if (!termos.length) return toast("Informe pelo menos um termo de busca.", "error");
-    if (!cidades.length) return toast("Informe pelo menos uma cidade.", "error");
+    if (!termos.length) return toast("Escreva pelo menos uma coisa para procurar.", "error");
+    if (!cidades.length) return toast("Escreva pelo menos uma cidade.", "error");
+    if (!(form.alvo > 0)) return toast("Diga quantos contatos você quer.", "error");
 
     const controller = new AbortController();
     abortRef.current = controller;
     const minha = ++geracao.current;
-    porId.current = new Map();
-    porTelefone.current = new Set();
-    const contagem: SearchStats = { brutos: 0, repetidos: 0, fechados: 0 };
-    const novaMeta: SearchMeta = {
-      id: crypto.randomUUID(),
-      criadoEm: new Date().toISOString(),
-      termos,
-      cidades,
-      profundidade: form.profundidade,
-    };
+    const novaMeta: SearchMeta = { id: crypto.randomUUID(), criadoEm: new Date().toISOString(), termos, cidades, alvo: form.alvo };
 
+    sessaoRef.current = null;
     setRodando(true);
+    setTemMais(false);
     atualizarLeads([]);
-    setStats(contagem);
+    setStats({ brutos: 0, repetidos: 0, fechados: 0 });
     setSelecionados(new Set());
     setCheck({ estado: "idle" });
     setMeta(novaMeta);
-    setProgress({ feitas: 0, previstas: 1, etapa: "Planejando a busca…", erros: [] });
+    setProgresso({
+      alvo: form.alvo,
+      novos: 0,
+      consultas: 0,
+      limite: calcularLimite(form, uso, maxPorBusca).limite,
+      vistos: 0,
+      unicos: 0,
+      repetidos: 0,
+      fechados: 0,
+      jaNaPlanilha: 0,
+      semCelular: 0,
+      etapa: "Preparando a busca…",
+      avisos: [],
+      rodando: true,
+      fim: null,
+    });
 
     let falhou = false;
+    let sessao: SessaoDeBusca | null = null;
     try {
-      await runSearch({
-        termos,
-        cidades,
-        profundidade: form.profundidade,
-        signal: controller.signal,
-        onPlan: () => {},
-        onProgress: setProgress,
-        onLeads: (batch) => {
-          let mudou = false;
-          for (const lead of batch) {
-            contagem.brutos++;
-            if (form.ignorarFechados && lead.situacaoNegocio !== "OPERATIONAL") {
-              contagem.fechados++;
-              continue;
-            }
-            if (porId.current.has(lead.id) || (lead.telefoneKey && porTelefone.current.has(lead.telefoneKey))) {
-              contagem.repetidos++;
-              continue;
-            }
-            porId.current.set(lead.id, lead);
-            if (lead.telefoneKey) porTelefone.current.add(lead.telefoneKey);
-            mudou = true;
-          }
-          setStats({ ...contagem });
-          if (mudou) {
-            // Mantém edições feitas durante a busca (ex.: tipo trocado).
-            const atuais = new Map(leadsRef.current.map((l) => [l.id, l]));
-            atualizarLeads([...porId.current.values()].map((l) => atuais.get(l.id) ?? l));
-          }
-        },
-      });
+      const plano = await planejarBusca(termos, cidades, controller.signal);
+      setUso(plano.uso);
+      const { limite } = calcularLimite(form, plano.uso, maxPorBusca);
+      if (limite <= 0) throw new Error(`As consultas grátis deste mês acabaram. Voltam em ${formatarRenovacaoCurta(plano.uso.renovaEm)}.`);
+      sessao = new SessaoDeBusca(plano, { ignorarFechados: form.ignorarFechados });
+      sessaoRef.current = sessao;
+      await executar(sessao, form.alvo, limite, controller, minha);
+      const p = sessao.progresso;
+      if (p.fim === "cota" || p.fim === "erro") {
+        falhou = !leadsRef.current.length;
+        toast(p.erro || "A busca parou por um erro.", "error");
+      }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
         falhou = true;
-        toast((e as Error).message, "error");
-        setProgress((p) => (p ? { ...p, etapa: "Falhou", erros: [...p.erros, (e as Error).message] } : p));
+        const msg = (e as Error).message;
+        toast(msg, "error");
+        setProgresso((p) => (p ? { ...p, rodando: false, fim: "erro", erro: msg, etapa: "" } : p));
+      } else {
+        setProgresso((p) => (p ? { ...p, rodando: false, fim: "parado", etapa: "" } : p));
       }
     }
+    await finalizar(minha, novaMeta, sessao, falhou);
+  }, [form, uso, maxPorBusca, toast, atualizarLeads, executar, finalizar]);
 
-    setRodando(false);
-    abortRef.current = null;
-    if (minha !== geracao.current) return;
-    if (!leadsRef.current.length) {
-      if (!falhou) toast("Nenhum estabelecimento encontrado. Tente outros termos ou uma cidade maior.", "info");
-      return;
+  const continuar = useCallback(async () => {
+    const sessao = sessaoRef.current;
+    if (!sessao || rodando || !meta) return;
+    const p = sessao.progresso;
+    const faltam = Math.max(1, p.alvo - p.novos);
+    const disponivel = uso?.bloquear ? Math.max(0, uso.restantes) : maxPorBusca;
+    const extra = Math.min(sugerirLimite(faltam, 1, maxPorBusca), disponivel);
+    if (extra <= 0 && uso) return toast(`As consultas grátis deste mês acabaram. Voltam em ${formatarRenovacaoCurta(uso.renovaEm)}.`, "error");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const minha = ++geracao.current;
+    setRodando(true);
+    setView("buscar");
+    try {
+      await executar(sessao, p.alvo, p.consultas + extra, controller, minha);
+      if (sessao.progresso.fim === "cota" || sessao.progresso.fim === "erro") toast(sessao.progresso.erro || "A busca parou por um erro.", "error");
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") toast((e as Error).message, "error");
     }
-    const conferidos = await conferirPlanilha();
-    if (!conferidos) return;
-    setHistorico(upsertHistory({ ...novaMeta, total: conferidos.length, enviados: 0, leads: conferidos }));
-    const novos = conferidos.filter((l) => podeEnviar(l, false)).length;
-    toast(`${conferidos.length} estabelecimentos únicos · ${novos} novos com celular.`, "success");
-    setView("resultados");
-  }, [form, toast, conferirPlanilha, atualizarLeads]);
+    await finalizar(minha, meta, sessao, false);
+  }, [rodando, meta, uso, maxPorBusca, toast, executar, finalizar]);
 
   const parar = useCallback(() => abortRef.current?.abort(), []);
 
@@ -271,22 +367,24 @@ export function Dashboard() {
 
   const abrirHistorico = useCallback(
     async (entry: HistoryEntry) => {
-      if (!entry.leads?.length) return toast("Os resultados desta busca não estão mais salvos neste navegador.", "info");
+      if (!entry.leads?.length) return toast("A lista desta busca não está mais guardada neste navegador.", "info");
       if (rodando) return toast("Espere a busca atual terminar.", "info");
       geracao.current++;
-      setMeta({ id: entry.id, criadoEm: entry.criadoEm, termos: entry.termos, cidades: entry.cidades, profundidade: entry.profundidade });
+      sessaoRef.current = null;
+      setTemMais(false);
+      setMeta({ id: entry.id, criadoEm: entry.criadoEm, termos: entry.termos, cidades: entry.cidades, alvo: entry.alvo });
       setStats({ brutos: entry.leads.length, repetidos: 0, fechados: 0 });
-      setProgress(null);
+      setProgresso(null);
       setSelecionados(new Set());
       atualizarLeads(entry.leads);
       setView("resultados");
-      await conferirPlanilha(); // a planilha pode ter mudado desde então
+      await conferirPlanilha(entry.alvo ?? Number.POSITIVE_INFINITY); // a planilha pode ter mudado desde então
     },
     [conferirPlanilha, toast, rodando, atualizarLeads],
   );
 
   const repetirBusca = useCallback((entry: HistoryEntry) => {
-    setForm((f) => ({ ...f, termos: entry.termos.join("\n"), cidades: entry.cidades.join("\n"), profundidade: entry.profundidade }));
+    setForm((f) => ({ ...f, termos: entry.termos.join("\n"), cidades: entry.cidades.join("\n"), alvo: entry.alvo ?? f.alvo }));
     setView("buscar");
   }, []);
 
@@ -306,6 +404,7 @@ export function Dashboard() {
       rodando={rodando}
       simulacao={Boolean(status?.simulacao)}
       planilhaUrl={status?.planilha.planilhaUrl}
+      uso={uso}
       onSair={sair}
     >
       {view === "buscar" && (
@@ -313,13 +412,16 @@ export function Dashboard() {
           form={form}
           onForm={setForm}
           rodando={rodando}
-          progress={progress}
-          stats={stats}
-          totalUnicos={leads.length}
-          maxConsultas={status?.limites.maxConsultasPorBusca ?? 200}
+          progresso={progresso}
+          podeContinuar={temMais}
+          uso={uso}
+          maxPorBusca={maxPorBusca}
           placesConfigurada={status ? status.places.configurada : true}
+          atualizandoUso={atualizandoUso}
+          onAtualizarUso={() => void carregarUso(true)}
           onBuscar={buscar}
           onParar={parar}
+          onContinuar={continuar}
           onVerResultados={() => setView("resultados")}
         />
       )}
@@ -330,6 +432,9 @@ export function Dashboard() {
           meta={meta}
           stats={stats}
           rodando={rodando}
+          progresso={progresso}
+          podeContinuar={temMais && !rodando}
+          onContinuar={continuar}
           check={check}
           selecionados={selecionados}
           onSelecionados={setSelecionados}
@@ -352,7 +457,7 @@ export function Dashboard() {
           onRemover={(id) => setHistorico(removeHistory(id))}
         />
       )}
-      {view === "config" && <SettingsView status={status} onRecarregar={carregarStatus} />}
+      {view === "config" && <SettingsView status={status} uso={uso} onRecarregar={carregarStatus} />}
 
       <SendDialog
         aberto={enviarAberto}

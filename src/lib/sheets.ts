@@ -1,8 +1,7 @@
 import "server-only";
 
-import { JWT } from "google-auth-library";
-
 import { getConfig } from "./env";
+import { GoogleAuthError, googleAccessToken } from "./google-auth";
 import { phoneKey } from "./phone";
 import { mockSheet } from "./mock";
 import {
@@ -36,33 +35,11 @@ export class SheetsError extends Error {
   }
 }
 
-let jwtClient: JWT | null = null;
-let jwtEmail = "";
-
 async function accessToken(): Promise<string> {
-  const cfg = getConfig();
-  if (!cfg.serviceAccount) {
-    throw new SheetsError(
-      cfg.serviceAccountInvalid
-        ? "GOOGLE_SERVICE_ACCOUNT_JSON está inválido. Cole o JSON inteiro da chave da conta de serviço."
-        : "Conta de serviço do Google não configurada (GOOGLE_SERVICE_ACCOUNT_JSON).",
-      503,
-    );
-  }
-  if (!jwtClient || jwtEmail !== cfg.serviceAccount.client_email) {
-    jwtClient = new JWT({
-      email: cfg.serviceAccount.client_email,
-      key: cfg.serviceAccount.private_key,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-    jwtEmail = cfg.serviceAccount.client_email;
-  }
   try {
-    const { token } = await jwtClient.getAccessToken();
-    if (!token) throw new Error("token vazio");
-    return token;
+    return await googleAccessToken();
   } catch (e) {
-    throw new SheetsError(`Não foi possível autenticar a conta de serviço: ${(e as Error).message}`, 503);
+    throw new SheetsError((e as Error).message, e instanceof GoogleAuthError ? e.status : 503);
   }
 }
 
@@ -93,9 +70,9 @@ async function sheetsFetch<T>(path: string, init?: RequestInit): Promise<T> {
         403,
       );
     }
-    if (res.status === 404) throw new SheetsError("Planilha não encontrada. Confira SHEET_ID.", 404);
-    if (/unable to parse range/i.test(msg)) throw new SheetsError(`Aba "${cfg.sheetTab}" não encontrada na planilha.`, 400);
-    throw new SheetsError(`Erro do Google Sheets (${res.status}): ${msg}`);
+    if (res.status === 404) throw new SheetsError("Planilha não encontrada. Confira o SHEET_ID no EasyPanel.", 404);
+    if (/unable to parse range/i.test(msg)) throw new SheetsError(`A aba "${cfg.sheetTab}" não existe na planilha.`, 400);
+    throw new SheetsError(`A planilha do Google respondeu com erro (${res.status}): ${msg}`);
   }
   return JSON.parse(text || "{}") as T;
 }
@@ -120,7 +97,7 @@ async function readMainTab(): Promise<TabData> {
   );
   const tabs = (meta.sheets ?? []).map((s) => s.properties?.title ?? "").filter(Boolean);
   if (!tabs.includes(cfg.sheetTab)) {
-    throw new SheetsError(`Aba "${cfg.sheetTab}" não encontrada. Abas da planilha: ${tabs.join(", ")}.`, 400);
+    throw new SheetsError(`A aba "${cfg.sheetTab}" não existe na planilha. Abas que existem: ${tabs.join(", ")}.`, 400);
   }
   // UNFORMATTED_VALUE: telefone salvo como número vem inteiro (sem notação científica da formatação).
   const data = await sheetsFetch<{ values?: unknown[][] }>(
@@ -162,7 +139,7 @@ async function readExtraTabKeys(existingTabs: string[]): Promise<{ keys: Set<str
 
 function assertColumns(tab: TabData) {
   const cfg = getConfig();
-  if (!tab.headers.length) throw new SheetsError(`A aba "${cfg.sheetTab}" está sem cabeçalho na linha 1.`, 400);
+  if (!tab.headers.length) throw new SheetsError(`A aba "${cfg.sheetTab}" está sem os nomes das colunas na linha 1.`, 400);
   const missing = missingRequired(tab.map);
   if (missing.length) {
     // Sem "status" a Carol nunca pegaria o lead; sem "telefone" não há deduplicação.
@@ -178,6 +155,27 @@ export async function loadExisting() {
   const extra = await readExtraTabKeys(tab.tabs);
   for (const k of extra.keys) idx.keys.add(k);
   return { ...idx, tab };
+}
+
+/**
+ * Mesma leitura, guardada por alguns segundos: durante a busca cada página de
+ * resultados já volta marcada como "novo" ou "já na planilha" sem reler a planilha toda hora.
+ * O envio nunca usa isto: ele relê a planilha na hora de gravar.
+ */
+let cacheExistentes: { em: number; valor: Promise<{ keys: Set<string>; optout: Set<string> }> } | null = null;
+export function existingKeysCached(maxAgeMs = 45_000): Promise<{ keys: Set<string>; optout: Set<string> }> {
+  const agora = Date.now();
+  if (!cacheExistentes || agora - cacheExistentes.em > maxAgeMs) {
+    const valor = loadExisting().then(({ keys, optout }) => ({ keys, optout }));
+    cacheExistentes = { em: agora, valor };
+    valor.catch(() => undefined); // uma falha também fica guardada: não trava cada página da busca
+
+  }
+  return cacheExistentes.valor;
+}
+
+function esquecerExistentes() {
+  cacheExistentes = null;
 }
 
 export function sheetUrl(): string {
@@ -247,6 +245,7 @@ export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
       }
     }
 
+    esquecerExistentes();
     return { adicionados, ignorados, planilhaUrl: sheetUrl(), aba: cfg.sheetTab };
   });
 }

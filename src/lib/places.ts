@@ -33,8 +33,8 @@ const LEAD_FIELDS = [
   "nextPageToken",
 ].join(",");
 
-/** Só campos Pro (cota grátis maior) para descobrir a área da cidade. */
-const AREA_FIELDS = "places.displayName,places.formattedAddress,places.viewport,places.types";
+const AUTOCOMPLETE = "https://places.googleapis.com/v1/places:autocomplete";
+const DETAILS = "https://places.googleapis.com/v1/places/";
 
 interface AddressComponent {
   longText?: string;
@@ -70,7 +70,8 @@ export class PlacesError extends Error {
   }
 }
 
-function explainGoogleError(status: number, body: string): string {
+/** Mensagem clara + código: 503 = problema de configuração (não adianta tentar de novo). */
+function explainGoogleError(status: number, body: string): { mensagem: string; status: number } {
   let reason = "";
   try {
     const json = JSON.parse(body) as { error?: { message?: string; status?: string } };
@@ -80,30 +81,44 @@ function explainGoogleError(status: number, body: string): string {
   }
   const r = reason.toLowerCase();
   if (r.includes("api key not valid") || r.includes("api_key_invalid"))
-    return "Chave do Google inválida. Confira GOOGLE_MAPS_API_KEY no .env do servidor.";
-  if (r.includes("billing")) return "O projeto do Google Cloud está sem faturamento ativo. Ative o faturamento para usar a Places API.";
+    return { status: 503, mensagem: "A chave do Google Maps está errada. Confira GOOGLE_MAPS_API_KEY no EasyPanel." };
+  if (r.includes("billing"))
+    return { status: 503, mensagem: "O projeto do Google Cloud está sem faturamento ativo. Sem ele o Google não libera a busca." };
   if (r.includes("has not been used") || r.includes("is disabled") || r.includes("service_disabled"))
-    return "A Places API (New) não está ativada no projeto do Google Cloud.";
-  if (status === 403) return `O Google recusou a chave (restrição de API ou de IP na chave?). Detalhe: ${reason}`;
-  if (status === 429 || r.includes("resource_exhausted")) return "Cota da Places API esgotada por hoje. Tente mais tarde ou aumente a cota no Google Cloud.";
-  return `Erro do Google (${status}): ${reason || "sem detalhes"}`;
+    return { status: 503, mensagem: "A Places API (New) não está ativada no projeto do Google Cloud." };
+  if (status === 403)
+    return { status: 503, mensagem: `O Google recusou a chave (restrição de API ou de IP na chave?). Detalhe: ${reason}` };
+  if (status === 429 || r.includes("resource_exhausted"))
+    return {
+      status: 429,
+      mensagem: "O Google atingiu o limite de consultas configurado no Google Cloud (cota diária ou por minuto). Tente mais tarde.",
+    };
+  if (status === 400 && (r.includes("page_token") || r.includes("pagetoken") || r.includes("page token")))
+    return { status: 400, mensagem: "O Google não aceitou continuar esta lista (próxima página expirou)." };
+  return { status: status === 400 ? 400 : 502, mensagem: `O Google respondeu com erro (${status}): ${reason || "sem detalhes"}` };
 }
 
-async function callTextSearch(body: Record<string, unknown>, fieldMask: string, apiKey: string) {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": fieldMask,
-    },
-    body: JSON.stringify(body),
+async function callPlaces<T>(url: string, apiKey: string, opts: { body?: Record<string, unknown>; fieldMask?: string }): Promise<T> {
+  const headers: Record<string, string> = { "X-Goog-Api-Key": apiKey };
+  if (opts.fieldMask) headers["X-Goog-FieldMask"] = opts.fieldMask;
+  if (opts.body) headers["Content-Type"] = "application/json";
+  const res = await fetch(url, {
+    method: opts.body ? "POST" : "GET",
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
     cache: "no-store",
     signal: AbortSignal.timeout(25_000),
   });
   const text = await res.text();
-  if (!res.ok) throw new PlacesError(explainGoogleError(res.status, text), res.status === 429 ? 429 : 502);
-  return JSON.parse(text || "{}") as { places?: GooglePlace[]; nextPageToken?: string };
+  if (!res.ok) {
+    const erro = explainGoogleError(res.status, text);
+    throw new PlacesError(erro.mensagem, erro.status);
+  }
+  return JSON.parse(text || "{}") as T;
+}
+
+function callTextSearch(body: Record<string, unknown>, fieldMask: string, apiKey: string) {
+  return callPlaces<{ places?: GooglePlace[]; nextPageToken?: string }>(ENDPOINT, apiKey, { body, fieldMask });
 }
 
 function component(place: GooglePlace, type: string): AddressComponent | undefined {
@@ -186,13 +201,36 @@ export interface CityArea {
   viewport: Rect | null;
 }
 
-export async function resolveCityArea(cidade: string, apiKey: string): Promise<CityArea> {
-  const data = await callTextSearch(
-    { textQuery: cidade, languageCode: "pt-BR", regionCode: "BR", pageSize: 1 },
-    AREA_FIELDS,
-    apiKey,
-  );
-  const place = data.places?.[0];
-  if (!place?.viewport) return { entrada: cidade, nome: cidade, viewport: null };
-  return { entrada: cidade, nome: place.formattedAddress || place.displayName?.text || cidade, viewport: place.viewport };
+const g = globalThis as unknown as { __radarAreas?: Map<string, { em: number; area: CityArea }> };
+const AREA_TTL_MS = 24 * 60 * 60_000;
+
+/**
+ * Descobre o retângulo da cidade/bairro (para dividir o mapa quando o Google
+ * esgota os 60 resultados de uma consulta).
+ * Usa Autocomplete + Place Details (sessão): cota grátis própria, não gasta as
+ * 1.000 consultas de busca do mês. Guardado por 24 h.
+ */
+export async function resolveCityArea(cidade: string, apiKey: string, onChamada?: () => void): Promise<CityArea> {
+  const chave = cidade.trim().toLowerCase();
+  const cache = (g.__radarAreas ??= new Map());
+  const salvo = cache.get(chave);
+  if (salvo && Date.now() - salvo.em < AREA_TTL_MS) return salvo.area;
+
+  const sessionToken = crypto.randomUUID();
+  const ac = await callPlaces<{ suggestions?: { placePrediction?: { placeId?: string; text?: { text?: string } } }[] }>(AUTOCOMPLETE, apiKey, {
+    body: { input: cidade, languageCode: "pt-BR", includedRegionCodes: ["br"], includedPrimaryTypes: ["(regions)"], sessionToken },
+  });
+  onChamada?.();
+  const placeId = ac.suggestions?.find((s) => s.placePrediction?.placeId)?.placePrediction?.placeId;
+  let area: CityArea = { entrada: cidade, nome: cidade, viewport: null };
+  if (placeId) {
+    const qs = new URLSearchParams({ languageCode: "pt-BR", regionCode: "BR", sessionToken });
+    const place = await callPlaces<GooglePlace>(`${DETAILS}${encodeURIComponent(placeId)}?${qs}`, apiKey, {
+      fieldMask: "id,displayName,formattedAddress,viewport",
+    });
+    onChamada?.();
+    if (place.viewport) area = { entrada: cidade, nome: place.formattedAddress || place.displayName?.text || cidade, viewport: place.viewport };
+  }
+  cache.set(chave, { em: Date.now(), area });
+  return area;
 }

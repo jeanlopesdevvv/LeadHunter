@@ -20,6 +20,12 @@ function int(name: string, fallback: number): number {
 export interface ServiceAccount {
   client_email: string;
   private_key: string;
+  /** Projeto do Google Cloud (do JSON ou do e-mail ...@PROJETO.iam.gserviceaccount.com). */
+  project_id: string;
+}
+
+function projectFromEmail(email: string): string {
+  return /@([a-z][a-z0-9-]{4,28}[a-z0-9])\.iam\.gserviceaccount\.com$/i.exec(email)?.[1] ?? "";
 }
 
 function parseServiceAccount(): ServiceAccount | null {
@@ -29,7 +35,11 @@ function parseServiceAccount(): ServiceAccount | null {
       const text = raw.startsWith("{") ? raw : Buffer.from(raw, "base64").toString("utf8");
       const json = JSON.parse(text) as Partial<ServiceAccount>;
       if (json.client_email && json.private_key) {
-        return { client_email: json.client_email, private_key: json.private_key.replace(/\\n/g, "\n") };
+        return {
+          client_email: json.client_email,
+          private_key: json.private_key.replace(/\\n/g, "\n"),
+          project_id: json.project_id || projectFromEmail(json.client_email),
+        };
       }
     } catch {
       return null;
@@ -37,7 +47,7 @@ function parseServiceAccount(): ServiceAccount | null {
   }
   const email = str("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   const key = str("GOOGLE_PRIVATE_KEY");
-  if (email && key) return { client_email: email, private_key: key.replace(/\\n/g, "\n") };
+  if (email && key) return { client_email: email, private_key: key.replace(/\\n/g, "\n"), project_id: projectFromEmail(email) };
   return null;
 }
 
@@ -68,6 +78,12 @@ export function getConfig() {
       .map((t) => t.trim())
       .filter((t) => t && t.toLowerCase() !== "nenhuma"),
     maxRequestsPerSearch: int("MAX_REQUESTS_PER_SEARCH", 200),
+    // Consultas grátis por mês do Google (Text Search Enterprise = 1.000).
+    limiteMensal: int("LIMITE_MENSAL_CONSULTAS", 1000),
+    // Parar as buscas quando as consultas grátis do mês acabarem ("0" = deixar passar e pagar o excedente).
+    bloquearNoLimite: str("BLOQUEAR_NO_LIMITE", "1") !== "0",
+    // Projeto do Google Cloud onde a chave do Places foi criada (padrão: o da conta de serviço).
+    googleProjectId: str("GOOGLE_CLOUD_PROJECT"),
   };
 }
 

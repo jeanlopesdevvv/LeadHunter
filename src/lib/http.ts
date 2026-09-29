@@ -10,7 +10,7 @@ export function jsonError(message: string, status = 400) {
 export function handleError(e: unknown) {
   if (e instanceof PlacesError || e instanceof SheetsError) return jsonError(e.message, e.status);
   console.error("[leadhunter]", e);
-  return jsonError("Erro inesperado no servidor. Tente novamente.", 500);
+  return jsonError("Algo deu errado no servidor. Tente de novo.", 500);
 }
 
 export async function readJson<T>(request: Request): Promise<T | null> {

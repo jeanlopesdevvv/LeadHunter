@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** Corpo da resposta de erro (ex.: { cota: true, uso }). */
+    public dados: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -30,6 +32,6 @@ export async function api<T>(path: string, body?: unknown, init?: { signal?: Abo
     throw new ApiError("Sessão expirada.", 401);
   }
   const data = (await res.json().catch(() => ({}))) as T & { erro?: string };
-  if (!res.ok) throw new ApiError(data.erro || `Erro ${res.status}`, res.status);
+  if (!res.ok) throw new ApiError(data.erro || `O servidor respondeu com erro ${res.status}.`, res.status, data as Record<string, unknown>);
   return data;
 }

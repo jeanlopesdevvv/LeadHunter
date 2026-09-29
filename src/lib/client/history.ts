@@ -1,6 +1,5 @@
 "use client";
 
-import type { Depth } from "@/lib/geo";
 import type { Lead } from "@/lib/types";
 
 /** Histórico de buscas guardado neste navegador (não é compartilhado). */
@@ -10,7 +9,10 @@ export interface HistoryEntry {
   criadoEm: string;
   termos: string[];
   cidades: string[];
-  profundidade: Depth;
+  /** Quantos contatos novos foram pedidos. */
+  alvo?: number;
+  /** Buscas antigas (antes do "quantos contatos"). */
+  profundidade?: string;
   total: number;
   enviados: number;
   leads?: Lead[];

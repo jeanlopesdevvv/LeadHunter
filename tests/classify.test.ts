@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyLead } from "@/lib/classify";
-import { cityFromInput, estimateRequests, splitLines, splitRect } from "@/lib/geo";
+import { cityFromInput, splitLines, splitRect, sugerirLimite } from "@/lib/geo";
 
 describe("classifyLead", () => {
   it("lava-jato com ponto físico e muitas avaliações é Empresa", () => {
@@ -39,9 +39,13 @@ describe("geo", () => {
     expect(cells[8].high).toEqual({ latitude: 3, longitude: 3 });
   });
 
-  it("estima consultas no pior caso", () => {
-    expect(estimateRequests(2, 1, "rapida")).toBe(6);
-    expect(estimateRequests(1, 2, "maxima")).toBe(2 * 9 * 3 + 2);
+  it("sugere um limite de consultas proporcional à quantidade pedida", () => {
+    expect(sugerirLimite(20, 2, 200)).toBe(8);
+    expect(sugerirLimite(50, 2, 200)).toBe(20);
+    expect(sugerirLimite(500, 2, 200)).toBe(200); // respeita o máximo
+    expect(sugerirLimite(5, 1, 200)).toBe(5); // mínimo de 5
+    expect(sugerirLimite(20, 12, 200)).toBe(12); // ao menos 1 por termo × cidade
+    expect(sugerirLimite(50, 2, 3)).toBe(3); // poucas consultas restantes
   });
 
   it("quebra linhas e remove repetidos", () => {

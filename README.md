@@ -11,11 +11,23 @@ telefone        nome              tipo       cidade           status    mensagem
 
 ## Como funciona
 
-1. **Buscar**: termos (ex.: `lava jato`, `estética automotiva`) × cidades. A profundidade *Ampla* ou
-   *Máxima* divide a cidade em 4 ou 9 áreas para passar do limite de 60 resultados por consulta do Google.
+1. **Buscar**: o que procurar (ex.: `lava jato`, `estética automotiva`), onde, e **quantos contatos novos**
+   você quer (20, 50, 100, 200, 500 ou outro número). A busca vai por rodadas (1ª página de cada termo × cidade,
+   depois as seguintes) e para assim que achar essa quantidade de contatos com celular que ainda não estão na
+   planilha. Quando o Google esgota os 60 resultados de uma consulta, o Radar divide o mapa da cidade em 4
+   (e de novo, até 64 pedaços) para achar mais.
 2. **Revisar**: cada lead mostra se o telefone é celular ou fixo, a sugestão de tipo (Autônomo/Empresa,
    editável), nota, site e link do Maps. Os que já estão na planilha aparecem como *Já na planilha*.
-3. **Enviar**: os selecionados vão para o fim da aba `leads` com `status = pendente`.
+   Exatamente a quantidade pedida já vem marcada.
+3. **Enviar**: os marcados vão para o fim da aba `leads` com `status = pendente`.
+
+### Consultas grátis do mês
+
+O painel mostra quantas das **1.000 consultas grátis** do Google ainda restam e quando renovam
+(dia 1º, 00:00 no horário do Pacífico = 04:00 de Brasília). O número vem do Cloud Monitoring do projeto
+(o mesmo do painel "APIs e serviços"); nos últimos minutos, que o Google ainda não mostrou, vale o registro do
+próprio Radar. Antes de buscar, a tela mostra o máximo de consultas que a busca pode gastar, e o Radar para de
+buscar quando as grátis acabam (`BLOQUEAR_NO_LIMITE=1`).
 
 ### Deduplicação (ninguém recebe duas vezes)
 
@@ -63,8 +75,9 @@ Imagem local: `docker build -t radar-lavacar . && docker run -p 3000:3000 --env-
 ```
 src/
   app/                  telas (login e painel) e rotas da API
-    api/search/plan     planeja a busca (termos × cidades × áreas)
-    api/search/page     uma página de resultados da Places API
+    api/search/plan     planeja a busca (termos × cidades) e acha o contorno de cada cidade
+    api/search/page     uma página de resultados da Places API (confere a cota antes)
+    api/uso             consultas grátis usadas/restantes no mês e data da renovação
     api/sheets/check    quem já está na planilha
     api/sheets/send     grava os novos (com nova checagem de duplicados)
     api/status          diagnóstico das conexões

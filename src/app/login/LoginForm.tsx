@@ -35,7 +35,8 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
     <form onSubmit={entrar} className="mt-8 space-y-4">
       {semSenha && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          A senha de acesso ainda não foi configurada (ou é a de exemplo). Defina <b>APP_PASSWORD</b> com 8+ caracteres nas variáveis do servidor e reinicie o app.
+          A senha do Radar ainda não foi definida no servidor (ou é a de exemplo). No EasyPanel, coloque em <b>APP_PASSWORD</b> uma senha com 8
+          ou mais caracteres e clique em Implantar.
         </div>
       )}
       <div className="relative">

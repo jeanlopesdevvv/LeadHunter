@@ -1,14 +1,20 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, KeyRound, Map, RefreshCw, Table2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, KeyRound, Map, RefreshCw, Table2, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, cx } from "@/components/ui";
+import { formatarRenovacao } from "@/lib/periodo";
+import type { Uso } from "@/lib/types";
+
+import { FonteDoUso } from "./UsoCota";
 
 export interface StatusResponse {
   simulacao: boolean;
   places: { configurada: boolean };
+  uso?: Uso;
+  projetoGoogle?: string;
   limites: { maxConsultasPorBusca: number };
   planilha: {
     configurada: boolean;
@@ -63,7 +69,23 @@ function Linha({ ok, titulo, children, icon }: { ok: boolean | "aviso"; titulo: 
   );
 }
 
-export function SettingsView({ status, onRecarregar }: { status: StatusResponse | null; onRecarregar: () => Promise<void> }) {
+function Copiavel({ texto }: { texto: string }) {
+  const toast = useToast();
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2">
+      <code className="min-w-0 flex-1 truncate text-[13px] text-ink">{texto}</code>
+      <button
+        onClick={() => navigator.clipboard.writeText(texto).then(() => toast("Copiado.", "success"))}
+        className="rounded-lg p-1.5 text-muted hover:bg-white hover:text-ink"
+        aria-label="Copiar"
+      >
+        <Copy className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+export function SettingsView({ status, uso, onRecarregar }: { status: StatusResponse | null; uso: Uso | null; onRecarregar: () => Promise<void> }) {
   const toast = useToast();
   const [carregando, setCarregando] = useState(false);
 
@@ -71,7 +93,7 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
     setCarregando(true);
     await onRecarregar();
     setCarregando(false);
-    toast("Conexões testadas de novo.", "info");
+    toast("Conexões conferidas de novo.", "info");
   }
 
   const p = status?.planilha;
@@ -82,12 +104,15 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
         <div>
           <p className="eyebrow">Configuração</p>
           <h1 className="display mt-3 text-4xl text-navy">
-            Conexões <span className="text-brand">do sistema</span>
+            Está tudo <span className="text-brand">conectado?</span>
           </h1>
-          <p className="mt-2 text-sm text-muted">Tudo é configurado no arquivo .env do servidor. Veja o passo a passo em docs/SETUP.md.</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            Aqui você vê se o Radar está falando com o Google e com a planilha. As chaves ficam guardadas no servidor (EasyPanel → serviço
+            radar → Ambiente). Depois de mudar alguma, clique em Implantar.
+          </p>
         </div>
         <Button variant="outline" onClick={recarregar} loading={carregando} icon={<RefreshCw className="size-4" />}>
-          Testar de novo
+          Conferir de novo
         </Button>
       </header>
 
@@ -95,8 +120,8 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <FlaskConical className="mt-0.5 size-4 shrink-0" />
           <span>
-            <b>Modo simulação ligado (MOCK_MODE=1).</b> Buscas e envios usam dados falsos e uma planilha em memória. Esse modo é desligado
-            automaticamente em produção.
+            <b>Modo simulação ligado.</b> As buscas e os envios usam dados de mentira e uma planilha de teste. No servidor de verdade esse
+            modo fica sempre desligado.
           </span>
         </div>
       )}
@@ -106,50 +131,79 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
       ) : (
         <Card className="divide-y divide-line p-5 sm:p-7">
           <Linha ok icon={<KeyRound className="size-5" />} titulo="Senha de acesso">
-            <p>Ativa. Para trocar, altere APP_PASSWORD no .env do servidor e reinicie (todas as sessões são encerradas).</p>
+            <p>Ativa. Para trocar, mude APP_PASSWORD no EasyPanel e clique em Implantar. Quem estiver dentro vai precisar entrar de novo.</p>
           </Linha>
 
-          <Linha ok={status.places.configurada} icon={<Map className="size-5" />} titulo="Google Places API">
+          <Linha ok={status.places.configurada} icon={<Map className="size-5" />} titulo="Busca no Google Maps">
             {status.places.configurada ? (
               <p>
-                Chave configurada. Limite de <b className="text-ink">{status.limites.maxConsultasPorBusca}</b> consultas por busca
+                Conectada. Uma busca pode gastar no máximo <b className="text-ink">{status.limites.maxConsultasPorBusca}</b> consultas
                 (MAX_REQUESTS_PER_SEARCH).
               </p>
             ) : (
               <p>
-                Falta <code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_MAPS_API_KEY</code>. Ative a &quot;Places API (New)&quot;
-                no Google Cloud, crie a chave e coloque no .env do servidor.
+                Falta a chave do Google Maps (<code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_MAPS_API_KEY</code>). No Google
+                Cloud, ative a &quot;Places API (New)&quot;, crie a chave e cole no EasyPanel.
               </p>
             )}
           </Linha>
 
-          <Linha ok={p?.ok ? true : p?.configurada ? "aviso" : false} icon={<Table2 className="size-5" />} titulo="Planilha (Google Sheets)">
+          {(() => {
+            const u = uso ?? status.uso;
+            if (!u) return null;
+            return (
+              <Linha ok={u.fonte === "radar" ? "aviso" : true} icon={<Gauge className="size-5" />} titulo="Contador de consultas grátis">
+                <p>
+                  <b className="text-ink tabular-nums">{u.restantes.toLocaleString("pt-BR")}</b> de {u.limite.toLocaleString("pt-BR")} restantes
+                  neste mês. Renova {formatarRenovacao(u.renovaEm)} (horário de Brasília).
+                </p>
+                <FonteDoUso uso={u} />
+                {u.fonte === "google" && status.projetoGoogle && (
+                  <p>
+                    Lendo o uso real do projeto <b className="text-ink">{status.projetoGoogle}</b> no Google Cloud (inclui buscas feitas por outros
+                    sistemas do mesmo projeto).
+                  </p>
+                )}
+                {u.fonte === "radar" && p?.contaServico && (
+                  <div>
+                    <p className="mb-1.5">
+                      Para o número exato: Google Cloud → IAM e administrador → IAM → <b className="text-ink">Conceder acesso</b> para este e-mail
+                      com o papel <b className="text-ink">Visualizador de monitoramento</b>:
+                    </p>
+                    <Copiavel texto={p.contaServico} />
+                  </div>
+                )}
+                <p>
+                  {u.bloquear
+                    ? "Quando as consultas grátis acabam, o Radar para de buscar até a renovação, então nada é cobrado."
+                    : "O bloqueio está desligado (BLOQUEAR_NO_LIMITE=0): passando do limite, o Google cobra cerca de US$ 35 a cada 1.000 consultas."}
+                </p>
+              </Linha>
+            );
+          })()}
+
+          <Linha ok={p?.ok ? true : p?.configurada ? "aviso" : false} icon={<Table2 className="size-5" />} titulo="Planilha">
             {p?.contaServico && (
               <div>
-                <p className="mb-1.5">Compartilhe a planilha com este e-mail como <b className="text-ink">Editor</b>:</p>
-                <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2">
-                  <code className="min-w-0 flex-1 truncate text-[13px] text-ink">{p.contaServico}</code>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(p.contaServico).then(() => toast("E-mail copiado.", "success"))}
-                    className="rounded-lg p-1.5 text-muted hover:bg-white hover:text-ink"
-                    aria-label="Copiar e-mail"
-                  >
-                    <Copy className="size-4" />
-                  </button>
-                </div>
+                <p className="mb-1.5">
+                  A planilha precisa estar compartilhada com este e-mail como <b className="text-ink">Editor</b>:
+                </p>
+                <Copiavel texto={p.contaServico} />
               </div>
             )}
             {!p?.configurada && (
               <p>
-                Falta <code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_SERVICE_ACCOUNT_JSON</code> (chave da conta de serviço).
+                Falta a chave da conta de serviço do Google (
+                <code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_SERVICE_ACCOUNT_JSON</code>).
               </p>
             )}
             {p?.erro && <p className="rounded-xl bg-red-50 px-3 py-2 text-red-700">{p.erro}</p>}
             {p?.titulo && (
               <p>
-                Conectado a <b className="text-ink">{p.titulo}</b> · aba <b className="text-ink">{p.aba}</b> ·{" "}
-                <span className="tabular-nums">{p.linhas ?? 0}</span> linhas · <span className="tabular-nums">{p.telefonesUnicos ?? 0}</span> telefones
-                únicos · <span className="tabular-nums">{p.optout ?? 0}</span> opt-out
+                Conectada a <b className="text-ink">{p.titulo}</b>, aba <b className="text-ink">{p.aba}</b>:{" "}
+                <span className="tabular-nums">{(p.linhas ?? 0).toLocaleString("pt-BR")}</span> linhas,{" "}
+                <span className="tabular-nums">{(p.telefonesUnicos ?? 0).toLocaleString("pt-BR")}</span> telefones diferentes,{" "}
+                <span className="tabular-nums">{p.optout ?? 0}</span> {(p.optout ?? 0) === 1 ? "pediu" : "pediram"} para não receber mensagens.
               </p>
             )}
             {p?.cabecalhos && (
@@ -169,11 +223,12 @@ export function SettingsView({ status, onRecarregar }: { status: StatusResponse 
               </div>
             )}
             <p>
-              Status gravado nos leads novos: <b className="text-ink">{p?.statusPadrao}</b>. Quem aparece também nas abas{" "}
-              <b className="text-ink">{p?.abasExtrasLidas?.length ? p.abasExtrasLidas.join(", ") : "—"}</b> não é reenviado
-              {p?.extraTelefones ? ` (${p.extraTelefones} telefones)` : ""}.
+              Os contatos novos entram com status <b className="text-ink">{p?.statusPadrao}</b> (é assim que a Carol sabe quem chamar). Também não
+              são enviados de novo os telefones que aparecem nas abas{" "}
+              <b className="text-ink">{p?.abasExtrasLidas?.length ? p.abasExtrasLidas.join(", ") : "—"}</b>
+              {p?.extraTelefones ? ` (${p.extraTelefones.toLocaleString("pt-BR")} telefones)` : ""}.
             </p>
-            {p?.extraErro && <p className="text-amber-700">Abas extras (DEDUP_EXTRA_TABS) {p.extraErro}</p>}
+            {p?.extraErro && <p className="text-amber-700">Abas de histórico (DEDUP_EXTRA_TABS) {p.extraErro}</p>}
             {p?.planilhaUrl && (
               <a href={p.planilhaUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-brand-700 hover:underline">
                 Abrir planilha <ExternalLink className="size-3.5" />

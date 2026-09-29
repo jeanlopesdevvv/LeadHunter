@@ -73,7 +73,8 @@ export async function mockSearchPage(input: SearchPageInput): Promise<PageResult
   await new Promise((res) => setTimeout(res, 250 + Math.random() * 350));
   const page = input.pageToken ? Number(input.pageToken.split(":")[1]) : 0;
   const base = hash(`${input.textQuery}|${JSON.stringify(input.rect ?? null)}`);
-  const count = page < 2 ? 20 : 11;
+  // Cidade inteira: 60 resultados (o Google "esgota" e o Radar divide o mapa); pedaços do mapa: menos.
+  const count = page < 2 ? 20 : input.rect ? 9 : 20;
   const cidade = input.cidade.split(/[-,/]/)[0].trim() || "Belo Horizonte";
   const places = Array.from({ length: count }, (_, i) => mockPlace((base + page * 20 + i) % 5000, cidade));
   return {

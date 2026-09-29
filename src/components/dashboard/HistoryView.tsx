@@ -3,7 +3,6 @@
 import { Clock, FolderOpen, MapPin, RotateCcw, Send, Tag, Trash2 } from "lucide-react";
 
 import { Badge, Button, Card } from "@/components/ui";
-import { DEPTHS } from "@/lib/geo";
 import type { HistoryEntry } from "@/lib/client/history";
 
 export function HistoryView({
@@ -24,16 +23,18 @@ export function HistoryView({
       <header>
         <p className="eyebrow">Histórico</p>
         <h1 className="display mt-3 text-4xl text-navy">
-          Suas <span className="text-brand">buscas</span>
+          Buscas <span className="text-brand">anteriores</span>
         </h1>
-        <p className="mt-2 text-sm text-muted">As últimas 12 buscas ficam salvas neste navegador. A fonte da verdade é sempre a planilha.</p>
+        <p className="mt-2 text-sm text-muted">
+          As 12 últimas ficam guardadas só neste navegador. Ao reabrir, o Radar confere a planilha de novo para não repetir ninguém.
+        </p>
       </header>
 
       {!historico.length ? (
         <Card className="grid place-items-center px-6 py-20 text-center">
           <Clock className="size-8 text-muted/60" />
           <p className="mt-4 font-semibold text-ink">Nenhuma busca ainda</p>
-          <p className="mt-1 text-sm text-muted">Quando você buscar, ela aparece aqui para reabrir ou repetir.</p>
+          <p className="mt-1 text-sm text-muted">Depois da primeira busca, ela aparece aqui para você reabrir a lista ou buscar de novo.</p>
         </Card>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
@@ -50,25 +51,25 @@ export function HistoryView({
                     <span className="truncate">{h.cidades.join(", ")}</span>
                   </p>
                 </div>
-                <Badge tone="gray">{DEPTHS[h.profundidade]?.label ?? h.profundidade}</Badge>
+                {h.alvo ? <Badge tone="brand">{h.alvo} pedidos</Badge> : null}
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                 <span>
                   {new Date(h.criadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
                 </span>
                 <span>
-                  <b className="text-ink tabular-nums">{h.total}</b> encontrados
+                  <b className="text-ink tabular-nums">{h.total}</b> na lista
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Send className="size-3" /> <b className="text-ink tabular-nums">{h.enviados}</b> enviados
+                  <Send className="size-3" /> <b className="text-ink tabular-nums">{h.enviados}</b> enviados para a planilha
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 border-t border-line pt-4">
                 <Button size="sm" variant="outline" onClick={() => onAbrir(h)} disabled={!h.leads?.length || rodando} icon={<FolderOpen className="size-3.5" />}>
-                  Abrir resultados
+                  Abrir lista
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => onRepetir(h)} icon={<RotateCcw className="size-3.5" />}>
-                  Repetir busca
+                  Buscar de novo
                 </Button>
                 <Button size="sm" variant="ghost" className="ml-auto hover:text-red-600" onClick={() => onRemover(h.id)} aria-label="Remover do histórico">
                   <Trash2 className="size-3.5" />
