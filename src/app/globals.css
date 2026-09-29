@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/* Tokens visuais do Lavacar (lavacar.app): ciano #03abc9, azul-noite #081021, Inter. */
+@theme {
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --color-brand-50: #e8fafd;
+  --color-brand-100: #cdf3fa;
+  --color-brand-200: #9be6f4;
+  --color-brand-300: #5fd3ea;
+  --color-brand-400: #22bedb;
+  --color-brand: #03abc9;
+  --color-brand-600: #0293ad;
+  --color-brand-700: #027a90;
+  --color-brand-800: #06586a;
+
+  --color-navy: #081021;
+  --color-navy-900: #060c19;
+  --color-navy-800: #0d1830;
+  --color-navy-700: #16233f;
+  --color-navy-600: #22324f;
+
+  --color-ink: #0b111e;
+  --color-muted: #667b99;
+  --color-line: #e5e7eb;
+  --color-surface: #f5f7fa;
+
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+
+  --shadow-brand: 0 10px 30px -10px rgb(3 171 201 / 0.55);
+  --shadow-card: 0 1px 2px rgb(8 16 33 / 0.04), 0 8px 24px -12px rgb(8 16 33 / 0.12);
+
+  --animate-fade-in: fade-in 0.25s ease-out;
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+html,
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-brand-100);
+  color: var(--color-navy);
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-brand);
+}
+
+.display {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+
+.glow-tl {
+  background:
+    radial-gradient(600px 380px at -10% -10%, rgb(3 171 201 / 0.22), transparent 60%),
+    var(--color-navy);
+}
+
+.glow-br {
+  background:
+    radial-gradient(520px 360px at 110% 110%, rgb(3 171 201 / 0.18), transparent 60%),
+    var(--color-surface);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+input[type="checkbox"].check {
+  appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 0.3rem;
+  border: 1.5px solid #c3cbd8;
+  background: #fff;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+input[type="checkbox"].check:checked {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+}
+input[type="checkbox"].check:checked::after {
+  content: "";
+  width: 0.55rem;
+  height: 0.3rem;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg);
+}
+input[type="checkbox"].check:indeterminate {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+}
+input[type="checkbox"].check:indeterminate::after {
+  content: "";
+  width: 0.5rem;
+  height: 2px;
+  background: #fff;
+}
+input[type="checkbox"].check:disabled {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+  cursor: not-allowed;
+}
+input[type="checkbox"].check:focus-visible {
+  outline: 2px solid var(--color-brand-300);
+  outline-offset: 2px;
+}

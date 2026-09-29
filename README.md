@@ -1,106 +1,73 @@
-# 🎯 LeadHunter
+# LeadHunter v3 · by Lavacar
 
-Ferramenta profissional de prospecção de leads via Google Maps. Extraia nome, telefone, e-mail, redes sociais e muito mais — 100% local, sem custos de API.
+Prospecção de lava-jatos para o Lavacar. Busca estabelecimentos no Google (Places API oficial),
+remove repetidos, confere na planilha **Leads Lava-jatos** quem já recebeu mensagem e envia os novos
+para a aba `leads` com um clique, no formato que a Carol usa para disparar a primeira mensagem no WhatsApp.
 
----
-
-## 🚀 Como Iniciar
-
-### Windows (duplo clique)
 ```
-start.bat
+telefone        nome              tipo       cidade           status    mensagem_enviada_em  optout
+5531982999779   Jean Lopes        Autônomo   Belo Horizonte   pendente
 ```
 
-### Linux / Mac (terminal)
+## Como funciona
+
+1. **Buscar**: termos (ex.: `lava jato`, `estética automotiva`) × cidades. A profundidade *Ampla* ou
+   *Máxima* divide a cidade em 4 ou 9 áreas para passar do limite de 60 resultados por consulta do Google.
+2. **Revisar**: cada lead mostra se o telefone é celular ou fixo, a sugestão de tipo (Autônomo/Empresa,
+   editável), nota, site e link do Maps. Os que já estão na planilha aparecem como *Já na planilha*.
+3. **Enviar**: os selecionados vão para o fim da aba `leads` com `status = pendente`.
+
+### Deduplicação (ninguém recebe duas vezes)
+
+- Durante a busca: mesmo lugar do Google ou mesmo telefone aparece uma vez só.
+- Antes de enviar: o servidor relê a planilha **na hora de gravar** e ignora quem já está na aba `leads`
+  (inclusive quem marcou `optout`) e quem aparece em `historico_carol` / `historico_sofia`.
+- Telefones são normalizados antes de comparar (o 9º dígito é colocado quando falta): `5531982999779`,
+  `553182999779`, `(31) 98299-9779` e `+55 31 9 8299-9779` são o mesmo contato.
+- Dois envios ao mesmo tempo: os envios são feitos um de cada vez e, depois de gravar, o app confere a
+  planilha de novo; se outro envio gravou o mesmo telefone um instante antes, a linha repetida recebe
+  `status = duplicado` (a Carol só dispara `pendente`).
+- Por padrão só celulares são enviados (fixo quase nunca tem WhatsApp); dá para incluir fixos.
+
+## Tecnologia
+
+- Next.js 16 (App Router) + TypeScript + Tailwind CSS 4, pronto para a Vercel.
+- Google Places API (New) — Text Search.
+- Google Sheets API com conta de serviço.
+- Acesso por senha única (cookie assinado, `httpOnly`).
+- Testes com Vitest (`npm test`).
+
+## Implantação
+
+Siga **[docs/SETUP.md](docs/SETUP.md)** (Google Cloud, planilha e Vercel, passo a passo).
+
+## Desenvolvimento local
+
 ```bash
-bash start.sh
+npm install
+cp .env.example .env.local   # preencha APP_PASSWORD e, para testar sem chaves, MOCK_MODE=1
+npm run dev                  # http://localhost:3000
+npm test                     # testes automatizados
+npm run lint && npm run typecheck
 ```
 
-Após iniciar, acesse: **http://localhost:8000**
+Com `MOCK_MODE=1` o app usa dados falsos e uma planilha em memória (nunca é ativado na produção da Vercel).
 
----
-
-## 📋 Fazendo uma Busca
-
-1. Clique em **Nova Busca** na sidebar
-2. Digite o tipo de negócio (pode digitar vários, um por linha)
-3. Digite as cidades/regiões (pode digitar várias, uma por linha)
-4. Ajuste o slider de quantidade (10 a 1000 resultados)
-5. Clique em **Iniciar Busca**
-6. Acompanhe os leads aparecendo em tempo real
-7. Os resultados ficam na aba **Resultados** automaticamente
-
----
-
-## ⬇️ Exportando Leads
-
-### Excel (.xlsx) e CSV
-- Clique em **Exportar Excel** ou **Exportar CSV** na tela de Resultados
-- O arquivo é salvo na pasta `exports/` e baixado automaticamente
-- No Excel, as colunas vêm organizadas com formatação profissional, detecção de perfil (Empresa / Autônomo) e telefones normalizados para disparo WhatsApp (DDI + DDD + Número)
-
-### Google Sheets
-1. Configure as credenciais (veja abaixo)
-2. Clique em **Google Sheets** na tela de Resultados
-3. Escolha criar nova planilha ou adicionar a uma existente
-4. A planilha abre automaticamente no seu browser
-
----
-
-## 📊 Configuração do Google Sheets (uma vez só)
-
-1. Acesse https://console.cloud.google.com/
-2. Crie um projeto → vá em **APIs e Serviços → Biblioteca**
-3. Ative **Google Sheets API** e **Google Drive API**
-4. Vá em **Credenciais → + Criar Credenciais → ID do cliente OAuth 2.0**
-5. Tipo: **App para computador** → baixe o arquivo JSON
-6. Renomeie para `credentials.json` e coloque na pasta `credentials/`
-7. Na primeira exportação, uma janela abrirá para você autorizar — é uma vez só!
-
----
-
-## ⚙️ Estrutura de Pastas
+## Estrutura
 
 ```
-leadhunter/
-├── main.py          # Servidor FastAPI (API + frontend)
-├── scraper.py       # Motor de scraping (Playwright)
-├── exporter.py      # Exportação CSV e Google Sheets
-├── database.py      # Banco de dados SQLite local
-├── config.py        # Configurações e campos
-├── frontend/        # Interface web (HTML/CSS/JS)
-├── credentials/     # Credenciais do Google (não compartilhe!)
-├── exports/         # CSVs gerados
-└── leadhunter.db    # Banco SQLite (criado automaticamente)
+src/
+  app/                  telas (login e painel) e rotas da API
+    api/search/plan     planeja a busca (termos × cidades × áreas)
+    api/search/page     uma página de resultados da Places API
+    api/sheets/check    quem já está na planilha
+    api/sheets/send     grava os novos (com nova checagem de duplicados)
+    api/status          diagnóstico das conexões
+  components/           interface (visual do Lavacar)
+  lib/                  regras: telefone, classificação, planilha, Places, sessão
+  proxy.ts              exige a senha em todas as páginas e APIs
+tests/                  testes automatizados
+docs/                   AUDITORIA.md (v2 → v3) e SETUP.md
 ```
 
----
-
-## 💡 Dicas
-
-| Dica | Detalhe |
-|---|---|
-| Seja específico | `"lava-jatos"` em `"Contagem - MG"` > buscas genéricas |
-| Limite seguro | Até 200 leads por busca reduz risco de CAPTCHA |
-| Sem e-mail? | Ative "Visitar Site do Lead" nas Configurações |
-| Mais rápido? | Desative "Visitar Site do Lead" se não precisar de e-mail |
-| CAPTCHA | O scraper pausa automaticamente — aguarde alguns minutos |
-
----
-
-## 🛠 Requisitos
-
-- Python 3.10 ou superior
-- Conexão com a internet (para acessar Google Maps)
-- Windows 10+ / Linux / MacOS
-
----
-
-## 📁 Histórico de Buscas
-
-Todas as buscas ficam salvas no banco local `leadhunter.db`.  
-Acesse pelo menu **Histórico** para reabrir resultados anteriores sem refazer a busca.
-
----
-
-*LeadHunter — Desenvolvido para prospecção profissional de leads.*
+A versão anterior (Python + Playwright, local) está preservada na tag `legacy-python-v2`.
