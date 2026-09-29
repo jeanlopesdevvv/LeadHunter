@@ -1,6 +1,7 @@
 import { ShieldCheck, Sparkles, Table2 } from "lucide-react";
 
 import { Logo } from "@/components/Logo";
+import { senhaDoApp } from "@/lib/session";
 
 import { LoginForm } from "./LoginForm";
 
@@ -20,7 +21,7 @@ function safeNext(raw: string): string {
 export default async function LoginPage(props: PageProps<"/login">) {
   const params = await props.searchParams;
   const next = safeNext(typeof params.next === "string" ? params.next : "/");
-  const semSenha = !process.env.APP_PASSWORD?.trim();
+  const semSenha = !senhaDoApp().ok;
 
   return (
     <main className="grid min-h-screen lg:grid-cols-2">

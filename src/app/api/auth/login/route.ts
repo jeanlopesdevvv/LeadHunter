@@ -2,12 +2,11 @@ import { cookies } from "next/headers";
 
 import { readJson, jsonError } from "@/lib/http";
 import { bloqueado, ipDe, limparFalhas, registrarFalha } from "@/lib/rate-limit";
-import { createSessionToken, passwordMatches, SESSION_COOKIE, SESSION_DAYS } from "@/lib/session";
+import { createSessionToken, passwordMatches, senhaDoApp, SESSION_COOKIE, SESSION_DAYS } from "@/lib/session";
 
 export async function POST(request: Request) {
-  if (!process.env.APP_PASSWORD?.trim()) {
-    return jsonError("A senha do app ainda não foi definida. Configure APP_PASSWORD no .env do servidor.", 503);
-  }
+  const senhaApp = senhaDoApp();
+  if (!senhaApp.ok) return jsonError(`${senhaApp.motivo} Ajuste nas variáveis do servidor.`, 503);
   const ip = ipDe(request);
   if (bloqueado(ip)) return jsonError("Muitas tentativas. Aguarde 10 minutos e tente de novo.", 429);
   const body = await readJson<{ senha?: unknown }>(request);
