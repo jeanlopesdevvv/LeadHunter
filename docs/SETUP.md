@@ -21,7 +21,7 @@ Tempo estimado: 30 minutos, uma vez só.
 
 1. **Workflow**: o arquivo `.github/workflows/imagem-docker.yml` precisa estar no repositório
    (ele testa o código e publica a imagem). Se ainda não estiver, crie pelo link que o Claude enviou
-   ou em *Add file → Create new file* com esse caminho e o conteúdo do arquivo.
+   ou em *Add file → Create new file* com esse caminho, colando o conteúdo de `docs/imagem-docker.yml`.
 2. Aba **Actions** do repositório: espere o "Testes e imagem Docker" ficar verde (2–4 min).
 3. **Tornar a imagem pública** (para o EasyPanel baixar sem senha; o código já é público):
    <https://github.com/users/jeanlopesdevvv/packages/container/leadhunter/settings> →
