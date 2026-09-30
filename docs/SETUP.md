@@ -157,6 +157,34 @@ Limite diário: o nó *Checar Limite Diário* usa `CAROL_LIMITE_DIARIO` (ou **5*
 Para aumentar, crie/ajuste `CAROL_LIMITE_DIARIO` no n8n e `LIMITE_DIARIO_CAROL` no Radar com o mesmo número.
 O contador do dia só é guardado em execuções de produção (webhook): pelo botão do Radar, o limite vale para o dia inteiro.
 
+### Trava (pausar e cancelar)
+
+O Fluxo 1 lê a lista de pendentes uma vez só, quando começa. Para o Radar conseguir **pausar** ou **cancelar** no meio
+do envio, o fluxo pergunta ao Radar antes de cada mensagem se ainda pode enviar. Instalação (uma vez só):
+
+1. Radar → **Configuração** → *Trava do disparo* → **Copiar os nós da trava** (o endereço e a chave já vêm dentro).
+2. No n8n, abra o Fluxo 1, clique num espaço vazio perto de **Delay - Antiblock** e aperte **Ctrl+V**. Aparecem
+   **Radar: Pode Enviar?** (HTTP) e **Radar Mandou Parar?** (IF), já ligados entre si.
+3. Apague a linha **Delay - Antiblock → Montar Mensagem**.
+4. Ligue **Delay - Antiblock → Radar: Pode Enviar?**.
+5. Ligue a saída **false** de **Radar Mandou Parar?** → **Montar Mensagem**. A saída **true** fica vazia: é ela que
+   encerra o disparo.
+6. **Publish**.
+
+Como funciona:
+- O nó manda o contato para `POST /api/n8n/trava?chave=…&exec={{$execution.id}}` e recebe o mesmo contato de volta com
+  `radar_parar`. `true` quando o disparo foi pausado/cancelado no Radar, quando o contato não está mais `pendente`
+  (ou pediu optout) ou quando é um número bloqueado.
+- **Pausar**: quem ainda não recebeu vira `aguardando` e a execução do n8n termina antes da próxima mensagem (a que já
+  estava saindo termina de ir). **Continuar** volta esses contatos para `pendente` e chama o n8n de novo, no mesmo
+  disparo. O Radar só deixa continuar depois que a execução antiga confirmou que parou (ou ficou 1 minuto em silêncio).
+- **Cancelar**: quem não recebeu volta para a fila (`aguardando`); nada é apagado.
+- Se o Radar estiver fora do ar ou a chave estiver errada, o nó dá erro e o n8n **para** o disparo (quem faltou
+  continua na fila). A chave vem do `AUTH_SECRET` (ou da senha, se não houver `AUTH_SECRET`): se trocar, copie os nós de
+  novo. Para fixar uma chave, use `N8N_TRAVA_CHAVE`.
+- Sem a trava instalada, Pausar/Cancelar ainda mudam a planilha, mas o n8n segue a lista que já leu: pare a execução
+  no n8n (*Executions → Stop*).
+
 ### Placar da Carol
 
 A tela **Placar da Carol** lê três abas que o n8n já grava na planilha (nomes em `PAINEL_ABA_HISTORICO`,

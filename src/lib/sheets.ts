@@ -228,7 +228,7 @@ async function readValues(): Promise<unknown[][]> {
 let cacheValores: { em: number; valor: Promise<{ headers: string[]; map: HeaderMap; rows: unknown[][] }> } | null = null;
 export function lerAbaLeads(maxAgeMs = 6_000): Promise<{ headers: string[]; map: HeaderMap; rows: unknown[][] }> {
   const agora = Date.now();
-  if (!cacheValores || agora - cacheValores.em > maxAgeMs) {
+  if (!cacheValores || agora - cacheValores.em >= maxAgeMs) {
     const cfg = getConfig();
     const valor = (async () => {
       const values: unknown[][] = cfg.mock ? (mockSheet().tabs[cfg.sheetTab] ?? mockSheet().tabs.leads) : await readValues();
@@ -255,19 +255,26 @@ export function esquecerAbaLeads() {
  * receber agora, "aguardando" para quem fica para depois). Antes de gravar, confere se cada
  * linha ainda tem o mesmo telefone; se a planilha mudou, não grava nada.
  */
-export function atualizarStatusLinhas(mudancas: { linha: number; key: string; status: string }[]): Promise<void> {
+/**
+ * Muda o status de linhas da aba leads. Confere o telefone de cada linha; com `de`, só muda se o
+ * status atual ainda for esse (o n8n pode ter acabado de gravar "enviado": nunca desfazer isso).
+ */
+export function atualizarStatusLinhas(mudancasPedidas: { linha: number; key: string; status: string; de?: string }[]): Promise<void> {
   return exclusivo(async () => {
-    if (!mudancas.length) return;
+    if (!mudancasPedidas.length) return;
     const cfg = getConfig();
     const values: unknown[][] = cfg.mock ? (mockSheet().tabs[cfg.sheetTab] ?? mockSheet().tabs.leads) : await readValues();
     const map = buildHeaderMap(values[0] ?? []);
     if (map.status === undefined || map.telefone === undefined) throw new SheetsError(`A aba "${cfg.sheetTab}" precisa das colunas telefone e status.`, 400);
-    for (const m of mudancas) {
+    for (const m of mudancasPedidas) {
       const row = values[m.linha - 1];
       if (!row || phoneKey(row[map.telefone]) !== m.key) {
         throw new SheetsError("A planilha mudou enquanto o Radar preparava o disparo (linhas mexidas). Nada foi alterado; tente de novo.", 409);
       }
     }
+    const statusStr = (row: unknown[]) => String(row[map.status!] ?? "").trim().toLowerCase();
+    const mudancas = mudancasPedidas.filter((m) => m.de === undefined || statusStr(values[m.linha - 1]) === m.de.trim().toLowerCase());
+    if (!mudancas.length) return;
     if (cfg.mock) {
       for (const m of mudancas) {
         const row = values[m.linha - 1] as unknown[];

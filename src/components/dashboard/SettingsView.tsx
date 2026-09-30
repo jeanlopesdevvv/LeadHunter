@@ -1,13 +1,14 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, KeyRound, Map, RefreshCw, Send, Table2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, KeyRound, Map, RefreshCw, Send, ShieldCheck, Table2, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, cx } from "@/components/ui";
-import { formatarRenovacao } from "@/lib/periodo";
+import { formatarRenovacao, horaBrasilia } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
+import { InstalarTrava } from "./TravaN8n";
 import { FonteDoUso } from "./UsoCota";
 
 export interface StatusResponse {
@@ -15,7 +16,7 @@ export interface StatusResponse {
   places: { configurada: boolean };
   uso?: Uso;
   projetoGoogle?: string;
-  disparo?: { configurado: boolean; destino: string; limiteDiario: number };
+  disparo?: { configurado: boolean; destino: string; limiteDiario: number; trava?: { ultimaEm: number | null; chaveErradaEm: number | null } };
   limites: { maxConsultasPorBusca: number };
   planilha: {
     configurada: boolean;
@@ -260,6 +261,39 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
               </p>
             )}
           </Linha>
+
+          {status.disparo?.configurado && (
+            <Linha
+              ok={
+                status.disparo.trava?.chaveErradaEm && (!status.disparo.trava.ultimaEm || status.disparo.trava.chaveErradaEm > status.disparo.trava.ultimaEm)
+                  ? false
+                  : status.disparo.trava?.ultimaEm
+                    ? true
+                    : "aviso"
+              }
+              icon={<ShieldCheck className="size-5" />}
+              titulo="Trava do disparo (pausar e cancelar)"
+            >
+              {status.disparo.trava?.chaveErradaEm &&
+              (!status.disparo.trava.ultimaEm || status.disparo.trava.chaveErradaEm > status.disparo.trava.ultimaEm) ? (
+                <p>
+                  O n8n chamou a trava com uma chave antiga (a senha ou o AUTH_SECRET mudou) e o disparo parou por segurança. Copie os nós de
+                  novo e troque no Fluxo 1.
+                </p>
+              ) : status.disparo.trava?.ultimaEm ? (
+                <p>
+                  Ativa: o n8n perguntou ao Radar pela última vez às <b className="text-ink">{horaBrasilia(status.disparo.trava.ultimaEm)}</b>.
+                  Pausar e Cancelar param o envio antes da próxima mensagem.
+                </p>
+              ) : (
+                <p>
+                  Ainda não confirmada desde que o Radar ligou. Se já instalou, ela aparece como ativa no próximo disparo. Sem ela, o n8n segue
+                  a lista que já leu e Pausar/Cancelar não conseguem parar o envio no meio.
+                </p>
+              )}
+              <InstalarTrava />
+            </Linha>
+          )}
         </Card>
       )}
     </div>

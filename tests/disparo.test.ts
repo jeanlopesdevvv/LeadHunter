@@ -100,7 +100,9 @@ describe("iniciar disparo (servidor)", () => {
     );
     vi.stubEnv("N8N_DISPARO_URL", "https://n8n.exemplo.com/webhook/radar-disparo");
     vi.stubEnv("N8N_DISPARO_TOKEN", "segredo-de-teste");
-    (globalThis as { __radarDisparo?: unknown }).__radarDisparo = null;
+    (globalThis as { __radarDisparo?: unknown; __radarTrava?: unknown }).__radarDisparo = null;
+    (globalThis as { __radarTrava?: unknown; __radarMovimentoConhecido?: number }).__radarTrava = undefined;
+    (globalThis as { __radarMovimentoConhecido?: number }).__radarMovimentoConhecido = 0;
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -219,8 +221,9 @@ describe("iniciar disparo (servidor)", () => {
     expect(planilha.slice(1).map((r) => r[4])).toEqual(["pendente", "aguardando", "aguardando", "aguardando", "enviado"]);
     expect(chamadasN8n).toHaveLength(1);
     expect(s.atual?.total).toBe(1);
+    // Quem está no disparo aparece no cartão do disparo; a fila mostra só quem ficou de fora.
+    expect(s.atual?.itens.map((i) => [i.nome, i.situacao])).toEqual([["Jean Lopes", "pendente"]]);
     expect(s.itensFila.map((i) => [i.nome, i.situacao])).toEqual([
-      ["Jean Lopes", "pendente"],
       ["A", "aguardando"],
       ["B", "aguardando"],
     ]);

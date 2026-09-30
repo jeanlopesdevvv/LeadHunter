@@ -1,3 +1,4 @@
+import { estadoDaTrava } from "@/lib/disparo";
 import { getConfig } from "@/lib/env";
 import { sheetStatus } from "@/lib/sheets";
 import { obterUso } from "@/lib/usage";
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
       configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
       destino: cfg.mock ? "simulação" : destinoN8n(cfg.n8nDisparoUrl),
       limiteDiario: cfg.limiteDiarioCarol,
+      trava: estadoDaTrava(),
     },
     limites: { maxConsultasPorBusca: cfg.maxRequestsPerSearch },
   });

@@ -365,10 +365,12 @@ export function Dashboard() {
   const retomada = useRef(false);
   const continuarRef = useRef(continuar);
   const buscarRef = useRef(buscar);
+  const finalizarRef = useRef(finalizar);
   useEffect(() => {
     continuarRef.current = continuar;
     buscarRef.current = buscar;
-  }, [continuar, buscar]);
+    finalizarRef.current = finalizar;
+  }, [continuar, buscar, finalizar]);
   useEffect(() => {
     const s = sessaoRef.current;
     const p = s?.progresso;
@@ -380,6 +382,19 @@ export function Dashboard() {
         toast("A página recarregou no começo da caçada. Ligando o radar de novo…", "info");
         void buscarRef.current();
       }, 600);
+      return () => window.clearTimeout(t);
+    }
+    // Recarregou quando a busca já tinha terminado, mas antes de conferir a planilha: termina o serviço.
+    const metaSalva = (salvo?.meta ?? null) as SearchMeta | null;
+    if (s && p && salvo?.rodando && metaSalva && (p.novos >= p.alvo || !s.temMais || p.consultas >= p.limite)) {
+      const t = window.setTimeout(() => {
+        if (retomada.current) return;
+        retomada.current = true;
+        s.progresso.fim = p.novos >= p.alvo ? "alvo" : !s.temMais ? "esgotado" : "limite";
+        s.progresso.rodando = false;
+        setProgresso({ ...s.progresso, avisos: [...s.progresso.avisos], etapa: "" });
+        void finalizarRef.current(geracao.current, metaSalva, s, false);
+      }, 300);
       return () => window.clearTimeout(t);
     }
     if (!s || !p || !salvo?.rodando || !s.temMais || p.novos >= p.alvo || p.consultas >= p.limite) return;

@@ -24,6 +24,9 @@ telefone        nome              tipo       cidade           status    mensagem
    (Fluxo 1) enviar a primeira mensagem da Carol; a tela acompanha o envio lendo a planilha (enviado / sem WhatsApp).
    Os não marcados ficam como `aguardando` na planilha, para um próximo disparo.
    Nunca começa um segundo disparo por cima do primeiro. Configuração em [docs/SETUP.md](docs/SETUP.md#5-botão-de-disparo-n8n).
+   Durante o envio dá para **Pausar** (continua depois de onde parou), **Cancelar** (quem não recebeu volta para a
+   fila) e **Continuar** um disparo que parou (ex.: limite diário). Para parar no meio, o Fluxo 1 tem uma **trava**:
+   antes de cada mensagem ele pergunta ao Radar se ainda pode enviar ([docs/SETUP.md](docs/SETUP.md#trava-pausar-e-cancelar)).
 5. **Placar da Carol**: funil do disparo até o "Sim, atendo" (disparadas → entregues → lidas → responderam →
    sim), lista de quentes com atalho para o WhatsApp e tabela filtrável por resposta. Lê as abas `historico_carol`,
    `status_meta_carol` e `sessoes_carol` da planilha (período: hoje, 7 dias, 30 dias ou tudo; atualiza a cada minuto).
@@ -99,6 +102,8 @@ src/
     api/uso             consultas grátis usadas/restantes no mês e data da renovação
     api/disparo         fila da Carol, chama o webhook do n8n e acompanha o progresso
     api/disparo/acompanhar  volta a acompanhar um disparo que o navegador lembra (servidor reiniciou)
+    api/disparo/pausar|continuar|encerrar  pausa/cancela, retoma e fecha o disparo
+    api/n8n/trava       consultada pelo n8n antes de cada mensagem (chave própria, sem sessão)
     api/painel          placar da Carol (funil, quentes e respostas) lido das abas do n8n
     api/sheets/check    quem já está na planilha
     api/sheets/send     grava os novos (com nova checagem de duplicados; idempotente por lote)

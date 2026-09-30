@@ -72,11 +72,22 @@ export interface DisparoLembrado {
   iniciadoEm: number;
   chaves: string[];
   comemorado?: boolean;
+  /** Pausado/cancelado no Radar (para o servidor lembrar se reiniciar). */
+  interrompido?: { como: "pausado" | "cancelado"; em: number } | null;
+  retomadoEm?: number | null;
 }
 
 export function lembrarDisparo(d: DisparoLembrado) {
   try {
     localStorage.setItem(CHAVE_DISPARO, JSON.stringify(d));
+  } catch {
+    /* sem acesso ao armazenamento */
+  }
+}
+
+export function esquecerDisparo() {
+  try {
+    localStorage.removeItem(CHAVE_DISPARO);
   } catch {
     /* sem acesso ao armazenamento */
   }

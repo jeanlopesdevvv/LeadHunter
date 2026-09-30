@@ -101,15 +101,15 @@ export function naFila(l: LinhaFila): boolean {
  * pendente (que o n8n pegaria) vira "aguardando". Quem já está certo não é tocado.
  */
 export function mudancasParaDisparo(linhas: LinhaFila[], escolhidos: Set<string>, statusAguardando: string) {
-  const mudancas: { linha: number; key: string; status: string }[] = [];
+  const mudancas: { linha: number; key: string; status: string; de: string }[] = [];
   const jaVai = new Set<string>(); // o mesmo telefone em duas linhas recebe uma vez só
   for (const l of linhas) {
     if (!l.key) continue;
     if (escolhidos.has(l.key) && naFila(l) && !jaVai.has(l.key)) {
       jaVai.add(l.key);
-      if (l.situacao !== "pendente") mudancas.push({ linha: l.linha, key: l.key, status: "pendente" });
+      if (l.situacao !== "pendente") mudancas.push({ linha: l.linha, key: l.key, status: "pendente", de: l.status });
     } else if (paraON8n(l)) {
-      mudancas.push({ linha: l.linha, key: l.key, status: statusAguardando });
+      mudancas.push({ linha: l.linha, key: l.key, status: statusAguardando, de: l.status });
     }
   }
   return mudancas;
@@ -143,10 +143,20 @@ export function resumoDoDia(linhas: LinhaFila[], agora = Date.now()): ResumoDia 
 
 /** Sem novidade na planilha há mais que isso = o n8n parou (limite diário, erro ou fim). */
 export const PARADO_APOS_MS = 4 * 60_000;
+/** Com a trava instalada o n8n avisa o Radar a cada contato: silêncio mais curto já indica que parou. */
+export const PARADO_COM_TRAVA_MS = 100_000;
+/** Depois de pausar, o n8n precisa ficar este tempo em silêncio para o Radar ter certeza de que parou. */
+export const SILENCIO_PARA_RETOMAR_MS = 60_000;
 /** Um lead leva ~10–15 s de espera + ~5–10 s de envio e registros. */
 export const SEGUNDOS_POR_LEAD = 22;
 
-export type EstadoDisparo = "enviando" | "concluido" | "parado";
+export type EstadoDisparo = "enviando" | "concluido" | "parado" | "pausado" | "cancelado";
+
+/** Pausa ou cancelamento pedido no Radar. */
+export interface Interrupcao {
+  como: "pausado" | "cancelado";
+  em: number;
+}
 
 export interface ItemDisparo {
   key: string;
@@ -164,15 +174,44 @@ export interface ProgressoDisparo {
   enviados: number;
   semWhatsapp: number;
   outros: number;
+  /** Quem ainda não recebeu (na vez, ou de volta à fila depois de pausar/cancelar). */
   aguardando: number;
   estado: EstadoDisparo;
   ultimoMovimento: number | null;
   segundosRestantes: number;
   itens: ItemDisparo[];
+  /** Quando foi pausado/cancelado no Radar. */
+  interrompidoEm: number | null;
+  /** Quando o disparo foi retomado depois de uma pausa. */
+  retomadoEm: number | null;
+  /** O n8n consultou a trava do Radar durante este disparo (Pausar/Cancelar funcionam no meio do envio). */
+  travaConfirmada: boolean;
+  /** Contato que a trava acabou de liberar (a mensagem está saindo agora). */
+  enviandoAgora: string | null;
+  /** A partir de quando dá para continuar (0 = já dá). Só faz sentido pausado ou parado. */
+  podeContinuarEm: number;
+}
+
+export interface ExtrasDoProgresso {
+  interrompido?: Interrupcao | null;
+  retomadoEm?: number | null;
+  /** Última vez que o n8n consultou a trava (qualquer execução). */
+  ultimaTrava?: number | null;
+  /** A trava respondeu "parar" para a execução antiga depois da pausa. */
+  paradaConfirmadaEm?: number | null;
+  /** Último movimento da Carol na planilha (qualquer contato). */
+  ultimoMovimentoGeral?: number | null;
+  enviandoAgora?: { key: string; em: number } | null;
 }
 
 /** Progresso de um disparo: os contatos que estavam na fila quando ele começou. */
-export function progressoDoDisparo(chaves: string[], iniciadoEm: number, linhas: LinhaFila[], agora = Date.now()): ProgressoDisparo {
+export function progressoDoDisparo(
+  chaves: string[],
+  iniciadoEm: number,
+  linhas: LinhaFila[],
+  agora = Date.now(),
+  extras: ExtrasDoProgresso = {},
+): ProgressoDisparo {
   const porChave = new Map<string, LinhaFila>();
   for (const l of linhas) if (l.key && !porChave.has(l.key)) porChave.set(l.key, l);
   let enviados = 0;
@@ -186,7 +225,7 @@ export function progressoDoDisparo(chaves: string[], iniciadoEm: number, linhas:
       outros++;
       return { key, nome: "", telefone: key, cidade: "", situacao: "sumiu", quando: null, detalhe: "linha não encontrada na planilha" };
     }
-    if (l.situacao === "pendente") aguardando++;
+    if (l.situacao === "pendente" || l.situacao === "aguardando") aguardando++;
     else if (l.situacao === "enviado") enviados++;
     else if (l.situacao === "sem_whatsapp") semWhatsapp++;
     else outros++;
@@ -196,14 +235,37 @@ export function progressoDoDisparo(chaves: string[], iniciadoEm: number, linhas:
     }
     return { key, nome: l.nome, telefone: l.telefone, cidade: l.cidade, situacao: l.situacao, quando: l.quando, detalhe: l.detalhe };
   });
-  const referencia = Math.max(iniciadoEm, ultimoMovimento ?? 0);
-  const estado: EstadoDisparo = aguardando === 0 ? "concluido" : agora - referencia > PARADO_APOS_MS ? "parado" : "enviando";
-  // Ordem: quem já foi (mais recente primeiro), depois quem está esperando.
+  const inicioValido = Math.max(iniciadoEm, extras.retomadoEm ?? 0);
+  const travaConfirmada = extras.ultimaTrava != null && extras.ultimaTrava >= inicioValido - 5_000;
+  const referencia = Math.max(inicioValido, ultimoMovimento ?? 0, travaConfirmada ? (extras.ultimaTrava ?? 0) : 0);
+  const silencioMax = travaConfirmada ? PARADO_COM_TRAVA_MS : PARADO_APOS_MS;
+  const interrompido = extras.interrompido ?? null;
+  const estado: EstadoDisparo =
+    aguardando === 0 ? "concluido" : interrompido ? interrompido.como : agora - referencia > silencioMax ? "parado" : "enviando";
+
+  // Continuar só quando a execução antiga do n8n com certeza parou: a trava confirmou,
+  // ou o n8n ficou em silêncio (sem consultar a trava e sem mexer na planilha) por 1 minuto.
+  let podeContinuarEm = 0;
+  if (estado === "pausado" || estado === "parado") {
+    const confirmou = interrompido && extras.paradaConfirmadaEm != null && extras.paradaConfirmadaEm >= interrompido.em;
+    if (!confirmou) {
+      const ultimoSinal = Math.max(extras.ultimaTrava ?? 0, extras.ultimoMovimentoGeral ?? 0, ultimoMovimento ?? 0, interrompido?.em ?? 0);
+      const liberaEm = ultimoSinal + SILENCIO_PARA_RETOMAR_MS;
+      podeContinuarEm = liberaEm > agora ? liberaEm : 0;
+    }
+  }
+
+  const agoraSaindo =
+    estado === "enviando" && extras.enviandoAgora && agora - extras.enviandoAgora.em < 45_000 ? extras.enviandoAgora.key : null;
+  const enviandoAgora = agoraSaindo && itens.some((i) => i.key === agoraSaindo && i.situacao === "pendente") ? agoraSaindo : null;
+
+  // Ordem: quem já foi (mais recente primeiro), o que está saindo agora, depois quem está esperando.
+  const peso = (i: ItemDisparo) => (i.situacao === "pendente" || i.situacao === "aguardando" ? (i.key === enviandoAgora ? 1 : 2) : 0);
   itens.sort((a, b) => {
-    const pa = a.situacao === "pendente" ? 1 : 0;
-    const pb = b.situacao === "pendente" ? 1 : 0;
+    const pa = peso(a);
+    const pb = peso(b);
     if (pa !== pb) return pa - pb;
-    return (b.quando ?? 0) - (a.quando ?? 0);
+    return pa === 0 ? (b.quando ?? 0) - (a.quando ?? 0) : 0;
   });
   return {
     iniciadoEm,
@@ -216,6 +278,11 @@ export function progressoDoDisparo(chaves: string[], iniciadoEm: number, linhas:
     ultimoMovimento,
     segundosRestantes: estado === "enviando" ? aguardando * SEGUNDOS_POR_LEAD : 0,
     itens,
+    interrompidoEm: interrompido?.em ?? null,
+    retomadoEm: extras.retomadoEm ?? null,
+    travaConfirmada,
+    enviandoAgora,
+    podeContinuarEm,
   };
 }
 
@@ -234,5 +301,7 @@ export interface StatusDisparo {
   /** Números bloqueados (ex.: o próprio Lavacar) que estão pendentes na planilha: travam o disparo. */
   bloqueadosNaFila: { nome: string; telefone: string; linha: number }[];
   atual: ProgressoDisparo | null;
+  /** Trava de segurança no n8n (o Fluxo 1 pergunta ao Radar antes de cada mensagem). */
+  trava: { ultimaEm: number | null; chaveErradaEm: number | null };
   atualizadoEm: number;
 }

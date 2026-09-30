@@ -29,7 +29,7 @@ import type { Lead, LeadTipo } from "@/lib/types";
 import { podeEnviar, type CheckState, type SearchMeta, type SearchStats } from "./Dashboard";
 
 type FiltroFone = "todos" | "celular" | "fixo" | "sem";
-type FiltroSituacao = "todos" | "novos" | "planilha" | "enviados";
+type FiltroSituacao = "disponiveis" | "todos" | "novos" | "planilha" | "enviados";
 type Ordem = "relevancia" | "nome" | "avaliacoes" | "nota" | "cidade";
 
 const POR_PAGINA = 50;
@@ -69,6 +69,14 @@ function situacaoBadge(lead: Lead) {
 function foneBadge(lead: Lead) {
   const tone = lead.telefoneTipo === "celular" ? "green" : lead.telefoneTipo === "fixo" ? "amber" : "gray";
   return <Badge tone={tone}>{PHONE_KIND_LABEL[lead.telefoneTipo]}</Badge>;
+}
+
+/** Ordem da lista: quem dá para mandar primeiro; quem já está na planilha por último. */
+function grupo(l: Lead, incluirFixos: boolean): number {
+  if (podeEnviar(l, incluirFixos)) return 0;
+  if (l.planilha === "enviado") return 2;
+  if (l.planilha === "existente" || l.planilha === "optout") return 3;
+  return 1;
 }
 
 function motivoBloqueio(lead: Lead, incluirFixos: boolean): string {
@@ -124,7 +132,7 @@ export function ResultsView({
   const [q, setQ] = useState("");
   const [fone, setFone] = useState<FiltroFone>("todos");
   const [tipo, setTipo] = useState<"todos" | LeadTipo>("todos");
-  const [situacao, setSituacao] = useState<FiltroSituacao>("todos");
+  const [situacao, setSituacao] = useState<FiltroSituacao>("disponiveis");
   const [ordem, setOrdem] = useState<Ordem>("relevancia");
   const [pagina, setPagina] = useState(1);
 
@@ -139,6 +147,7 @@ export function ResultsView({
       if (fone === "fixo" && l.telefoneTipo !== "fixo") return false;
       if (fone === "sem" && l.telefone) return false;
       if (tipo !== "todos" && l.tipo !== tipo) return false;
+      if (situacao === "disponiveis" && (l.planilha === "existente" || l.planilha === "optout")) return false;
       if (situacao === "novos" && l.planilha !== "novo" && l.planilha !== "desconhecido") return false;
       if (situacao === "planilha" && l.planilha !== "existente" && l.planilha !== "optout") return false;
       if (situacao === "enviados" && l.planilha !== "enviado") return false;
@@ -151,7 +160,10 @@ export function ResultsView({
       }
       return true;
     });
-    if (ordem !== "relevancia") {
+    if (ordem === "relevancia") {
+      // Ordem do Google, mas com quem dá para mandar em cima.
+      lista = lista.map((l, i) => ({ l, i, g: grupo(l, incluirFixos) })).sort((a, b) => a.g - b.g || a.i - b.i).map((x) => x.l);
+    } else {
       lista = [...lista].sort((a, b) => {
         if (ordem === "nome") return a.nome.localeCompare(b.nome, "pt-BR");
         if (ordem === "cidade") return a.cidade.localeCompare(b.cidade, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR");
@@ -160,7 +172,7 @@ export function ResultsView({
       });
     }
     return lista;
-  }, [leads, q, fone, tipo, situacao, ordem]);
+  }, [leads, q, fone, tipo, situacao, ordem, incluirFixos]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -285,7 +297,7 @@ export function ResultsView({
           <Stat label="Prontos para a Carol" value={novos} hint={incluirFixos ? "celular ou fixo, fora da planilha" : "celular e fora da planilha"} tone="brand" />
         </div>
         <div style={{ "--i": 3 } as CSSProperties}>
-          <Stat label="Já na planilha" value={naPlanilha} hint={enviados ? `+ ${enviados} enviados agora` : "ficam de fora, sem repetir"} tone="amber" />
+          <Stat label="Já na planilha" value={naPlanilha} hint={enviados ? `+ ${enviados} enviados agora` : "escondidos da lista, sem repetir"} tone="amber" />
         </div>
       </div>
 
@@ -326,7 +338,8 @@ export function ResultsView({
               className={cx(inputClass, "lg:w-auto")}
               aria-label="Situação"
             >
-              <option value="todos">Todos</option>
+              <option value="disponiveis">Sem quem já está na planilha</option>
+              <option value="todos">Todos (inclusive já na planilha)</option>
               <option value="novos">Só novos</option>
               <option value="planilha">Só já na planilha</option>
               <option value="enviados">Só enviados agora</option>
@@ -356,10 +369,22 @@ export function ResultsView({
               onChange={marcarTodos}
               disabled={!elegiveisFiltrados.length}
             />
-            Marcar todos os {elegiveisFiltrados.length} prontos para a Carol{filtrados.length !== leads.length && " (com este filtro)"}
+            Marcar todos os {elegiveisFiltrados.length} prontos para a Carol
+            {(q || fone !== "todos" || tipo !== "todos" || (situacao !== "disponiveis" && situacao !== "todos")) && " (com este filtro)"}
           </label>
-          <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Permitir telefone fixo" hint="Fixo quase nunca tem WhatsApp." />
+          <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Permitir telefone fixo" hint="Alguns fixos têm WhatsApp Business." />
         </div>
+        {situacao === "disponiveis" && naPlanilha > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-white px-4 py-2 text-xs text-muted">
+            <span>
+              <b className="text-ink tabular-nums">{naPlanilha}</b> {naPlanilha === 1 ? "contato que já estava" : "contatos que já estavam"} na planilha{" "}
+              {naPlanilha === 1 ? "está escondido" : "estão escondidos"} para não atrapalhar.
+            </span>
+            <button type="button" onClick={() => (setSituacao("todos"), setPagina(1))} className="font-semibold text-brand-700 hover:underline">
+              Mostrar mesmo assim
+            </button>
+          </div>
+        )}
 
         {/* Tabela (desktop) */}
         <div className="hidden overflow-x-auto md:block">
