@@ -50,6 +50,8 @@ interface ExecucaoN8n {
 
 /** O que o Radar sabe da trava (chamadas do n8n antes de cada mensagem). */
 interface EstadoTrava {
+  /** Limite diário que o próprio n8n informou (campo limite_diario do contato). */
+  limiteN8n: number | null;
   ultimaEm: number | null;
   chaveErradaEm: number | null;
   paradaConfirmadaEm: number | null;
@@ -66,7 +68,14 @@ const g = globalThis as unknown as {
 };
 
 function trava(): EstadoTrava {
-  return (g.__radarTrava ??= { ultimaEm: null, chaveErradaEm: null, paradaConfirmadaEm: null, enviandoAgora: null, execucoes: new Map() });
+  return (g.__radarTrava ??= {
+    limiteN8n: null,
+    ultimaEm: null,
+    chaveErradaEm: null,
+    paradaConfirmadaEm: null,
+    enviandoAgora: null,
+    execucoes: new Map(),
+  });
 }
 
 function progressoAtual(linhas: LinhaFila[], agora: number): ProgressoDisparo | null {
@@ -124,7 +133,7 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
       situacao: l.situacao === "pendente" ? ("pendente" as const) : ("aguardando" as const),
     })),
     hoje,
-    limiteDiario: cfg.limiteDiarioCarol,
+    limiteDiario: t.limiteN8n ?? cfg.limiteDiarioCarol,
     movimentoRecente: atual?.estado !== "enviando" && movimentoDeFora(hoje.ultimoMovimento, atual, agora),
     bloqueadosNaFila: naFilaTodos.filter((l) => bloqueados.has(l.key)).map((l) => ({ nome: l.nome, telefone: l.telefone, linha: l.linha })),
     atual,
@@ -362,6 +371,8 @@ export async function consultarTrava(
     for (const [k, v] of t.execucoes) if (agora - v.ultimaEm > 6 * 60 * 60_000) t.execucoes.delete(k);
   }
   ex.ultimaEm = agora;
+  const limite = Number(contato.limite_diario);
+  if (Number.isInteger(limite) && limite > 0 && limite < 10_000) t.limiteN8n = limite;
   const key = phoneKey(String(contato.telefone ?? ""));
   const d = g.__radarDisparo;
 

@@ -10,13 +10,30 @@ import { createHash, timingSafeEqual } from "node:crypto";
  * ("Radar: Pode Enviar?"). O Radar responde com o próprio contato e `radar_parar`:
  * true = encerra a execução ali (nenhuma mensagem a mais).
  *
- * A chamada é protegida por uma chave derivada do segredo do servidor (AUTH_SECRET, ou a senha
- * se AUTH_SECRET não existir). Dá para fixar outra em N8N_TRAVA_CHAVE.
+ * A chamada é protegida por uma chave derivada do código secreto do webhook "Disparo pelo Radar"
+ * (o final de N8N_DISPARO_URL): o n8n e o Radar já compartilham esse segredo, então trocar a senha
+ * do Radar não quebra a trava. Sem N8N_DISPARO_URL (simulação), usa AUTH_SECRET/senha.
+ * Dá para fixar outra chave em N8N_TRAVA_CHAVE.
  */
+
+/** Chave da trava a partir do código do webhook (ex.: "radar-disparo-8c2e…"). */
+export function chaveDoWebhook(codigo: string): string {
+  return createHash("sha256").update(`radar-trava:v2:${codigo}`).digest("hex").slice(0, 32);
+}
+
+function codigoDoWebhook(url: string): string {
+  try {
+    return new URL(url.trim()).pathname.split("/").filter(Boolean).pop() ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export function chaveDaTrava(): string {
   const fixa = process.env.N8N_TRAVA_CHAVE?.trim();
   if (fixa) return fixa;
+  const codigo = codigoDoWebhook(process.env.N8N_DISPARO_URL ?? "");
+  if (codigo) return chaveDoWebhook(codigo);
   const base = process.env.AUTH_SECRET?.trim() || process.env.APP_PASSWORD?.trim() || "radar-sem-segredo";
   return createHash("sha256").update(`radar-trava:v1:${base}`).digest("hex").slice(0, 32);
 }

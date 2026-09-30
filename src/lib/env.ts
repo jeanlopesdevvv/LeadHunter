@@ -89,7 +89,7 @@ export function getConfig() {
     n8nDisparoToken: str("N8N_DISPARO_TOKEN"),
     n8nDisparoHeader: str("N8N_DISPARO_HEADER", "X-Radar-Token"),
     // Só para mostrar na tela: limite diário da Carol no n8n (CAROL_LIMITE_DIARIO de lá; sem ela o n8n usa 5).
-    limiteDiarioCarol: int("LIMITE_DIARIO_CAROL", 5),
+    limiteDiarioCarol: int("LIMITE_DIARIO_CAROL", 10),
     // Abas que o painel da Carol lê (as que não existirem são ignoradas).
     painelAbaHistorico: str("PAINEL_ABA_HISTORICO", "historico_carol"),
     painelAbaStatus: str("PAINEL_ABA_STATUS", "status_meta_carol"),

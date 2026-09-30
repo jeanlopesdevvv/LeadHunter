@@ -131,7 +131,7 @@ O passo a passo também aparece dentro do Radar, na tela **Disparo**, enquanto o
 
    ```
    N8N_DISPARO_URL=cole-a-Production-URL
-   LIMITE_DIARIO_CAROL=5
+   LIMITE_DIARIO_CAROL=10
    ```
 
 Opcional: para uma senha a mais, ligue *Header Auth* no nó (credencial com *Name* `X-Radar-Token`) e coloque o
@@ -153,8 +153,9 @@ Proteções:
 - O progresso vem da planilha: se ficar mais de 4 minutos sem novidade com gente aguardando, a tela mostra
   "O disparo parou" (quase sempre o limite diário da Carol; quem sobrou continua `pendente`).
 
-Limite diário: o nó *Checar Limite Diário* usa `CAROL_LIMITE_DIARIO` (ou **5**, se a variável não existir no n8n).
-Para aumentar, crie/ajuste `CAROL_LIMITE_DIARIO` no n8n e `LIMITE_DIARIO_CAROL` no Radar com o mesmo número.
+Limite diário: fica em um lugar só, no nó *Inicializar Limite Diário* do Fluxo 1 (`const DAILY_LIMIT = 10;`); os nós
+*Checar Limite Diário* e *Registrar Sucesso no Limite* leem esse valor. Com a trava instalada, o Radar aprende o número
+sozinho no primeiro contato de cada disparo; `LIMITE_DIARIO_CAROL` no Radar só vale até lá (padrão **10**).
 O contador do dia só é guardado em execuções de produção (webhook): pelo botão do Radar, o limite vale para o dia inteiro.
 
 ### Trava (pausar e cancelar)
@@ -180,8 +181,10 @@ Como funciona:
   disparo. O Radar só deixa continuar depois que a execução antiga confirmou que parou (ou ficou 1 minuto em silêncio).
 - **Cancelar**: quem não recebeu volta para a fila (`aguardando`); nada é apagado.
 - Se o Radar estiver fora do ar ou a chave estiver errada, o nó dá erro e o n8n **para** o disparo (quem faltou
-  continua na fila). A chave vem do `AUTH_SECRET` (ou da senha, se não houver `AUTH_SECRET`): se trocar, copie os nós de
-  novo. Para fixar uma chave, use `N8N_TRAVA_CHAVE`.
+  continua na fila). A chave é derivada do código do webhook em `N8N_DISPARO_URL` (o segredo que o n8n e o Radar já
+  compartilham): trocar a senha do Radar não quebra a trava; trocar o webhook, sim (copie os nós de novo). Para fixar
+  uma chave, use `N8N_TRAVA_CHAVE`.
+- Importante: implante o Radar **antes** de publicar o Fluxo 1 com a trava (sem a rota nova, o n8n para no 1º contato).
 - Sem a trava instalada, Pausar/Cancelar ainda mudam a planilha, mas o n8n segue a lista que já leu: pare a execução
   no n8n (*Executions → Stop*).
 

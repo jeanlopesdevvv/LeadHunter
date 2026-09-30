@@ -230,4 +230,28 @@ describe("pausar, continuar e cancelar", () => {
     await iniciarDisparo([B]);
     expect(chamadasN8n).toBe(2);
   });
+
+});
+
+describe("chave da trava e limite do n8n", () => {
+  it("a chave vem do código do webhook (trocar a senha não quebra a trava)", async () => {
+    vi.stubEnv("N8N_DISPARO_URL", "https://n8n.exemplo.com/webhook/radar-disparo-abc123/");
+    vi.stubEnv("APP_PASSWORD", "senha-1");
+    const { chaveDaTrava, chaveDoWebhook } = await import("@/lib/trava");
+    const antes = chaveDaTrava();
+    expect(antes).toBe(chaveDoWebhook("radar-disparo-abc123"));
+    vi.stubEnv("APP_PASSWORD", "senha-2");
+    vi.stubEnv("AUTH_SECRET", "outro");
+    expect(chaveDaTrava()).toBe(antes);
+    vi.stubEnv("N8N_TRAVA_CHAVE", "fixa");
+    expect(chaveDaTrava()).toBe("fixa");
+  });
+
+  it("o Radar aprende o limite diário que o n8n usa", async () => {
+    montar([[A, "Lava A", "Empresa", "BH", "pendente", "", ""]]);
+    const { consultarTrava, statusDisparo } = await import("@/lib/disparo");
+    expect((await statusDisparo()).limiteDiario).toBe(10);
+    await consultarTrava({ telefone: A, limite_diario: 12, disparos_enviados_hoje: 3 }, "e1");
+    expect((await statusDisparo()).limiteDiario).toBe(12);
+  });
 });
