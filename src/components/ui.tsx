@@ -9,7 +9,7 @@ import { cx } from "@/lib/cx";
 
 export { cx };
 
-type Variant = "primary" | "dark" | "outline" | "ghost" | "danger";
+type Variant = "primary" | "dark" | "outline" | "ghost" | "danger" | "aviso";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
@@ -18,6 +18,7 @@ const VARIANTS: Record<Variant, string> = {
   outline: "bg-card text-brand-700 border border-brand-200 hover:border-brand hover:bg-brand-50",
   ghost: "text-muted hover:text-ink hover:bg-strong/5",
   danger: "bg-card text-red-600 border border-red-200 hover:bg-red-50",
+  aviso: "lift bg-amber-400 text-[#3a2a05] shadow-[0_8px_20px_-10px_rgb(251_191_36_/_0.8)] hover:bg-amber-300",
 };
 
 const SIZES: Record<Size, string> = {
@@ -201,7 +202,7 @@ export function Stat({ label, value, hint, tone = "ink", icon }: { label: string
       <div className={cx("mt-1.5 text-2xl font-extrabold tracking-tight tabular-nums sm:text-[28px]", color)}>
         {typeof value === "number" ? <AnimatedNumber value={value} /> : value}
       </div>
-      {hint && <div className="mt-0.5 text-xs text-muted">{hint}</div>}
+      {hint && <div className="mt-0.5 text-xs text-muted max-sm:hidden">{hint}</div>}
     </Card>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, WifiOff } from "lucide-react";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
 import { Logo } from "@/components/Logo";
@@ -58,6 +58,13 @@ export function Shell({
         {rodando ? "…" : totalResultados}
       </span>
     ) : null;
+
+  // No celular o menu rola de lado: mantém a aba atual à vista.
+  const navMovel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const ativo = navMovel.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    ativo?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [view]);
 
   const online = useSyncExternalStore(assinarConexao, () => navigator.onLine, () => true);
   const chatwoot = useChatwoot();
@@ -123,6 +130,7 @@ export function Shell({
             <button
               key={id}
               onClick={() => onView(id)}
+              aria-current={view === id ? "page" : undefined}
               className={cx(
                 "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors",
                 view === id ? "bg-white/[0.08] text-white" : "text-white/55 hover:bg-white/[0.04] hover:text-white",
@@ -184,11 +192,15 @@ export function Shell({
             </button>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-2 scrollbar-thin">
+        <nav
+          ref={navMovel}
+          className="flex gap-1 overflow-x-auto px-3 pb-2.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,#000_12px,#000_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden"
+        >
           {ITEMS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => onView(id)}
+              aria-current={view === id ? "page" : undefined}
               className={cx(
                 "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold",
                 view === id ? "bg-white/10 text-white" : "text-white/55",

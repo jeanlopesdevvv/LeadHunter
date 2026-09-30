@@ -256,7 +256,7 @@ export function DisparoView({
       setAba("todos");
       setConfirmar(false);
       const total = s.atual?.total ?? escolhidos.length;
-      toast(`Disparo iniciado: ${total === 1 ? "1 contato" : `${n(total)} contatos`} na vez da Carol.`, "success");
+      toast(`Disparo iniciado para ${total === 1 ? "1 contato" : `${n(total)} contatos`}.`, "success");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       setConfirmar(false);
@@ -287,12 +287,12 @@ export function DisparoView({
       aplicar(s);
       toast(
         acao === "pausar"
-          ? "Disparo pausado. A mensagem que já estava saindo termina de ir; as outras esperam você continuar."
+          ? "Disparo pausado."
           : acao === "cancelar"
             ? "Disparo cancelado. Quem não recebeu voltou para a fila."
             : acao === "continuar"
               ? "Disparo retomado de onde parou."
-              : "Pronto. A fila está livre para um novo disparo.",
+              : "Pronto para um novo disparo.",
         acao === "cancelar" || acao === "encerrar" ? "info" : "success",
       );
     } catch (e) {
@@ -359,15 +359,12 @@ export function DisparoView({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Disparo</p>
-          <h1 className="display mt-3 text-4xl text-strong sm:text-5xl">
-            A Carol faz o primeiro contato <span className="text-brand">no WhatsApp.</span>
+          <h1 className="display mt-3 text-[32px] text-strong sm:text-5xl">
+            A Carol faz o primeiro contato <span className="texto-marca">no WhatsApp.</span>
           </h1>
-          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-            Revise a fila, marque quem recebe e confirme. A Carol manda uma mensagem por vez, a cada 10 a 15 segundos, e você acompanha,
-            pausa ou cancela aqui.
-          </p>
+          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Marque quem recebe e confirme. Você pode pausar ou cancelar a qualquer momento.</p>
         </div>
-        <Button variant="outline" onClick={atualizar} loading={atualizando} icon={<RefreshCw className="size-4" />}>
+        <Button variant="outline" className="self-start sm:self-auto" onClick={atualizar} loading={atualizando} icon={<RefreshCw className="size-4" />}>
           Atualizar
         </Button>
       </header>
@@ -537,7 +534,7 @@ export function DisparoView({
               <input
                 value={filtro}
                 onChange={(e) => setFiltro(e.target.value)}
-                placeholder="Procurar por nome, telefone ou cidade…"
+                placeholder="Procurar na lista…"
                 className={cx(inputClass, "sm:w-72")}
               />
             </div>
@@ -787,7 +784,7 @@ function CartaoDisparo({
       >
         <p className="min-w-0">
           {atual.estado === "enviando" &&
-            `Uma mensagem por vez, para o WhatsApp não bloquear. Faltam cerca de ${minutos(atual.segundosRestantes)}. Você pode fechar esta tela: o envio continua.`}
+            `Uma mensagem por vez. Faltam cerca de ${minutos(atual.segundosRestantes)}. Pode fechar esta tela: o envio continua.`}
           {atual.estado === "pausado" &&
             (esperar > 0
               ? "Pausando: a mensagem em andamento é concluída e as próximas ficam em espera."
@@ -809,20 +806,18 @@ function CartaoDisparo({
             `Cancelado. ${atual.enviados === 1 ? "1 contato recebeu" : `${n(atual.enviados)} receberam`}; ${atual.aguardando === 1 ? "o que faltava voltou" : `os ${n(atual.aguardando)} que faltavam voltaram`} para a fila, sem mensagem.`}
           {atual.estado === "concluido" && "Todos os contatos foram processados. Acompanhe as respostas em Desempenho e atenda pelo Chatwoot."}
         </p>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
           {atual.estado === "enviando" && (
             <>
-              <Button size="sm" variant="outline" onClick={() => onAcao("pausar")} loading={agindo === "pausar"} icon={<PauseCircle className="size-4" />}>
+              <Button
+                variant="aviso"
+                onClick={() => onAcao("pausar")}
+                loading={agindo === "pausar"}
+                icon={<PauseCircle className="size-4" />}
+              >
                 Pausar
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                onClick={() => onAcao("cancelar")}
-                loading={agindo === "cancelar"}
-                icon={<XCircle className="size-4" />}
-              >
+              <Button variant="danger" onClick={() => onAcao("cancelar")} loading={agindo === "cancelar"} icon={<XCircle className="size-4" />}>
                 Cancelar
               </Button>
             </>
@@ -830,7 +825,7 @@ function CartaoDisparo({
           {(atual.estado === "pausado" || atual.estado === "parado") && (
             <>
               <Button
-                size="sm"
+                className={cx(esperar > 0 && "col-span-2")}
                 onClick={() => onAcao("continuar")}
                 loading={agindo === "continuar"}
                 disabled={esperar > 0}
@@ -839,9 +834,8 @@ function CartaoDisparo({
                 {esperar > 0 ? `Concluindo o envio atual (${esperar}s)` : `Continuar (${n(atual.aguardando)})`}
               </Button>
               <Button
-                size="sm"
-                variant="ghost"
-                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                variant="danger"
+                className={cx(esperar > 0 && "col-span-2")}
                 onClick={() => onAcao("cancelar")}
                 loading={agindo === "cancelar"}
                 icon={<XCircle className="size-4" />}
@@ -851,7 +845,7 @@ function CartaoDisparo({
             </>
           )}
           {(atual.estado === "cancelado" || atual.estado === "concluido") && (
-            <Button size="sm" variant="outline" onClick={() => onAcao("encerrar")} loading={agindo === "encerrar"} icon={<X className="size-4" />}>
+            <Button variant="outline" className="col-span-2" onClick={() => onAcao("encerrar")} loading={agindo === "encerrar"} icon={<X className="size-4" />}>
               Fechar
             </Button>
           )}

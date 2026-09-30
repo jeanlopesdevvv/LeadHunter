@@ -32,7 +32,13 @@ export const LUGARES_POR_PAGINA = 20;
 /** Quantas vezes uma área cheia pode ser dividida em 4 (3 níveis = até 64 pedaços). */
 export const MAX_DIVISOES = 3;
 
-export const QUANTIDADES = [1, 5, 20, 50, 100, 200, 500] as const;
+export const QUANTIDADES = [10, 25, 50, 100, 250, 500] as const;
+
+/** Leva um número antigo (ex.: 20 de uma busca salva) para a opção mais próxima acima. */
+export function quantidadeValida(alvo: number | undefined): number {
+  if (!alvo || !Number.isFinite(alvo)) return 50;
+  return QUANTIDADES.find((q) => q >= alvo) ?? QUANTIDADES[QUANTIDADES.length - 1];
+}
 
 /**
  * Limite de consultas sugerido para achar `alvo` contatos novos.

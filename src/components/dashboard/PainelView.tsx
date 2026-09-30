@@ -172,13 +172,10 @@ export function PainelView() {
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="eyebrow">Desempenho dos disparos</p>
-          <h1 className="display mt-3 text-4xl text-strong sm:text-5xl">
-            Do disparo à <span className="text-brand">conversa.</span>
+          <h1 className="display mt-3 text-[32px] text-strong sm:text-5xl">
+            Do disparo à <span className="texto-marca">conversa.</span>
           </h1>
-          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-            Acompanhe cada etapa depois do disparo: quem recebeu, leu, respondeu e disse <b>Sim, atendo</b>. Os contatos que responderam
-            aparecem primeiro, com atalho para atender no Chatwoot. Atualiza sozinho a cada minuto.
-          </p>
+          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Quem recebeu, leu, respondeu e quer atender. Quem respondeu aparece primeiro.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-xl border border-line bg-card p-1" role="radiogroup" aria-label="Período">
@@ -361,7 +358,47 @@ export function PainelView() {
             {contatos.length ? "Ninguém com esse filtro." : "Nenhum disparo neste período. Os resultados aparecem aqui depois do primeiro disparo."}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Cartões (celular) */}
+          <ul className="divide-y divide-line md:hidden">
+            {lista.slice(0, 300).map((c) => (
+              <li key={c.key} className="px-4 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink">{c.nome || "(sem nome)"}</p>
+                    <p className="truncate text-xs text-muted">
+                      {normalizePhone(c.telefone).display || c.telefone}
+                      {c.cidade && ` · ${c.cidade}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <BotaoAtender telefone={c.telefone} nome={c.nome} compacto />
+                    <a
+                      href={whatsappLink(c.telefone)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-lg p-2 text-muted transition hover:bg-emerald-50 hover:text-emerald-600"
+                      aria-label="Abrir no WhatsApp"
+                    >
+                      <MessageCircle className="size-4" />
+                    </a>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <ChipEntrega c={c} />
+                  <ChipResposta c={c} />
+                  {c.enviadoEm && <span className="text-[11px] text-muted">{quandoCurto(c.enviadoEm)}</span>}
+                </div>
+                {c.ultima && (
+                  <p className="mt-2 line-clamp-2 rounded-lg bg-surface px-3 py-2 text-xs text-ink">
+                    <b className={c.ultima.deCarol ? "text-brand-700" : "text-emerald-700"}>{c.ultima.deCarol ? "Carol: " : "Contato: "}</b>
+                    {c.ultima.texto}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm">
               <thead className="text-[11px] font-bold tracking-wider text-muted uppercase">
                 <tr className="border-b border-line">
@@ -422,6 +459,7 @@ export function PainelView() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
 

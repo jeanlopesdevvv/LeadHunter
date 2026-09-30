@@ -107,12 +107,12 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Configuração</p>
-          <h1 className="display mt-3 text-4xl text-strong">
-            Status das <span className="text-brand">integrações</span>
+          <h1 className="display mt-3 text-[32px] text-strong sm:text-4xl">
+            Status das <span className="texto-marca">integrações</span>
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted">Confira se o Radar está conectado a todos os serviços que usa.</p>
+          <p className="mt-2 max-w-2xl text-[15px] text-muted">Tudo o que o Radar usa, em um só lugar.</p>
         </div>
-        <Button variant="outline" onClick={recarregar} loading={carregando} icon={<RefreshCw className="size-4" />}>
+        <Button variant="outline" className="self-start sm:self-auto" onClick={recarregar} loading={carregando} icon={<RefreshCw className="size-4" />}>
           Atualizar
         </Button>
       </header>

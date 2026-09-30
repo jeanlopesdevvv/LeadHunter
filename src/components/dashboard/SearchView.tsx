@@ -1,16 +1,32 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleStop, MapPin, Play, Plus, Search, SlidersHorizontal, Tag, Users } from "lucide-react";
-import { useState } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Car,
+  Check,
+  ChevronDown,
+  CircleStop,
+  Gauge,
+  Layers,
+  MapPin,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Store,
+  Tag,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 
-import { Badge, Button, Card, Field, inputClass, Toggle, cx } from "@/components/ui";
+import { AnimatedNumber, RadarSweep } from "@/components/motion";
+import { Button, Card, Toggle, cx } from "@/components/ui";
+import type { Progresso } from "@/lib/client/search-runner";
 import { QUANTIDADES, splitLines, sugerirLimite } from "@/lib/geo";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
-import type { Progresso } from "@/lib/client/search-runner";
 import type { Uso } from "@/lib/types";
-import { AnimatedNumber, RadarSweep } from "@/components/motion";
-
-import { UsoCard } from "./UsoCota";
 
 export interface SearchForm {
   termos: string;
@@ -24,13 +40,37 @@ export interface SearchForm {
   incluirFixos: boolean;
 }
 
-/** Atalhos de "quem procurar": preenchem o campo de termos (que continua editável). */
+/** Atalhos de "quem procurar": preenchem os termos de busca (que continuam editáveis). */
 export const PUBLICOS = {
   lavajatos: { rotulo: "Lava-jatos", termos: ["lava jato", "estética automotiva", "lava rápido"] },
   autonomos: { rotulo: "Lavadores autônomos", termos: ["lavagem a domicílio", "lavador de carros", "lava jato delivery"] },
   todos: { rotulo: "Os dois", termos: ["lava jato", "estética automotiva", "lavagem a domicílio", "lavador de carros"] },
 } as const;
 type Publico = keyof typeof PUBLICOS;
+
+const VISUAL_PUBLICO: Record<Publico, { icone: typeof Store; detalhe: string; resumo: string; cor: string; gradiente: string }> = {
+  lavajatos: {
+    icone: Store,
+    detalhe: "Estabelecimentos",
+    resumo: "Lava-jatos",
+    cor: "bg-[#03abc9]/12 text-[#03abc9]",
+    gradiente: "from-[#22bedb] to-[#0293ad]",
+  },
+  autonomos: {
+    icone: Car,
+    detalhe: "Atendem a domicílio",
+    resumo: "Lavadores autônomos",
+    cor: "bg-[#7c6cf2]/12 text-[#7c6cf2]",
+    gradiente: "from-[#9486f7] to-[#6552e0]",
+  },
+  todos: {
+    icone: Layers,
+    detalhe: "Mais alcance",
+    resumo: "Lava-jatos e autônomos",
+    cor: "bg-[#10b981]/12 text-[#10b981]",
+    gradiente: "from-[#34d399] to-[#059669]",
+  },
+};
 
 function publicoAtual(termos: string[]): Publico | null {
   const atual = termos.map((t) => t.toLowerCase()).sort().join("|");
@@ -55,11 +95,8 @@ const SUGESTOES_CIDADES = ["Belo Horizonte - MG", "Contagem - MG", "Nova Lima - 
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 
-function addLine(text: string, value: string) {
-  const lines = splitLines(text);
-  if (lines.some((l) => l.toLowerCase() === value.toLowerCase())) return text;
-  return [...lines, value].join("\n");
-}
+/** Pontos no radar do resumo: mais oportunidades, mais pontos. */
+const PONTOS_POR_QUANTIDADE: Record<number, number> = { 10: 3, 25: 5, 50: 8, 100: 12, 250: 18, 500: 26 };
 
 /** Consultas que esta busca pode gastar (sugestão automática ou valor escolhido, dentro do que resta no mês). */
 export function calcularLimite(form: SearchForm, uso: Uso | null, maxPorBusca: number) {
@@ -71,16 +108,129 @@ export function calcularLimite(form: SearchForm, uso: Uso | null, maxPorBusca: n
   return { limite: Math.min(escolhido, teto), sugerido, teto, cortadoPelaCota: escolhido > teto && teto === disponivel };
 }
 
-function Chip({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+/** Cabeçalho numerado de cada passo. */
+function Passo({ num, titulo, extra, children, i }: { num: number; titulo: string; extra?: ReactNode; children: ReactNode; i: number }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-full border border-line bg-card px-2.5 py-1 text-xs font-medium text-muted transition hover:border-brand-200 hover:text-brand-700 disabled:opacity-50"
-    >
-      <Plus className="size-3" /> {children}
-    </button>
+    <Card className="p-5 sm:p-6" style={{ "--i": i } as CSSProperties}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-3 text-base font-bold text-ink sm:text-[17px]">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-extrabold text-white shadow-brand">
+            {num}
+          </span>
+          {titulo}
+        </h2>
+        {extra}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+/** Lista de etiquetas: digite e aperte Enter; clique no × para tirar. */
+function Etiquetas({
+  id,
+  valores,
+  onChange,
+  sugestoes,
+  placeholder,
+  icone,
+  disabled,
+  rotulo,
+}: {
+  id: string;
+  valores: string[];
+  onChange: (v: string[]) => void;
+  sugestoes: string[];
+  placeholder: string;
+  icone: ReactNode;
+  disabled?: boolean;
+  rotulo: string;
+}) {
+  const [texto, setTexto] = useState("");
+  const tem = (v: string) => valores.some((x) => x.toLowerCase() === v.toLowerCase());
+
+  function adicionar(bruto: string) {
+    const novos = splitLines(bruto).filter((v) => !tem(v));
+    if (novos.length) onChange([...valores, ...novos]);
+    setTexto("");
+  }
+
+  function aoTeclar(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      adicionar(texto);
+    } else if (e.key === "Backspace" && !texto && valores.length) {
+      onChange(valores.slice(0, -1));
+    }
+  }
+
+  function aoColar(e: ClipboardEvent<HTMLInputElement>) {
+    const colado = e.clipboardData.getData("text");
+    if (/[\n;]/.test(colado)) {
+      e.preventDefault();
+      adicionar(colado);
+    }
+  }
+
+  const restantes = sugestoes.filter((s) => !tem(s)).slice(0, 5);
+
+  return (
+    <div>
+      <div
+        className={cx(
+          "flex min-h-14 flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-2 transition",
+          "focus-within:border-brand focus-within:bg-card focus-within:ring-4 focus-within:ring-brand/10",
+          disabled && "opacity-70",
+        )}
+      >
+        {valores.map((v) => (
+          <span
+            key={v.toLowerCase()}
+            className="inline-flex max-w-full animate-pop-in items-center gap-1.5 rounded-full bg-card py-1.5 pr-1.5 pl-3 text-sm font-semibold text-ink shadow-card ring-1 ring-line"
+          >
+            <span className="text-brand">{icone}</span>
+            <span className="truncate">{v}</span>
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => onChange(valores.filter((x) => x !== v))}
+                className="grid size-6 shrink-0 place-items-center rounded-full text-muted transition hover:bg-red-50 hover:text-red-600"
+                aria-label={`Tirar ${v}`}
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </span>
+        ))}
+        <input
+          id={id}
+          value={texto}
+          disabled={disabled}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={aoTeclar}
+          onPaste={aoColar}
+          onBlur={() => texto.trim() && adicionar(texto)}
+          placeholder={valores.length ? "Adicionar mais…" : placeholder}
+          aria-label={rotulo}
+          enterKeyHint="done"
+          className="h-9 min-w-44 flex-1 bg-transparent px-2 text-base text-ink placeholder:text-muted/70 focus:outline-none sm:text-sm"
+        />
+      </div>
+      {!disabled && restantes.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {restantes.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onChange([...valores, s])}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand hover:bg-brand-50 hover:text-brand-700"
+            >
+              <Plus className="size-3.5" /> {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -115,44 +265,80 @@ export function SearchView({
   onContinuar: () => void;
   onVerResultados: () => void;
 }) {
-  const [outro, setOutro] = useState(!QUANTIDADES.includes(form.alvo as (typeof QUANTIDADES)[number]));
-  const [ajustar, setAjustar] = useState(form.limite !== null);
   const termos = splitLines(form.termos);
   const cidades = splitLines(form.cidades);
+  const publico = publicoAtual(termos);
+  const [verTermos, setVerTermos] = useState(publico === null);
+  const [opcoes, setOpcoes] = useState(form.limite !== null);
   const set = (patch: Partial<SearchForm>) => onForm({ ...form, ...patch });
   const { limite, sugerido, teto, cortadoPelaCota } = calcularLimite(form, uso, maxPorBusca);
   const semCota = Boolean(uso?.bloquear && uso.restantes <= 0);
   const podeBuscar = termos.length > 0 && cidades.length > 0 && form.alvo > 0 && limite > 0 && placesConfigurada && !semCota;
 
+  // Ao começar a busca, leva o progresso para a vista (no celular o botão fica lá embaixo).
+  const progressoRef = useRef<HTMLDivElement>(null);
+  const rodandoAntes = useRef(rodando);
+  useEffect(() => {
+    if (rodando && !rodandoAntes.current) {
+      requestAnimationFrame(() => progressoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+    rodandoAntes.current = rodando;
+  }, [rodando]);
+
+  const resumoPublico = publico ? VISUAL_PUBLICO[publico].resumo : `${termos.length} ${termos.length === 1 ? "termo" : "termos"} de busca`;
+  const resumoCidades = cidades.length === 0 ? "Escolha uma região" : cidades.length === 1 ? cidades[0] : `${cidades[0]} e mais ${cidades.length - 1}`;
+
   return (
     <div className="space-y-6">
       <header>
         <p className="eyebrow">Nova prospecção</p>
-        <h1 className="display mt-3 text-4xl text-strong sm:text-5xl">
-          Novos parceiros <span className="text-brand">para o Lavacar.</span>
+        <h1 className="display mt-3 text-[34px] text-strong sm:text-5xl">
+          Novos parceiros <span className="texto-marca">para o Lavacar.</span>
         </h1>
-        <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-          Defina o perfil, a região e quantos contatos você quer. O Radar busca lava-jatos e lavadores autônomos no Google Maps, remove
-          os repetidos e quem já está na planilha, e entrega apenas oportunidades novas, prontas para a Carol.
-        </p>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Escolha quem, onde e quantos. O Radar entrega só contatos novos.</p>
       </header>
 
       {!placesConfigurada && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <span>
-            A busca no Google Maps ainda não foi configurada. Veja a página <b>Configuração</b>.
-          </span>
+          <span>A busca ainda não está disponível. Fale com o administrador do Radar.</span>
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="p-5 sm:p-7">
-          <div className="mb-6">
-            <p className="text-sm font-semibold text-ink">Qual perfil você quer prospectar?</p>
-            <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Quem procurar">
+      {progresso && (
+        <div ref={progressoRef} className="scroll-mt-36 animate-slide-up lg:scroll-mt-8">
+          <CartaoProgresso
+            p={progresso}
+            podeContinuar={podeContinuar && !rodando}
+            onContinuar={onContinuar}
+            onVerResultados={onVerResultados}
+          />
+        </div>
+      )}
+
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="stagger space-y-4">
+          <Passo
+            i={0}
+            num={1}
+            titulo="Quem você quer encontrar?"
+            extra={
+              <button
+                type="button"
+                onClick={() => setVerTermos((v) => !v)}
+                className="hidden items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-brand-700 sm:inline-flex"
+                aria-expanded={verTermos}
+              >
+                <Tag className="size-3.5" /> Termos
+                <ChevronDown className={cx("size-3.5 transition-transform", verTermos && "rotate-180")} />
+              </button>
+            }
+          >
+            <div className="grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Quem procurar">
               {(Object.keys(PUBLICOS) as Publico[]).map((k) => {
-                const ativo = publicoAtual(termos) === k;
+                const ativo = publico === k;
+                const v = VISUAL_PUBLICO[k];
+                const Icone = v.icone;
                 return (
                   <button
                     key={k}
@@ -162,72 +348,77 @@ export function SearchView({
                     disabled={rodando}
                     onClick={() => set({ termos: PUBLICOS[k].termos.join("\n") })}
                     className={cx(
-                      "h-10 rounded-xl border px-4 text-sm font-bold transition-all",
-                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-card text-ink hover:border-brand-200",
+                      "group relative flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all duration-200 sm:flex-col sm:items-start sm:gap-3 sm:p-4",
+                      ativo
+                        ? "border-brand bg-brand-50 ring-4 ring-brand/10"
+                        : "border-line bg-card hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card disabled:hover:translate-y-0",
                     )}
                   >
-                    {PUBLICOS[k].rotulo}
+                    <span
+                      className={cx(
+                        "grid size-11 shrink-0 place-items-center rounded-xl transition-all duration-300",
+                        ativo ? cx("bg-gradient-to-br text-white shadow-lg", v.gradiente) : v.cor,
+                        !rodando && "group-hover:scale-105",
+                      )}
+                    >
+                      <Icone className="size-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className={cx("block text-[15px] font-bold", ativo ? "text-brand-700" : "text-ink")}>{PUBLICOS[k].rotulo}</span>
+                      <span className="mt-0.5 block text-xs text-muted">{v.detalhe}</span>
+                    </span>
+                    {ativo && (
+                      <span className="absolute top-1/2 right-3.5 grid size-6 -translate-y-1/2 animate-pop-in place-items-center rounded-full bg-brand text-white sm:top-3 sm:translate-y-0">
+                        <Check className="size-3.5" strokeWidth={3} />
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
-            <p className="mt-1.5 text-xs text-muted">Escolha um perfil e os termos de busca são preenchidos. Você pode ajustá-los no campo abaixo.</p>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Field label="1. O que procurar no Google" hint="um por linha" htmlFor="termos">
-              <div className="relative">
-                <Tag className="pointer-events-none absolute top-3 left-3.5 size-4 text-muted" />
-                <textarea
+
+            <button
+              type="button"
+              onClick={() => setVerTermos((v) => !v)}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-muted transition hover:text-brand-700 sm:hidden"
+              aria-expanded={verTermos}
+            >
+              <Tag className="size-3.5" /> Termos de busca
+              <ChevronDown className={cx("size-3.5 transition-transform", verTermos && "rotate-180")} />
+            </button>
+            {verTermos && (
+              <div className="mt-4 animate-slide-up">
+                <Etiquetas
                   id="termos"
-                  rows={4}
-                  value={form.termos}
-                  onChange={(e) => set({ termos: e.target.value })}
+                  rotulo="Termos de busca"
+                  valores={termos}
+                  onChange={(v) => set({ termos: v.join("\n") })}
+                  sugestoes={SUGESTOES_TERMOS}
+                  placeholder="Ex.: lava jato"
+                  icone={<Tag className="size-3.5" />}
                   disabled={rodando}
-                  className={cx(inputClass, "resize-y pl-10 leading-relaxed")}
-                  placeholder={"lava jato\nestética automotiva"}
                 />
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {SUGESTOES_TERMOS.filter((s) => !termos.some((t) => t.toLowerCase() === s)).map((s) => (
-                  <Chip key={s} disabled={rodando} onClick={() => set({ termos: addLine(form.termos, s) })}>
-                    {s}
-                  </Chip>
-                ))}
-              </div>
-            </Field>
+            )}
+          </Passo>
 
-            <Field label="2. Onde" hint="cidade ou bairro, um por linha" htmlFor="cidades">
-              <div className="relative">
-                <MapPin className="pointer-events-none absolute top-3 left-3.5 size-4 text-muted" />
-                <textarea
-                  id="cidades"
-                  rows={4}
-                  value={form.cidades}
-                  onChange={(e) => set({ cidades: e.target.value })}
-                  disabled={rodando}
-                  className={cx(inputClass, "resize-y pl-10 leading-relaxed")}
-                  placeholder={"Belo Horizonte - MG\nContagem - MG"}
-                />
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {SUGESTOES_CIDADES.filter((s) => !cidades.some((c) => c.toLowerCase() === s.toLowerCase())).map((s) => (
-                  <Chip key={s} disabled={rodando} onClick={() => set({ cidades: addLine(form.cidades, s) })}>
-                    {s}
-                  </Chip>
-                ))}
-              </div>
-            </Field>
-          </div>
+          <Passo i={1} num={2} titulo="Em qual região?">
+            <Etiquetas
+              id="cidades"
+              rotulo="Cidades ou bairros"
+              valores={cidades}
+              onChange={(v) => set({ cidades: v.join("\n") })}
+              sugestoes={SUGESTOES_CIDADES}
+              placeholder="Digite uma cidade ou bairro e aperte Enter"
+              icone={<MapPin className="size-3.5" />}
+              disabled={rodando}
+            />
+          </Passo>
 
-          <div className="mt-7">
-            <p className="text-sm font-semibold text-ink">3. Quantas oportunidades novas você quer?</p>
-            <p className="mt-0.5 text-xs text-muted">
-              Só conta quem tem {form.incluirFixos ? "celular ou telefone fixo" : "celular"} e ainda não está na planilha. A busca termina assim
-              que bater a meta.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Quantidade de contatos">
+          <Passo i={2} num={3} titulo="Quantas oportunidades novas?">
+            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6" role="radiogroup" aria-label="Quantidade de contatos">
               {QUANTIDADES.map((q) => {
-                const ativo = !outro && form.alvo === q;
+                const ativo = form.alvo === q;
                 return (
                   <button
                     key={q}
@@ -235,298 +426,279 @@ export function SearchView({
                     role="radio"
                     aria-checked={ativo}
                     disabled={rodando}
-                    onClick={() => {
-                      setOutro(false);
-                      set({ alvo: q });
-                    }}
+                    onClick={() => set({ alvo: q })}
                     className={cx(
-                      "h-11 min-w-16 rounded-xl border px-4 text-sm font-bold tabular-nums transition-all",
-                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-card text-ink hover:border-brand-200",
+                      "h-14 rounded-2xl text-lg font-extrabold tabular-nums transition-all duration-200",
+                      ativo
+                        ? "scale-[1.03] bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-brand"
+                        : "border border-line bg-card text-ink hover:-translate-y-0.5 hover:border-brand-300 hover:text-brand-700 disabled:hover:translate-y-0",
                     )}
                   >
                     {q}
                   </button>
                 );
               })}
-              <div
-                className={cx(
-                  "flex h-11 items-center gap-2 rounded-xl border pr-2 pl-3 transition-all",
-                  outro ? "border-brand bg-brand-50 ring-2 ring-brand/15" : "border-line bg-card",
-                )}
-              >
-                <button
-                  type="button"
-                  disabled={rodando}
-                  onClick={() => setOutro(true)}
-                  className={cx("text-sm font-bold", outro ? "text-brand-700" : "text-ink")}
-                >
-                  Outro
-                </button>
-                {outro && (
-                  <input
-                    type="number"
-                    min={1}
-                    max={2000}
-                    inputMode="numeric"
-                    autoFocus
-                    disabled={rodando}
-                    value={form.alvo || ""}
-                    onChange={(e) => set({ alvo: Math.max(0, Math.min(2000, Math.floor(Number(e.target.value) || 0))) })}
-                    className="h-8 w-20 rounded-lg border border-brand-200 bg-card px-2 text-sm font-bold text-ink tabular-nums focus:border-brand focus:outline-none"
-                    aria-label="Quantidade de contatos"
-                  />
-                )}
-              </div>
             </div>
-          </div>
+          </Passo>
 
-          {/* Quanto vai gastar */}
-          <div
-            className={cx(
-              "mt-6 rounded-xl px-4 py-3.5 text-sm",
-              semCota ? "bg-red-50 text-red-800" : cortadoPelaCota ? "bg-amber-50 text-amber-900" : "bg-surface text-ink",
-            )}
-          >
-            {semCota && uso ? (
-              <p className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                <span>
-                  As {n(uso.limite)} consultas grátis deste mês acabaram. Elas voltam em <b>{formatarRenovacaoCurta(uso.renovaEm)}</b>.
-                </span>
-              </p>
-            ) : (
-              <>
-                <p>
-                  Usa <b>no máximo {n(limite)} consulta{limite === 1 ? "" : "s"}</b>
-                  {form.alvo > 0 && <> para encontrar {form.alvo === 1 ? "1 oportunidade" : `${n(form.alvo)} oportunidades`}</>}. A busca
-                  termina ao atingir a meta, então normalmente usa menos.
-                  {uso && uso.bloquear && (
-                    <span className="text-muted">
-                      {" "}
-                      Restam {n(uso.restantes)} no mês.
-                    </span>
-                  )}
-                </p>
-                {cortadoPelaCota && (
-                  <p className="mt-1 text-xs">Só restam {n(teto)} consultas grátis neste mês, então a busca vai parar nelas.</p>
-                )}
-                {!ajustar ? (
-                  <button
-                    type="button"
-                    onClick={() => setAjustar(true)}
-                    disabled={rodando}
-                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:underline"
-                  >
-                    <SlidersHorizontal className="size-3.5" /> Mudar o máximo de consultas
-                  </button>
-                ) : (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                    <label htmlFor="limite" className="font-semibold">
-                      Máximo nesta busca:
-                    </label>
-                    <input
-                      id="limite"
-                      type="number"
-                      min={1}
-                      max={maxPorBusca}
-                      disabled={rodando}
-                      value={form.limite ?? sugerido}
-                      onChange={(e) => set({ limite: Math.max(1, Math.min(maxPorBusca, Math.floor(Number(e.target.value) || 1))) })}
-                      className="h-8 w-20 rounded-lg border border-line bg-card px-2 text-sm font-bold tabular-nums focus:border-brand focus:outline-none"
-                    />
-                    <span className="text-muted">consultas (até {n(maxPorBusca)})</span>
+          <div className="rounded-2xl border border-line bg-card" style={{ "--i": 3 } as CSSProperties}>
+            <button
+              type="button"
+              onClick={() => setOpcoes((v) => !v)}
+              aria-expanded={opcoes}
+              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-ink sm:px-6"
+            >
+              <span className="flex items-center gap-2.5">
+                <SlidersHorizontal className="size-4 text-brand" /> Mais opções
+              </span>
+              <ChevronDown className={cx("size-4 text-muted transition-transform", opcoes && "rotate-180")} />
+            </button>
+            {opcoes && (
+              <div className="grid animate-slide-up gap-5 border-t border-line px-5 py-5 sm:grid-cols-2 sm:px-6">
+                <Toggle
+                  checked={form.incluirFixos}
+                  onChange={(v) => set({ incluirFixos: v })}
+                  label="Incluir telefone fixo"
+                  hint="Alguns fixos têm WhatsApp Business."
+                />
+                <Toggle
+                  checked={form.ignorarFechados}
+                  onChange={(v) => set({ ignorarFechados: v })}
+                  label="Pular estabelecimentos fechados"
+                  hint="Os que o Google marca como fechados."
+                />
+                <div className="sm:col-span-2">
+                  <p className="text-sm font-semibold text-ink">Máximo de consultas nesta busca</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setAjustar(false);
-                        set({ limite: null });
-                      }}
-                      className="font-semibold text-brand-700 hover:underline"
+                      disabled={rodando}
+                      onClick={() => set({ limite: null })}
+                      className={cx(
+                        "h-10 rounded-xl border px-3.5 text-sm font-semibold transition",
+                        form.limite === null ? "border-brand bg-brand-50 text-brand-700" : "border-line bg-card text-ink hover:border-brand-200",
+                      )}
                     >
-                      Voltar ao automático ({n(sugerido)})
+                      Automático ({n(sugerido)})
                     </button>
+                    <label
+                      className={cx(
+                        "flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold transition",
+                        form.limite !== null ? "border-brand bg-brand-50 text-brand-700" : "border-line bg-card text-ink",
+                      )}
+                    >
+                      Definir
+                      <input
+                        id="limite"
+                        type="number"
+                        min={1}
+                        max={maxPorBusca}
+                        inputMode="numeric"
+                        disabled={rodando}
+                        value={form.limite ?? sugerido}
+                        onChange={(e) => set({ limite: Math.max(1, Math.min(maxPorBusca, Math.floor(Number(e.target.value) || 1))) })}
+                        className="h-7 w-16 rounded-lg border border-line bg-card px-2 text-center font-bold text-ink tabular-nums focus:border-brand focus:outline-none"
+                        aria-label="Máximo de consultas"
+                      />
+                    </label>
                   </div>
-                )}
-              </>
+                </div>
+              </div>
             )}
           </div>
-
-          <div className="mt-6 flex flex-col gap-5 border-t border-line pt-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
-              <Toggle
-                checked={form.incluirFixos}
-                onChange={(v) => set({ incluirFixos: v })}
-                label="Incluir telefone fixo"
-                hint="Alguns fixos têm WhatsApp Business."
-              />
-              <Toggle
-                checked={form.ignorarFechados}
-                onChange={(v) => set({ ignorarFechados: v })}
-                label="Pular estabelecimentos fechados"
-                hint="Os que o Google marca como fechados."
-              />
-            </div>
-            <div className="flex flex-wrap gap-3 sm:justify-end">
-              {!rodando ? (
-                <Button size="lg" onClick={onBuscar} disabled={!podeBuscar} icon={<Search className="size-4" />}>
-                  Buscar {form.alvo === 1 ? "1 oportunidade" : `${form.alvo > 0 ? n(form.alvo) : ""} oportunidades`}
-                </Button>
-              ) : (
-                <Button size="lg" variant="danger" onClick={onParar} icon={<CircleStop className="size-4" />}>
-                  Parar a busca
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        <div className="space-y-4">
-          <UsoCard uso={uso} onAtualizar={onAtualizarUso} atualizando={atualizandoUso} />
         </div>
-      </div>
 
-      {progresso && (
-        <CartaoProgresso
-          p={progresso}
-          ignorarFechados={form.ignorarFechados}
-          incluirFixos={form.incluirFixos}
-          podeContinuar={podeContinuar && !rodando}
-          onContinuar={onContinuar}
-          onVerResultados={onVerResultados}
-        />
-      )}
-
-      {!progresso && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[
-            ["1", "Busque", "Defina perfil, região e quantidade de contatos."],
-            ["2", "Revise e envie", "Confira a lista, ajuste empresa ou autônomo e envie os escolhidos para a planilha."],
-            ["3", "Dispare", "Escolha quem recebe a mensagem da Carol e acompanhe os resultados em Desempenho."],
-          ].map(([num, t, d]) => (
-            <div key={num} className="flex gap-3 rounded-2xl border border-dashed border-line p-4">
-              <Badge tone="brand" className="size-6 justify-center p-0 text-xs">
-                {num}
-              </Badge>
+        <aside className="xl:sticky xl:top-8">
+          <div className="cartao-noite relative overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_60px_-28px_rgb(3_171_201_/_0.65)] ring-1 ring-white/10">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-bold text-ink">{t}</p>
-                <p className="text-xs text-muted">{d}</p>
+                <p className="text-[11px] font-bold tracking-[0.18em] text-brand-300 uppercase">Sua busca</p>
+                <p className="mt-3 text-6xl leading-none font-extrabold tracking-tight">
+                  <AnimatedNumber value={form.alvo} />
+                </p>
+                <p className="mt-2 text-sm font-medium text-white/65">oportunidades novas</p>
               </div>
+              <RadarSweep ativo pontos={PONTOS_POR_QUANTIDADE[form.alvo] ?? 8} tamanho={84} className="ring-1 ring-brand/30" />
             </div>
-          ))}
-        </div>
-      )}
+
+            <ul className="mt-6 space-y-3 text-sm">
+              <LinhaResumo icone={publico ? VISUAL_PUBLICO[publico].icone : Tag}>{resumoPublico}</LinhaResumo>
+              <LinhaResumo icone={MapPin} alerta={cidades.length === 0}>
+                {resumoCidades}
+              </LinhaResumo>
+              <LinhaResumo icone={Gauge}>
+                {semCota ? (
+                  "Consultas do mês esgotadas"
+                ) : (
+                  <>
+                    Até {n(limite)} {limite === 1 ? "consulta" : "consultas"}
+                    {uso?.bloquear && <span className="text-white/50"> · {n(uso.restantes)} grátis no mês</span>}
+                  </>
+                )}
+                {uso && uso.fonte !== "simulacao" && (
+                  <button
+                    type="button"
+                    onClick={onAtualizarUso}
+                    disabled={atualizandoUso}
+                    className="ml-1.5 inline-grid size-6 place-items-center rounded-md align-middle text-white/40 transition hover:bg-white/10 hover:text-white"
+                    aria-label="Atualizar consultas grátis"
+                    title="Atualizar"
+                  >
+                    <RefreshCw className={cx("size-3.5", atualizandoUso && "animate-spin")} />
+                  </button>
+                )}
+              </LinhaResumo>
+            </ul>
+
+            {semCota && uso ? (
+              <p className="mt-5 rounded-xl bg-red-500/15 px-3.5 py-2.5 text-sm text-red-200 ring-1 ring-red-400/25">
+                As consultas grátis voltam em <b>{formatarRenovacaoCurta(uso.renovaEm)}</b>.
+              </p>
+            ) : (
+              cortadoPelaCota && (
+                <p className="mt-5 rounded-xl bg-amber-400/12 px-3.5 py-2.5 text-sm text-amber-200 ring-1 ring-amber-300/25">
+                  Restam só {n(teto)} consultas grátis no mês.
+                </p>
+              )
+            )}
+
+            {!rodando ? (
+              <button
+                type="button"
+                onClick={onBuscar}
+                disabled={!podeBuscar}
+                className={cx(
+                  "botao-brilho mt-6 flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl bg-brand text-base font-bold text-white transition",
+                  "hover:-translate-y-0.5 hover:bg-brand-400 active:translate-y-0 active:scale-[0.99]",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300",
+                  "disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40 disabled:hover:translate-y-0",
+                  podeBuscar && "animate-glow",
+                )}
+              >
+                <Search className="size-5" />
+                Buscar {n(form.alvo)} oportunidades
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onParar}
+                className="mt-6 flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl bg-white/10 text-base font-bold text-white ring-1 ring-white/20 transition hover:bg-red-500/25 hover:ring-red-400/40"
+              >
+                <CircleStop className="size-5" /> Parar a busca
+              </button>
+            )}
+          </div>
+        </aside>
+      </div>
     </div>
+  );
+}
+
+function LinhaResumo({ icone: Icone, alerta, children }: { icone: typeof Store; alerta?: boolean; children: ReactNode }) {
+  return (
+    <li className="flex items-center gap-3">
+      <span className={cx("grid size-8 shrink-0 place-items-center rounded-lg", alerta ? "bg-amber-400/15 text-amber-300" : "bg-white/[0.07] text-brand-300")}>
+        <Icone className="size-4" />
+      </span>
+      <span className={cx("min-w-0 font-medium", alerta ? "text-amber-200" : "text-white/90")}>{children}</span>
+    </li>
   );
 }
 
 function CartaoProgresso({
   p,
-  ignorarFechados,
-  incluirFixos,
   podeContinuar,
   onContinuar,
   onVerResultados,
 }: {
   p: Progresso;
-  ignorarFechados: boolean;
-  incluirFixos: boolean;
   podeContinuar: boolean;
   onContinuar: () => void;
   onVerResultados: () => void;
 }) {
   const pct = p.alvo ? Math.min(100, Math.round((p.novos / p.alvo) * 100)) : 0;
   const final = !p.rodando && p.fim;
-  const faltam = Math.max(0, p.alvo - p.novos);
+  const meta = p.fim === "alvo";
+  const descartados = p.jaNaPlanilha + p.semCelular + p.repetidos + p.fechados;
 
   const mensagem = (() => {
     if (!final) return null;
     switch (p.fim) {
       case "alvo":
-        return {
-          tom: "ok",
-          texto: `Meta atingida: ${p.alvo === 1 ? "1 oportunidade nova encontrada" : `${n(p.alvo)} oportunidades novas encontradas`} com ${n(p.consultas)} consulta${p.consultas === 1 ? "" : "s"}. Revise a lista e envie para a planilha.`,
-        };
+        return { tom: "ok", texto: "Tudo pronto. Revise a lista e envie para a planilha." };
       case "limite":
-        return {
-          tom: "aviso",
-          texto: `Limite de ${n(p.limite)} consultas atingido com ${n(p.novos)} de ${n(p.alvo)} oportunidades. Continue a busca para encontrar as ${n(faltam)} restantes.`,
-        };
+        return { tom: "aviso", texto: "Chegou ao máximo de consultas desta busca. Continue para encontrar o resto." };
       case "esgotado":
-        return {
-          tom: "aviso",
-          texto: `O Google não tem mais resultados para esses termos e regiões: ${n(p.novos)} de ${n(p.alvo)} oportunidades. Para encontrar mais, tente outras cidades, bairros ou termos.`,
-        };
+        return { tom: "aviso", texto: "Não há mais resultados nesta região. Tente outras cidades ou termos." };
       case "parado":
-        return { tom: "aviso", texto: `Busca interrompida com ${n(p.novos)} de ${n(p.alvo)} oportunidades. Você pode continuar de onde parou.` };
+        return { tom: "aviso", texto: "Busca interrompida. Você pode continuar de onde parou." };
       default:
         return { tom: "erro", texto: p.erro || "A busca parou por um erro." };
     }
   })();
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div className="flex min-w-0 items-center gap-5">
-          {p.rodando || p.unicos > 0 ? (
-            <RadarSweep ativo={p.rodando} pontos={p.novos} tamanho={76} className={cx(p.fim === "alvo" && "ring-4 ring-emerald-200")} />
-          ) : (
-            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-amber-50 text-amber-600">
-              {p.fim === "alvo" ? <CheckCircle2 className="size-6" /> : <Users className="size-6" />}
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-base font-extrabold text-ink">
-              {p.rodando ? "Buscando no Google Maps…" : p.fim === "alvo" ? "Meta atingida" : "Busca encerrada"}
-            </p>
-            <p className="mt-0.5 truncate text-xs text-muted">
-              {p.rodando ? p.etapa || "Preparando a busca…" : `${n(p.consultas)} consultas usadas · ${n(p.unicos)} estabelecimentos na lista`}
-            </p>
-          </div>
+    <Card className={cx("overflow-hidden", meta && "ring-2 ring-emerald-200")}>
+      <div className="flex items-center gap-4 p-5 sm:gap-5 sm:p-6">
+        <RadarSweep ativo={p.rodando} pontos={p.novos} tamanho={68} />
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-extrabold text-ink sm:text-lg">
+            {p.rodando ? "Buscando no Google Maps…" : meta ? "Meta atingida" : "Busca encerrada"}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-muted sm:text-sm">
+            {p.rodando ? p.etapa || "Preparando a busca…" : `${n(p.unicos)} estabelecimentos na lista`}
+          </p>
         </div>
-        <div className="text-left sm:text-right">
-          <div className={cx("text-4xl font-extrabold tabular-nums", p.fim === "alvo" ? "text-emerald-600" : "text-strong")}>
-            <AnimatedNumber value={Math.min(p.novos, p.alvo)} /> <span className="text-lg font-bold text-muted">de {n(p.alvo)}</span>
+        <div className="shrink-0 text-right">
+          <div className={cx("text-3xl font-extrabold tabular-nums sm:text-4xl", meta ? "text-emerald-600" : "text-strong")}>
+            <AnimatedNumber value={Math.min(p.novos, p.alvo)} />
+            <span className="text-base font-bold text-muted sm:text-lg">/{n(p.alvo)}</span>
           </div>
-          <div className="text-xs font-semibold text-muted">
-            oportunidades novas
-            {p.novos > p.alvo && <span className="text-emerald-600"> · +{n(p.novos - p.alvo)} extras na lista</span>}
-          </div>
+          <div className="text-[11px] font-semibold text-muted sm:text-xs">novas</div>
         </div>
       </div>
-      <div className="h-2.5 bg-surface">
+
+      <div className="mx-5 h-2.5 overflow-hidden rounded-full bg-surface sm:mx-6">
         <div
-          className={cx("h-full rounded-r-full transition-all duration-700 ease-out", p.fim === "alvo" ? "bg-emerald-500" : "bg-brand", p.rodando && "shine")}
-          style={{ width: `${pct}%` }}
-        />
+          className={cx(
+            "h-full overflow-hidden rounded-full bg-gradient-to-r transition-all duration-700 ease-out",
+            meta ? "from-emerald-400 to-emerald-500" : "from-brand-400 to-brand-600",
+          )}
+          style={{ width: `${Math.max(pct, p.rodando ? 3 : 0)}%` }}
+        >
+          {p.rodando && <div className="shine size-full" />}
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 px-5 py-4 text-xs text-muted sm:grid-cols-3 sm:px-7 lg:grid-cols-6">
-        <Numero rotulo="consultas usadas" valor={`${n(p.consultas)} / ${n(p.limite)}`} />
-        <Numero rotulo="vistos no Google" valor={n(p.vistos)} />
-        <Numero rotulo="já na planilha" valor={n(p.jaNaPlanilha)} />
-        <Numero rotulo={incluirFixos ? "sem telefone" : "sem celular"} valor={n(p.semCelular)} />
-        <Numero rotulo="repetidos" valor={n(p.repetidos)} />
-        {ignorarFechados && <Numero rotulo="fechados" valor={n(p.fechados)} />}
+
+      <div className="grid grid-cols-3 gap-2 px-5 py-4 sm:px-6">
+        <Numero rotulo="Consultas" valor={`${n(p.consultas)}/${n(p.limite)}`} />
+        <Numero rotulo="Analisados" valor={n(p.vistos)} />
+        <Numero
+          rotulo="Descartados"
+          valor={n(descartados)}
+          titulo={`${n(p.jaNaPlanilha)} já na planilha · ${n(p.semCelular)} sem telefone válido · ${n(p.repetidos)} repetidos${p.fechados ? ` · ${n(p.fechados)} fechados` : ""}`}
+        />
       </div>
 
       {mensagem && (
         <div
           className={cx(
-            "flex flex-col gap-3 border-t px-5 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-7",
-            mensagem.tom === "ok" && "border-emerald-100 bg-emerald-50/70 text-emerald-900",
-            mensagem.tom === "aviso" && "border-amber-100 bg-amber-50/70 text-amber-900",
+            "flex flex-col gap-3 border-t px-5 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6",
+            mensagem.tom === "ok" && "border-emerald-100 bg-emerald-50 text-emerald-900",
+            mensagem.tom === "aviso" && "border-amber-100 bg-amber-50 text-amber-900",
             mensagem.tom === "erro" && "border-red-100 bg-red-50 text-red-800",
           )}
         >
-          <p>{mensagem.texto}</p>
+          <p className="font-medium">{mensagem.texto}</p>
           <div className="flex shrink-0 flex-wrap gap-2">
             {podeContinuar && p.fim !== "alvo" && p.fim !== "esgotado" && p.fim !== "cota" && (
-              <Button size="sm" variant="outline" onClick={onContinuar} icon={<Play className="size-3.5" />}>
+              <Button variant="outline" onClick={onContinuar} icon={<Play className="size-4" />}>
                 Continuar a busca
               </Button>
             )}
             {p.unicos > 0 && (
-              <Button size="sm" variant="dark" onClick={onVerResultados}>
-                Ver a lista <ArrowRight className="size-3.5" />
+              <Button onClick={onVerResultados}>
+                Ver a lista <ArrowRight className="size-4" />
               </Button>
             )}
           </div>
@@ -534,26 +706,26 @@ function CartaoProgresso({
       )}
 
       {p.avisos.length > 0 && (
-        <div className="border-t border-line bg-amber-50/40 px-5 py-3 text-xs text-amber-900 sm:px-7">
-          <p className="mb-1 flex items-center gap-1.5 font-semibold">
-            <AlertTriangle className="size-3.5" /> {p.avisos.length} aviso{p.avisos.length === 1 ? "" : "s"}
-          </p>
-          <ul className="list-disc space-y-0.5 pl-5">
+        <details className="border-t border-line px-5 py-3 text-xs text-amber-900 sm:px-6">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 font-semibold text-amber-700">
+            <AlertTriangle className="size-3.5" /> {p.avisos.length} {p.avisos.length === 1 ? "aviso" : "avisos"}
+          </summary>
+          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-muted">
             {p.avisos.slice(0, 5).map((e, i) => (
               <li key={i}>{e}</li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
     </Card>
   );
 }
 
-function Numero({ rotulo, valor }: { rotulo: string; valor: string }) {
+function Numero({ rotulo, valor, titulo }: { rotulo: string; valor: string; titulo?: string }) {
   return (
-    <div>
-      <div className="text-base font-bold text-ink tabular-nums">{valor}</div>
-      <div>{rotulo}</div>
+    <div className="rounded-xl bg-surface px-3 py-2.5" title={titulo}>
+      <div className="text-base font-bold text-ink tabular-nums sm:text-lg">{valor}</div>
+      <div className="text-[11px] font-medium text-muted sm:text-xs">{rotulo}</div>
     </div>
   );
 }

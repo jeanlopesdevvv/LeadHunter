@@ -221,6 +221,41 @@ body {
     var(--color-surface);
 }
 
+/* Texto com o degradê da marca (títulos). */
+.texto-marca {
+  background: linear-gradient(100deg, #22bedb 0%, #03abc9 45%, #0293ad 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Cartão de destaque azul-noite com brilho ciano (resumo da busca). Igual nos dois temas. */
+.cartao-noite {
+  background:
+    radial-gradient(420px 260px at 105% -10%, rgb(3 171 201 / 0.42), transparent 62%),
+    radial-gradient(360px 240px at -20% 120%, rgb(124 108 242 / 0.22), transparent 60%),
+    linear-gradient(160deg, #0f1c36 0%, #081021 100%);
+}
+
+/* Faixa de luz que atravessa o botão ao passar o mouse. */
+.botao-brilho {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.botao-brilho::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.75s ease;
+}
+.botao-brilho:hover:not(:disabled)::after {
+  transform: translateX(120%);
+}
+
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line) transparent;
@@ -322,6 +357,14 @@ input[type="checkbox"].check:focus-visible {
 }
 .flash {
   animation: flash-bg 1.2s ease-out;
+}
+
+/* No celular, campos com fonte menor que 16px fazem o iPhone dar zoom ao tocar. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

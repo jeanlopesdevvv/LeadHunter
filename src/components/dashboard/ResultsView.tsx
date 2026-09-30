@@ -239,8 +239,8 @@ export function ResultsView({
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="eyebrow">Resultado da busca</p>
-          <h1 className="display mt-3 text-4xl text-strong">
-            <AnimatedNumber value={leads.length} /> <span className="text-brand">{leads.length === 1 ? "estabelecimento encontrado" : "estabelecimentos encontrados"}</span>
+          <h1 className="display mt-3 text-[32px] text-strong sm:text-4xl">
+            <AnimatedNumber value={leads.length} /> <span className="texto-marca">{leads.length === 1 ? "estabelecimento encontrado" : "estabelecimentos encontrados"}</span>
           </h1>
           {meta && (
             <p className="mt-2 truncate text-sm text-muted">
@@ -249,11 +249,17 @@ export function ResultsView({
             </p>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 self-start lg:shrink-0 lg:flex-nowrap lg:self-auto">
           <Button variant="ghost" onClick={onReconferir} disabled={rodando || check.estado === "checando"} icon={<RefreshCw className="size-4" />}>
-            Conferir planilha de novo
+            Conferir planilha
           </Button>
-          <Button variant="outline" onClick={exportar} icon={<Download className="size-4" />} title="Baixa a lista (com os filtros atuais) para abrir no Excel">
+          <Button
+            variant="outline"
+            className="max-sm:hidden"
+            onClick={exportar}
+            icon={<Download className="size-4" />}
+            title="Baixa a lista (com os filtros atuais) para abrir no Excel"
+          >
             Baixar lista
           </Button>
           <Button variant="dark" onClick={onNovaBusca} icon={<Search className="size-4" />}>
@@ -311,7 +317,7 @@ export function ResultsView({
                 setQ(e.target.value);
                 setPagina(1);
               }}
-              placeholder="Buscar na lista: nome, telefone, bairro…"
+              placeholder="Buscar na lista…"
               className={cx(inputClass, "pl-10")}
             />
             {q && (
@@ -328,7 +334,7 @@ export function ResultsView({
               <option value="sem">Sem telefone</option>
             </select>
             <select value={tipo} onChange={(e) => (setTipo(e.target.value as "todos" | LeadTipo), setPagina(1))} className={cx(inputClass, "lg:w-auto")} aria-label="Tipo">
-              <option value="todos">Empresa e autônomo</option>
+              <option value="todos">Todos os perfis</option>
               <option value="Empresa">Só empresa</option>
               <option value="Autônomo">Só autônomo</option>
             </select>
@@ -338,16 +344,16 @@ export function ResultsView({
               className={cx(inputClass, "lg:w-auto")}
               aria-label="Situação"
             >
-              <option value="disponiveis">Sem quem já está na planilha</option>
-              <option value="todos">Todos (inclusive já na planilha)</option>
+              <option value="disponiveis">Disponíveis</option>
+              <option value="todos">Todos</option>
               <option value="novos">Só novos</option>
-              <option value="planilha">Só já na planilha</option>
-              <option value="enviados">Só enviados agora</option>
+              <option value="planilha">Já na planilha</option>
+              <option value="enviados">Enviados agora</option>
             </select>
             <div className="relative">
               <ArrowDownUp className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted" />
               <select value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)} className={cx(inputClass, "pl-8 lg:w-auto")} aria-label="Ordenar">
-                <option value="relevancia">Ordem do Google</option>
+                <option value="relevancia">Mais relevantes</option>
                 <option value="avaliacoes">Mais avaliações</option>
                 <option value="nota">Melhor nota</option>
                 <option value="nome">Nome (A–Z)</option>
@@ -560,16 +566,16 @@ export function ResultsView({
       <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 sm:px-6 sm:pb-5 lg:left-64 lg:px-10">
         <div className="mx-auto flex max-w-7xl animate-slide-up items-center justify-between gap-3 rounded-2xl bg-navy py-2.5 pr-2.5 pl-4 text-white shadow-2xl sm:py-3 sm:pr-3 sm:pl-5">
           <div className="min-w-0 text-sm leading-tight">
-            <AnimatedNumber value={paraEnviar} className="text-base font-extrabold" />{" "}
+            <AnimatedNumber value={paraEnviar} className="text-lg font-extrabold" />{" "}
             <span className="text-white/60">
-              {paraEnviar === 1 ? "oportunidade marcada" : "oportunidades marcadas"}
-              <span className="hidden sm:inline"> para a planilha</span>
+              <span className="sm:hidden">{paraEnviar === 1 ? "marcada" : "marcadas"}</span>
+              <span className="hidden sm:inline">{paraEnviar === 1 ? "oportunidade marcada" : "oportunidades marcadas"} para a planilha</span>
             </span>
             {!podeEnviarParaPlanilha && check.estado === "erro" && <span className="block text-xs text-red-300">Planilha indisponível</span>}
           </div>
           <div className="flex gap-2">
             {paraEnviar > 0 && (
-              <Button variant="ghost" className="hidden text-white/60 hover:bg-white/10 hover:text-white sm:inline-flex" onClick={() => onSelecionados(new Set())}>
+              <Button variant="ghost" className="text-white/60 hover:bg-white/10 hover:text-white max-sm:hidden" onClick={() => onSelecionados(new Set())}>
                 Desmarcar
               </Button>
             )}
@@ -606,22 +612,19 @@ function ResumoBusca({ p, podeContinuar, onContinuar }: { p: Progresso; podeCont
         <span>
           {completo ? (
             <>
-              <b>Meta atingida.</b> {p.alvo === 1 ? "A oportunidade nova já está marcada" : `As ${n(p.alvo)} oportunidades novas já estão marcadas`}.
-              Revise a lista e clique em <b>Enviar para a planilha</b>.
+              <b>Meta atingida.</b> {p.alvo === 1 ? "A oportunidade nova já está marcada." : `As ${n(p.alvo)} oportunidades novas já estão marcadas.`}
             </>
           ) : p.fim === "esgotado" ? (
             <>
-              Foram encontradas <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades: o Google não tem mais resultados para esses termos e
-              regiões. Tente outras cidades, bairros ou termos.
+              <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades: não há mais resultados nesta região. Tente outras cidades ou termos.
             </>
           ) : p.fim === "cota" ? (
             <>
-              Foram encontradas <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades. {p.erro}
+              <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades encontradas. {p.erro}
             </>
           ) : (
             <>
-              Foram encontradas <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades
-              {p.fim === "limite" ? ` (limite de ${n(p.limite)} consultas atingido)` : ""}. Faltam {n(faltam)}.
+              <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades encontradas. Faltam {n(faltam)}.
             </>
           )}
         </span>

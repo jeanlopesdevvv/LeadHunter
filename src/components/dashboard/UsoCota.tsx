@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, FlaskConical, Gauge, RefreshCw } from "lucide-react";
 
 import { AnimatedNumber } from "@/components/motion";
-import { Card, cx } from "@/components/ui";
-import { formatarRenovacao, formatarRenovacaoCurta, horaBrasilia, tempoAte } from "@/lib/periodo";
+import { cx } from "@/components/ui";
+import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
@@ -22,86 +21,6 @@ function Barra({ uso, escura }: { uso: Uso; escura?: boolean }) {
     <div className={cx("h-2 overflow-hidden rounded-full", escura ? "bg-white/10" : "bg-surface")}>
       <div className={cx("h-full rounded-full transition-all duration-700 ease-out", tom(uso).barra)} style={{ width: `${pct}%` }} />
     </div>
-  );
-}
-
-/** De onde veio o número (Google, contagem do Radar ou simulação). */
-export function FonteDoUso({ uso }: { uso: Uso }) {
-  if (uso.fonte === "simulacao") {
-    return (
-      <p className="flex items-center gap-1.5 text-xs text-amber-700">
-        <FlaskConical className="size-3.5" /> Modo de demonstração: nenhuma consulta real é usada.
-      </p>
-    );
-  }
-  if (uso.fonte === "google") {
-    return <p className="text-xs text-muted">Atualizado às {horaBrasilia(uso.atualizadoEm)}.</p>;
-  }
-  return (
-    <p className="flex items-start gap-1.5 text-xs text-amber-800">
-      <AlertTriangle className="mt-px size-3.5 shrink-0" />
-      <span>Número aproximado: contado pelo Radar desde {formatarRenovacaoCurta(uso.contandoDesde)}.</span>
-    </p>
-  );
-}
-
-/** Cartão grande (tela de busca). */
-export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; onAtualizar?: () => void; atualizando?: boolean }) {
-  if (!uso) {
-    return (
-      <Card className="p-5 sm:p-6">
-        <div className="skeleton h-4 w-44 rounded" />
-        <div className="skeleton mt-4 h-8 w-28 rounded" />
-        <div className="skeleton mt-4 h-2 rounded-full" />
-      </Card>
-    );
-  }
-  const t = tom(uso);
-  return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm font-bold text-ink">
-          <Gauge className="size-4 text-brand" /> Consultas grátis do mês
-        </p>
-        {onAtualizar && uso.fonte !== "simulacao" && (
-          <button
-            onClick={onAtualizar}
-            disabled={atualizando}
-            className="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-ink disabled:opacity-50"
-            aria-label="Atualizar contador"
-            title="Atualizar agora"
-          >
-            <RefreshCw className={cx("size-4", atualizando && "animate-spin")} />
-          </button>
-        )}
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-2">
-        <AnimatedNumber value={uso.restantes} className={cx("text-4xl font-extrabold tracking-tight", t.texto)} />
-        <span className="text-sm text-muted">
-          restantes de <b className="text-ink tabular-nums">{n(uso.limite)}</b> · {n(uso.usadas)} usadas
-        </span>
-      </div>
-      <div className="mt-3">
-        <Barra uso={uso} />
-      </div>
-
-      <p className="mt-3 flex items-start gap-2 text-sm text-ink">
-        <CalendarClock className="mt-0.5 size-4 shrink-0 text-muted" />
-        <span>
-          Renova {tempoAte(uso.renovaEm)}: <b>{formatarRenovacao(uso.renovaEm)}</b>
-          <span className="text-muted"> (horário de Brasília)</span>
-        </span>
-      </p>
-
-      <div className="mt-3 space-y-1.5 border-t border-line pt-3">
-        <FonteDoUso uso={uso} />
-        <p className="text-xs text-muted">
-          Cada consulta traz até 20 estabelecimentos.{" "}
-          {uso.bloquear ? "Quando acabam, as buscas pausam até a renovação, sem cobrança." : "Acima do limite, o Google cobra pelas consultas extras."}
-        </p>
-      </div>
-    </Card>
   );
 }
 

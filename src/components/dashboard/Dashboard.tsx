@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useToast } from "@/components/toast";
-import { splitLines, sugerirLimite } from "@/lib/geo";
+import { quantidadeValida, splitLines, sugerirLimite } from "@/lib/geo";
 import { api } from "@/lib/client/api";
 import { clearHistory, loadHistory, removeHistory, upsertHistory, type HistoryEntry } from "@/lib/client/history";
 import { planejarBusca, SessaoDeBusca, type Progresso } from "@/lib/client/search-runner";
@@ -72,7 +72,10 @@ export function Dashboard() {
   // O que estava na tela antes de recarregar (lista, seleção, busca em andamento). Lido uma vez.
   const [salvo] = useState(() => carregarSessao());
   const [view, setView] = useState<View>(() => (salvo && VIEWS.includes(salvo.view as View) ? (salvo.view as View) : "buscar"));
-  const [form, setForm] = useState<SearchForm>(() => ({ ...FORM_INICIAL, ...(salvo?.form as Partial<SearchForm> | undefined) }));
+  const [form, setForm] = useState<SearchForm>(() => {
+    const f = { ...FORM_INICIAL, ...(salvo?.form as Partial<SearchForm> | undefined) };
+    return { ...f, alvo: quantidadeValida(f.alvo) };
+  });
   const [rodando, setRodando] = useState(false);
   const [progresso, setProgresso] = useState<Progresso | null>(() =>
     salvo?.progresso ? { ...salvo.progresso, rodando: false, etapa: "", fim: salvo.rodando ? "parado" : salvo.progresso.fim } : null,
@@ -495,7 +498,7 @@ export function Dashboard() {
   );
 
   const repetirBusca = useCallback((entry: HistoryEntry) => {
-    setForm((f) => ({ ...f, termos: entry.termos.join("\n"), cidades: entry.cidades.join("\n"), alvo: entry.alvo ?? f.alvo }));
+    setForm((f) => ({ ...f, termos: entry.termos.join("\n"), cidades: entry.cidades.join("\n"), alvo: quantidadeValida(entry.alvo ?? f.alvo) }));
     setView("buscar");
   }, []);
 

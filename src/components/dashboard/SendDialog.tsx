@@ -152,7 +152,7 @@ export function SendDialog({
                 Destino: planilha de leads
               </p>
               <p className="mt-0.5 text-muted">
-                Os contatos entram na fila da Carol. Antes de gravar, o Radar confere a planilha de novo e ignora quem já estiver nela.
+                Os contatos entram na fila da Carol. Quem já estiver na planilha é ignorado.
               </p>
             </div>
           </div>
@@ -178,25 +178,25 @@ export function SendDialog({
           <div>
             <p className="mb-2 text-xs font-bold tracking-wider text-muted uppercase">Prévia</p>
             <div className="overflow-hidden rounded-xl border border-line">
-              <table className="w-full text-left text-[13px]">
+              <table className="w-full table-fixed text-left text-[13px]">
                 <thead className="bg-surface text-[11px] font-semibold tracking-wide text-muted uppercase">
                   <tr>
                     <th className="px-3.5 py-2">Estabelecimento</th>
-                    <th className="px-3.5 py-2">Telefone</th>
-                    <th className="hidden px-3.5 py-2 sm:table-cell">Tipo</th>
-                    <th className="hidden px-3.5 py-2 sm:table-cell">Cidade</th>
+                    <th className="w-40 px-3.5 py-2 sm:w-44">Telefone</th>
+                    <th className="hidden w-28 px-3.5 py-2 sm:table-cell">Tipo</th>
+                    <th className="hidden w-40 px-3.5 py-2 sm:table-cell">Cidade</th>
                   </tr>
                 </thead>
                 <tbody>
                   {leads.slice(0, 6).map((l) => (
                     <tr key={l.id} className="border-t border-line">
-                      <td className="max-w-[240px] truncate px-3.5 py-2.5 font-medium text-ink">{l.nome}</td>
+                      <td className="truncate px-3.5 py-2.5 font-medium text-ink">{l.nome}</td>
                       <td className="px-3.5 py-2.5 whitespace-nowrap text-ink tabular-nums">
                         {l.telefoneExibicao}
                         {l.telefoneTipo === "fixo" && <span className="ml-1.5 text-[11px] font-semibold text-amber-600">fixo</span>}
                       </td>
                       <td className="hidden px-3.5 py-2.5 text-muted sm:table-cell">{l.tipo}</td>
-                      <td className="hidden px-3.5 py-2.5 whitespace-nowrap text-muted sm:table-cell">{l.cidade}</td>
+                      <td className="hidden truncate px-3.5 py-2.5 text-muted sm:table-cell">{l.cidade}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -209,12 +209,12 @@ export function SendDialog({
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sticky bottom-0 z-10 -mx-5 -mb-5 border-t border-line bg-card/95 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:bg-transparent sm:px-0 sm:pt-5 sm:pb-0 sm:backdrop-blur-none flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-center gap-1.5 text-xs text-muted">
               <ShieldCheck className="size-3.5 text-emerald-600" /> Nenhuma mensagem é enviada nesta etapa.
             </p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button variant="ghost" onClick={fechar} disabled={enviando}>
+              <Button variant="ghost" className="max-sm:hidden" onClick={fechar} disabled={enviando}>
                 Cancelar
               </Button>
               <Button onClick={enviar} loading={enviando} icon={<Send className="size-4" />} disabled={!leads.length}>
@@ -296,14 +296,14 @@ export function SendDialog({
             <div className="flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3.5 text-sm">
               <ArrowRight className="mt-0.5 size-4 shrink-0 text-brand-700" />
               <p className="text-brand-800">
-                <b>Próximo passo:</b> na tela Disparo você revisa a fila (os {n(resultado.adicionados.length)} novos já chegam marcados), ajusta
-                quem vai receber e só então dispara. Nada é enviado sem a sua confirmação.
+                <b>Próximo passo:</b> no Disparo, os {n(resultado.adicionados.length)} novos já chegam marcados. Nada é enviado sem a sua
+                confirmação.
               </p>
             </div>
           )}
 
-          <div className="flex flex-col-reverse gap-2 border-t border-line pt-5 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={fechar}>
+          <div className="sticky bottom-0 z-10 -mx-5 -mb-5 border-t border-line bg-card/95 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:bg-transparent sm:px-0 sm:pt-5 sm:pb-0 sm:backdrop-blur-none flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" className="max-sm:hidden" onClick={fechar}>
               Fechar
             </Button>
             <a

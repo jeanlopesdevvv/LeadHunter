@@ -27,18 +27,15 @@ export function HistoryView({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
         <p className="eyebrow">Histórico</p>
-        <h1 className="display mt-3 text-4xl text-strong">
-          Buscas <span className="text-brand">recentes</span>
+        <h1 className="display mt-3 text-[32px] text-strong sm:text-4xl">
+          Buscas <span className="texto-marca">recentes</span>
         </h1>
-        <p className="mt-2 text-sm text-muted">
-          As 12 últimas ficam guardadas neste navegador. Reabra uma lista ou repita a busca com um clique: o Radar confere a planilha de
-          novo e ninguém recebe mensagem repetida.
-        </p>
+        <p className="mt-2 text-[15px] text-muted">Reabra uma lista ou repita a busca com um clique.</p>
         </div>
         {historico.length > 0 &&
           (confirmar ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted">Apagar as {historico.length} buscas deste navegador?</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted">Apagar as {historico.length} buscas? A planilha não muda.</span>
               <Button
                 size="sm"
                 variant="danger"
@@ -54,12 +51,11 @@ export function HistoryView({
               </Button>
             </div>
           ) : (
-            <Button variant="outline" onClick={() => setConfirmar(true)} disabled={rodando} icon={<Trash2 className="size-4" />}>
+            <Button variant="ghost" className="self-start sm:self-auto" onClick={() => setConfirmar(true)} disabled={rodando} icon={<Trash2 className="size-4" />}>
               Limpar histórico
             </Button>
           ))}
       </header>
-      <p className="-mt-3 text-xs text-muted">Limpar o histórico não mexe na planilha: quem já foi enviado continua lá e não recebe de novo.</p>
 
       {!historico.length ? (
         <Card className="grid place-items-center px-6 py-20 text-center">
@@ -70,7 +66,7 @@ export function HistoryView({
       ) : (
         <div className="stagger grid gap-3 lg:grid-cols-2">
           {historico.map((h, i) => (
-            <Card key={h.id} className="lift flex flex-col gap-4 p-5 hover:shadow-md" style={{ "--i": i } as CSSProperties}>
+            <Card key={h.id} className="lift flex min-w-0 flex-col gap-4 p-5 hover:shadow-md" style={{ "--i": i } as CSSProperties}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1.5">
                   <p className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -92,7 +88,7 @@ export function HistoryView({
                   <b className="text-ink tabular-nums">{h.total}</b> encontrados
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Send className="size-3" /> <b className="text-ink tabular-nums">{h.enviados}</b> enviados para a planilha
+                  <Send className="size-3" /> <b className="text-ink tabular-nums">{h.enviados}</b> enviados
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 border-t border-line pt-4">
