@@ -3,7 +3,7 @@
 
 import { AnimatedNumber } from "@/components/motion";
 import { cx } from "@/components/ui";
-import { formatarRenovacaoCurta } from "@/lib/periodo";
+import { formatarRenovacaoCurta, tempoAte } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
@@ -30,7 +30,7 @@ export function UsoMini({ uso }: { uso: Uso | null }) {
   return (
     <div className="rounded-xl bg-white/[0.04] px-3 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-semibold text-white/50">Consultas grátis</span>
+        <span className="text-[11px] font-semibold text-white/60">Consultas grátis</span>
         <span className={cx("text-sm font-bold tabular-nums", uso.restantes <= 0 ? "text-red-300" : "text-white")}>
           <AnimatedNumber value={uso.restantes} />
           <span className="font-medium text-white/40">/{n(uso.limite)}</span>
@@ -39,8 +39,8 @@ export function UsoMini({ uso }: { uso: Uso | null }) {
       <div className="mt-2">
         <Barra uso={uso} escura />
       </div>
-      <p className="mt-2 text-[11px] text-white/45">
-        Renova {formatarRenovacaoCurta(uso.renovaEm)}
+      <p className="mt-2 text-[11px] leading-snug text-white/45">
+        Renovam <b className="font-semibold text-white/75">{tempoAte(uso.renovaEm)}</b> · {formatarRenovacaoCurta(uso.renovaEm)}
         {uso.fonte === "radar" && <span className="text-amber-300/80"> · contagem parcial</span>}
       </p>
     </div>

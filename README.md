@@ -12,8 +12,9 @@ telefone        nome              tipo       cidade           status    mensagem
 ## Como funciona
 
 1. **Buscar**: quem procurar (lava-jatos, lavadores autônomos ou os dois), onde (cidades e bairros como etiquetas),
-   e **quantos contatos novos** você quer (10, 25, 50, 100, 250 ou 500). Termos de busca, telefone fixo, fechados e
-   máximo de consultas ficam em "Termos" e "Mais opções". A busca vai por rodadas (1ª página de cada termo × cidade,
+   e **quantos contatos novos** você quer (10, 25, 50, 100, 250 ou 500). Os termos de busca ficam sempre à vista,
+   com campo "Adicionar" e sugestões; telefone fixo, fechados e máximo de consultas ficam em "Mais opções". O cartão
+   "Sua busca" mostra as consultas grátis restantes, quando renovam e o máximo que a busca pode gastar. A busca vai por rodadas (1ª página de cada termo × cidade,
    depois as seguintes) e para assim que achar essa quantidade de contatos com celular que ainda não estão na
    planilha. Quando o Google esgota os 60 resultados de uma consulta, o Radar divide o mapa da cidade em 4
    (e de novo, até 64 pedaços) para achar mais.

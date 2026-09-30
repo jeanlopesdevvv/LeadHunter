@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarClock,
   Car,
   Check,
   ChevronDown,
@@ -25,7 +26,7 @@ import { AnimatedNumber, RadarSweep } from "@/components/motion";
 import { Button, Card, Toggle, cx } from "@/components/ui";
 import type { Progresso } from "@/lib/client/search-runner";
 import { QUANTIDADES, splitLines, sugerirLimite } from "@/lib/geo";
-import { formatarRenovacaoCurta } from "@/lib/periodo";
+import { formatarRenovacao, formatarRenovacaoCurta, tempoAte } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
 export interface SearchForm {
@@ -126,7 +127,7 @@ function Passo({ num, titulo, extra, children, i }: { num: number; titulo: strin
   );
 }
 
-/** Lista de etiquetas: digite e aperte Enter; clique no × para tirar. */
+/** Lista de etiquetas com campo próprio para adicionar (Enter ou botão) e sugestões de um clique. */
 function Etiquetas({
   id,
   valores,
@@ -136,6 +137,7 @@ function Etiquetas({
   icone,
   disabled,
   rotulo,
+  vazio,
 }: {
   id: string;
   valores: string[];
@@ -145,8 +147,10 @@ function Etiquetas({
   icone: ReactNode;
   disabled?: boolean;
   rotulo: string;
+  vazio: string;
 }) {
   const [texto, setTexto] = useState("");
+  const campo = useRef<HTMLInputElement>(null);
   const tem = (v: string) => valores.some((x) => x.toLowerCase() === v.toLowerCase());
 
   function adicionar(bruto: string) {
@@ -156,11 +160,9 @@ function Etiquetas({
   }
 
   function aoTeclar(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" || e.key === ",") {
+    if (e.key === "Enter") {
       e.preventDefault();
       adicionar(texto);
-    } else if (e.key === "Backspace" && !texto && valores.length) {
-      onChange(valores.slice(0, -1));
     }
   }
 
@@ -172,52 +174,72 @@ function Etiquetas({
     }
   }
 
-  const restantes = sugestoes.filter((s) => !tem(s)).slice(0, 5);
+  const restantes = sugestoes.filter((s) => !tem(s));
+  const digitou = texto.trim().length > 0;
 
   return (
     <div>
-      <div
-        className={cx(
-          "flex min-h-14 flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-2 transition",
-          "focus-within:border-brand focus-within:bg-card focus-within:ring-4 focus-within:ring-brand/10",
-          disabled && "opacity-70",
-        )}
-      >
-        {valores.map((v) => (
-          <span
-            key={v.toLowerCase()}
-            className="inline-flex max-w-full animate-pop-in items-center gap-1.5 rounded-full bg-card py-1.5 pr-1.5 pl-3 text-sm font-semibold text-ink shadow-card ring-1 ring-line"
-          >
-            <span className="text-brand">{icone}</span>
-            <span className="truncate">{v}</span>
-            {!disabled && (
-              <button
-                type="button"
-                onClick={() => onChange(valores.filter((x) => x !== v))}
-                className="grid size-6 shrink-0 place-items-center rounded-full text-muted transition hover:bg-red-50 hover:text-red-600"
-                aria-label={`Tirar ${v}`}
+      <div className={cx("rounded-2xl border border-line bg-surface p-3 sm:p-3.5", disabled && "opacity-70")}>
+        {valores.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {valores.map((v) => (
+              <span
+                key={v.toLowerCase()}
+                className="inline-flex max-w-full animate-pop-in items-center gap-1.5 rounded-full bg-card py-1.5 pr-1.5 pl-3 text-sm font-semibold text-ink shadow-card ring-1 ring-line"
               >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </span>
-        ))}
-        <input
-          id={id}
-          value={texto}
-          disabled={disabled}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={aoTeclar}
-          onPaste={aoColar}
-          onBlur={() => texto.trim() && adicionar(texto)}
-          placeholder={valores.length ? "Adicionar mais…" : placeholder}
-          aria-label={rotulo}
-          enterKeyHint="done"
-          className="h-9 min-w-44 flex-1 bg-transparent px-2 text-base text-ink placeholder:text-muted/70 focus:outline-none sm:text-sm"
-        />
+                <span className="text-brand">{icone}</span>
+                <span className="truncate">{v}</span>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(valores.filter((x) => x !== v))}
+                    className="grid size-6 shrink-0 place-items-center rounded-full text-muted transition hover:bg-red-50 hover:text-red-600"
+                    aria-label={`Tirar ${v}`}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="px-1 text-sm text-muted">{vazio}</p>
+        )}
+
+        {!disabled && (
+          <div className="mt-3 flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Plus className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-brand" />
+              <input
+                ref={campo}
+                id={id}
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={aoTeclar}
+                onPaste={aoColar}
+                onBlur={() => digitou && adicionar(texto)}
+                placeholder={placeholder}
+                aria-label={rotulo}
+                enterKeyHint="done"
+                className="h-11 w-full rounded-xl border border-line bg-card pr-3 pl-10 text-ink placeholder:text-muted/70 transition focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none sm:text-sm"
+              />
+            </div>
+            <Button
+              type="button"
+              variant={digitou ? "primary" : "outline"}
+              className="h-11"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => (digitou ? adicionar(texto) : campo.current?.focus())}
+            >
+              Adicionar
+            </Button>
+          </div>
+        )}
       </div>
+
       {!disabled && restantes.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="mr-0.5 text-xs font-semibold text-muted">Sugestões:</span>
           {restantes.map((s) => (
             <button
               key={s}
@@ -268,7 +290,6 @@ export function SearchView({
   const termos = splitLines(form.termos);
   const cidades = splitLines(form.cidades);
   const publico = publicoAtual(termos);
-  const [verTermos, setVerTermos] = useState(publico === null);
   const [opcoes, setOpcoes] = useState(form.limite !== null);
   const set = (patch: Partial<SearchForm>) => onForm({ ...form, ...patch });
   const { limite, sugerido, teto, cortadoPelaCota } = calcularLimite(form, uso, maxPorBusca);
@@ -296,6 +317,21 @@ export function SearchView({
           Novos parceiros <span className="texto-marca">para o Lavacar.</span>
         </h1>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Escolha quem, onde e quantos. O Radar entrega só contatos novos.</p>
+        {/* No celular o menu lateral some: as consultas grátis ficam à vista aqui. */}
+        {uso && (
+          <div
+            className={cx(
+              "mt-4 inline-flex items-center gap-3 rounded-2xl px-4 py-2.5 ring-1 lg:hidden",
+              semCota ? "bg-red-50 text-red-800 ring-red-200" : "bg-brand-50 text-brand-800 ring-brand-100",
+            )}
+          >
+            <Gauge className="size-5 shrink-0" />
+            <span className="text-sm leading-snug">
+              <b className="tabular-nums">{n(Math.max(0, uso.restantes))}</b> de {n(uso.limite)} consultas grátis
+              <span className="block text-xs opacity-75">Renovam {tempoAte(uso.renovaEm)} · {formatarRenovacaoCurta(uso.renovaEm)}</span>
+            </span>
+          </div>
+        )}
       </header>
 
       {!placesConfigurada && (
@@ -322,17 +358,6 @@ export function SearchView({
             i={0}
             num={1}
             titulo="Quem você quer encontrar?"
-            extra={
-              <button
-                type="button"
-                onClick={() => setVerTermos((v) => !v)}
-                className="hidden items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-brand-700 sm:inline-flex"
-                aria-expanded={verTermos}
-              >
-                <Tag className="size-3.5" /> Termos
-                <ChevronDown className={cx("size-3.5 transition-transform", verTermos && "rotate-180")} />
-              </button>
-            }
           >
             <div className="grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Quem procurar">
               {(Object.keys(PUBLICOS) as Publico[]).map((k) => {
@@ -377,41 +402,35 @@ export function SearchView({
               })}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setVerTermos((v) => !v)}
-              className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-muted transition hover:text-brand-700 sm:hidden"
-              aria-expanded={verTermos}
-            >
-              <Tag className="size-3.5" /> Termos de busca
-              <ChevronDown className={cx("size-3.5 transition-transform", verTermos && "rotate-180")} />
-            </button>
-            {verTermos && (
-              <div className="mt-4 animate-slide-up">
-                <Etiquetas
-                  id="termos"
-                  rotulo="Termos de busca"
-                  valores={termos}
-                  onChange={(v) => set({ termos: v.join("\n") })}
-                  sugestoes={SUGESTOES_TERMOS}
-                  placeholder="Ex.: lava jato"
-                  icone={<Tag className="size-3.5" />}
-                  disabled={rodando}
-                />
-              </div>
-            )}
+            <div className="mt-5">
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+                <Tag className="size-4 text-brand" /> Termos de busca no Google Maps
+              </p>
+              <Etiquetas
+                id="termos"
+                rotulo="Adicionar termo de busca"
+                valores={termos}
+                onChange={(v) => set({ termos: v.join("\n") })}
+                sugestoes={SUGESTOES_TERMOS}
+                placeholder="Novo termo"
+                icone={<Tag className="size-3.5" />}
+                disabled={rodando}
+                vazio="Nenhum termo ainda. Escolha um perfil acima ou adicione abaixo."
+              />
+            </div>
           </Passo>
 
           <Passo i={1} num={2} titulo="Em qual região?">
             <Etiquetas
               id="cidades"
-              rotulo="Cidades ou bairros"
+              rotulo="Adicionar cidade ou bairro"
               valores={cidades}
               onChange={(v) => set({ cidades: v.join("\n") })}
               sugestoes={SUGESTOES_CIDADES}
-              placeholder="Digite uma cidade ou bairro e aperte Enter"
+              placeholder="Cidade ou bairro"
               icone={<MapPin className="size-3.5" />}
               disabled={rodando}
+              vazio="Nenhuma região ainda. Adicione uma cidade ou bairro abaixo."
             />
           </Passo>
 
@@ -526,41 +545,17 @@ export function SearchView({
               <LinhaResumo icone={MapPin} alerta={cidades.length === 0}>
                 {resumoCidades}
               </LinhaResumo>
-              <LinhaResumo icone={Gauge}>
-                {semCota ? (
-                  "Consultas do mês esgotadas"
-                ) : (
-                  <>
-                    Até {n(limite)} {limite === 1 ? "consulta" : "consultas"}
-                    {uso?.bloquear && <span className="text-white/50"> · {n(uso.restantes)} grátis no mês</span>}
-                  </>
-                )}
-                {uso && uso.fonte !== "simulacao" && (
-                  <button
-                    type="button"
-                    onClick={onAtualizarUso}
-                    disabled={atualizandoUso}
-                    className="ml-1.5 inline-grid size-6 place-items-center rounded-md align-middle text-white/40 transition hover:bg-white/10 hover:text-white"
-                    aria-label="Atualizar consultas grátis"
-                    title="Atualizar"
-                  >
-                    <RefreshCw className={cx("size-3.5", atualizandoUso && "animate-spin")} />
-                  </button>
-                )}
-              </LinhaResumo>
             </ul>
 
-            {semCota && uso ? (
-              <p className="mt-5 rounded-xl bg-red-500/15 px-3.5 py-2.5 text-sm text-red-200 ring-1 ring-red-400/25">
-                As consultas grátis voltam em <b>{formatarRenovacaoCurta(uso.renovaEm)}</b>.
-              </p>
-            ) : (
-              cortadoPelaCota && (
-                <p className="mt-5 rounded-xl bg-amber-400/12 px-3.5 py-2.5 text-sm text-amber-200 ring-1 ring-amber-300/25">
-                  Restam só {n(teto)} consultas grátis no mês.
-                </p>
-              )
-            )}
+            <PainelConsultas
+              uso={uso}
+              limite={limite}
+              teto={teto}
+              semCota={semCota}
+              cortadoPelaCota={cortadoPelaCota}
+              atualizando={atualizandoUso}
+              onAtualizar={onAtualizarUso}
+            />
 
             {!rodando ? (
               <button
@@ -594,13 +589,107 @@ export function SearchView({
   );
 }
 
+/** Consultas grátis do mês: quantas restam, quando renova e quanto esta busca pode gastar. */
+function PainelConsultas({
+  uso,
+  limite,
+  teto,
+  semCota,
+  cortadoPelaCota,
+  atualizando,
+  onAtualizar,
+}: {
+  uso: Uso | null;
+  limite: number;
+  teto: number;
+  semCota: boolean;
+  cortadoPelaCota: boolean;
+  atualizando: boolean;
+  onAtualizar: () => void;
+}) {
+  if (!uso) {
+    return (
+      <div className="mt-6 space-y-3 rounded-2xl bg-white/[0.06] p-4 ring-1 ring-white/10">
+        <div className="h-3 w-40 animate-pulse rounded bg-white/10" />
+        <div className="h-8 w-28 animate-pulse rounded bg-white/10" />
+        <div className="h-2 animate-pulse rounded-full bg-white/10" />
+      </div>
+    );
+  }
+  const fracao = uso.limite ? uso.restantes / uso.limite : 0;
+  const pouco = !semCota && fracao < 0.15;
+  const cor = semCota ? "text-red-300" : pouco ? "text-amber-300" : "text-white";
+  const barra = semCota ? "bg-red-400" : pouco ? "bg-gradient-to-r from-amber-300 to-amber-400" : "bg-gradient-to-r from-brand-300 to-brand";
+
+  return (
+    <div className={cx("mt-6 rounded-2xl p-4 ring-1", semCota ? "bg-red-500/10 ring-red-400/30" : "bg-white/[0.06] ring-white/10")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-[11px] font-bold tracking-[0.16em] text-brand-300 uppercase">
+          <Gauge className="size-4" /> Consultas grátis do mês
+        </p>
+        {uso.fonte !== "simulacao" && (
+          <button
+            type="button"
+            onClick={onAtualizar}
+            disabled={atualizando}
+            className="grid size-7 shrink-0 place-items-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-white"
+            aria-label="Atualizar consultas grátis"
+            title="Atualizar"
+          >
+            <RefreshCw className={cx("size-3.5", atualizando && "animate-spin")} />
+          </button>
+        )}
+      </div>
+
+      <p className="mt-2 flex flex-wrap items-baseline gap-x-2">
+        <AnimatedNumber value={Math.max(0, uso.restantes)} className={cx("text-4xl font-extrabold tracking-tight", cor)} />
+        <span className="text-sm font-medium text-white/65">
+          {uso.restantes === 1 ? "restante" : "restantes"} de {n(uso.limite)}
+        </span>
+      </p>
+      <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/10">
+        <div className={cx("h-full rounded-full transition-all duration-700 ease-out", barra)} style={{ width: `${Math.min(100, fracao * 100)}%` }} />
+      </div>
+
+      <div className="mt-4 space-y-2.5 text-sm">
+        <p className="flex items-start gap-2.5">
+          <CalendarClock className="mt-0.5 size-4 shrink-0 text-brand-300" />
+          <span className="text-white/85">
+            {semCota ? "Voltam" : "Renovam"} <b className="text-white">{tempoAte(uso.renovaEm)}</b>
+            <span className="block text-xs text-white/55">{formatarRenovacao(uso.renovaEm)} (Brasília)</span>
+          </span>
+        </p>
+        {!semCota && (
+          <p className="flex items-start gap-2.5">
+            <Search className="mt-0.5 size-4 shrink-0 text-brand-300" />
+            <span className="text-white/85">
+              Esta busca gasta <b className="text-white">no máximo {n(limite)} {limite === 1 ? "consulta" : "consultas"}</b>
+              <span className="block text-xs text-white/55">Normalmente menos: ela para ao bater a meta.</span>
+            </span>
+          </p>
+        )}
+      </div>
+
+      {semCota && (
+        <p className="mt-3 rounded-xl bg-red-500/15 px-3 py-2 text-sm font-semibold text-red-200">As consultas grátis deste mês acabaram.</p>
+      )}
+      {cortadoPelaCota && !semCota && (
+        <p className="mt-3 rounded-xl bg-amber-400/12 px-3 py-2 text-sm text-amber-200">
+          Só restam <b>{n(teto)}</b>: a busca para quando elas acabarem.
+        </p>
+      )}
+      {uso.fonte === "radar" && <p className="mt-3 text-xs text-white/45">Número aproximado, contado pelo Radar.</p>}
+    </div>
+  );
+}
+
 function LinhaResumo({ icone: Icone, alerta, children }: { icone: typeof Store; alerta?: boolean; children: ReactNode }) {
   return (
     <li className="flex items-center gap-3">
       <span className={cx("grid size-8 shrink-0 place-items-center rounded-lg", alerta ? "bg-amber-400/15 text-amber-300" : "bg-white/[0.07] text-brand-300")}>
         <Icone className="size-4" />
       </span>
-      <span className={cx("min-w-0 font-medium", alerta ? "text-amber-200" : "text-white/90")}>{children}</span>
+      <span className={cx("min-w-0 flex-1 font-medium", alerta ? "text-amber-200" : "text-white/90")}>{children}</span>
     </li>
   );
 }
