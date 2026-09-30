@@ -252,8 +252,8 @@ export function Dashboard() {
       const novos = conferidos.filter((l) => podeEnviar(l, incluirFixosRef.current)).length;
       toast(
         novos
-          ? `Na mira! ${novos} oportunidade${novos === 1 ? "" : "s"} nova${novos === 1 ? "" : "s"} prontinha${novos === 1 ? "" : "s"} para a Carol.`
-          : "Dessa vez não veio ninguém novo: quem apareceu já está na planilha ou não tem telefone. Bora tentar outra cidade?",
+          ? `${novos} oportunidade${novos === 1 ? "" : "s"} nova${novos === 1 ? "" : "s"} pronta${novos === 1 ? "" : "s"} para revisão.`
+          : "Nenhum contato novo desta vez: os encontrados já estão na planilha ou não têm telefone. Tente outra cidade ou outros termos.",
         novos ? "success" : "info",
       );
       if (sessao?.progresso.fim === "alvo") void confete("forte");
@@ -265,8 +265,8 @@ export function Dashboard() {
   const buscar = useCallback(async () => {
     const termos = splitLines(form.termos);
     const cidades = splitLines(form.cidades);
-    if (!termos.length) return toast("Diga o que caçar: pelo menos um termo de busca.", "error");
-    if (!cidades.length) return toast("Falta a cidade: onde vamos procurar?", "error");
+    if (!termos.length) return toast("Informe pelo menos um termo de busca.", "error");
+    if (!cidades.length) return toast("Informe pelo menos uma cidade.", "error");
     if (!(form.alvo > 0)) return toast("Quantos contatos você quer? Escolha um número.", "error");
 
     const controller = new AbortController();
@@ -294,7 +294,7 @@ export function Dashboard() {
       fechados: 0,
       jaNaPlanilha: 0,
       semCelular: 0,
-      etapa: "Ligando o radar…",
+      etapa: "Preparando a busca…",
       avisos: [],
       rodando: true,
       fim: null,
@@ -330,7 +330,7 @@ export function Dashboard() {
 
   /**
    * Continua a busca da sessão atual. Sem `limiteFixo`, ganha um novo lote de consultas
-   * (botão "Continuar a caçada"); com ele, retoma até o limite original (depois de recarregar a página).
+   * (botão "Continuar a busca"); com ele, retoma até o limite original (depois de recarregar a página).
    */
   const continuar = useCallback(async (limiteFixo?: number) => {
     const sessao = sessaoRef.current;
@@ -374,12 +374,12 @@ export function Dashboard() {
   useEffect(() => {
     const s = sessaoRef.current;
     const p = s?.progresso;
-    // Recarregou ainda no planejamento (antes da primeira consulta): começa a mesma caçada de novo.
+    // Recarregou ainda no planejamento (antes da primeira consulta): começa a mesma busca de novo.
     if (salvo?.rodando && !s && !salvo.leads.length) {
       const t = window.setTimeout(() => {
         if (retomada.current) return;
         retomada.current = true;
-        toast("A página recarregou no começo da caçada. Ligando o radar de novo…", "info");
+        toast("A página recarregou no início da busca. Reiniciando…", "info");
         void buscarRef.current();
       }, 600);
       return () => window.clearTimeout(t);
@@ -401,7 +401,7 @@ export function Dashboard() {
     const t = window.setTimeout(() => {
       if (retomada.current) return;
       retomada.current = true;
-      toast("A página recarregou no meio da caçada. Retomando de onde parou…", "info");
+      toast("A página recarregou durante a busca. Retomando de onde parou…", "info");
       void continuarRef.current(p.limite);
     }, 600);
     return () => window.clearTimeout(t);

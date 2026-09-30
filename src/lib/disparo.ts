@@ -192,6 +192,8 @@ export function iniciarDisparo(pedido: string[] | "todos" = "todos"): Promise<St
     const anterior = progressoAtual(linhas, agora);
     conferirQueDaParaDisparar(linhas, anterior, agora);
     await dispararPara(linhas, chaves, () => {
+      // O que a Carol mandou no disparo anterior continua explicado (não é "fluxo rodando de fora").
+      if (anterior?.ultimoMovimento) g.__radarMovimentoConhecido = Math.max(g.__radarMovimentoConhecido ?? 0, anterior.ultimoMovimento);
       g.__radarDisparo = { iniciadoEm: agora, chaves };
     });
     esquecerAbaLeads();
@@ -202,7 +204,7 @@ export function iniciarDisparo(pedido: string[] | "todos" = "todos"): Promise<St
 function exigirConfigurado() {
   const cfg = getConfig();
   if (!cfg.mock && !cfg.n8nDisparoUrl) {
-    throw new DisparoError("O botão de disparo ainda não foi ligado ao n8n (falta N8N_DISPARO_URL no EasyPanel).", 503);
+    throw new DisparoError("O disparo ainda não está configurado. Fale com o administrador do Radar.", 503);
   }
 }
 
@@ -224,7 +226,7 @@ function conferirQueDaParaDisparar(linhas: LinhaFila[], anterior: ProgressoDispa
   if (movimentoDeFora(ultimoMovimento, anterior, agora)) {
     const seg = Math.max(1, Math.round((agora - (ultimoMovimento ?? agora)) / 1000));
     throw new DisparoError(
-      `A Carol mandou mensagem há ${seg} segundos: parece que o fluxo está rodando no n8n agora. Espere uns minutos e tente de novo.`,
+      `Há um envio em andamento (última mensagem há ${seg} segundos). Aguarde alguns minutos e tente novamente.`,
       409,
     );
   }
@@ -249,7 +251,7 @@ async function dispararPara(linhas: LinhaFila[], chaves: string[], registrar: ()
   const repetidos = conferencia.length - new Set(conferencia).size;
   if (sobrando.length || faltando.length || repetidos) {
     throw new DisparoError(
-      `A planilha não ficou como esperado (${sobrando.length} pendente(s) a mais, ${faltando.length} a menos). Por segurança o n8n não foi chamado. Tente de novo.`,
+      "A planilha mudou enquanto o disparo era preparado. Por segurança, nada foi enviado. Tente novamente.",
       409,
     );
   }
@@ -448,9 +450,9 @@ async function chamarN8n(pendentes: number) {
       signal: AbortSignal.timeout(20_000),
     });
   } catch (e) {
+    console.error("[radar] n8n sem resposta:", (e as Error).message);
     throw new DisparoError(
-      `O n8n não respondeu a tempo (${(e as Error).message}). Ele pode ter começado mesmo assim: acompanhe aqui. ` +
-        "Se em 4 minutos ninguém mudar de status, pode disparar de novo.",
+      "O serviço de envio demorou a responder, mas o disparo pode ter começado. Acompanhe por aqui antes de tentar de novo.",
       504,
       true,
     );
@@ -458,18 +460,21 @@ async function chamarN8n(pendentes: number) {
   if (res.ok) return;
   const texto = (await res.text().catch(() => "")).slice(0, 200);
   if (res.status === 404) {
+    console.error("[radar] n8n 404: confira se o Fluxo 1 está publicado e se N8N_DISPARO_URL é a Production URL.");
     throw new DisparoError(
-      "O n8n não reconheceu o endereço do disparo. Confira se o Fluxo 1 está publicado (botão Publish) e se N8N_DISPARO_URL é a Production URL do nó \"Disparo pelo Radar\".",
+      "O serviço de envio não está disponível (fluxo não publicado). Fale com o administrador do Radar.",
       502,
     );
   }
   if (res.status === 401 || res.status === 403) {
+    console.error("[radar] n8n recusou (401/403): confira N8N_DISPARO_TOKEN e a credencial do nó.");
     throw new DisparoError(
-      "O n8n recusou o pedido. Se o nó \"Disparo pelo Radar\" usa Header Auth, N8N_DISPARO_TOKEN precisa ser igual ao valor da credencial.",
+      "O serviço de envio recusou o pedido. Fale com o administrador do Radar.",
       502,
     );
   }
-  throw new DisparoError(`O n8n respondeu com erro (${res.status})${texto ? `: ${texto}` : ""}.`, 502);
+  console.error("[radar] n8n respondeu", res.status, texto);
+  throw new DisparoError(`O serviço de envio respondeu com erro (${res.status}). Tente novamente em instantes.`, 502);
 }
 
 /**

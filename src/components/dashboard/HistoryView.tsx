@@ -28,10 +28,10 @@ export function HistoryView({
         <div>
         <p className="eyebrow">Histórico</p>
         <h1 className="display mt-3 text-4xl text-navy">
-          Suas caçadas <span className="text-brand">recentes</span>
+          Buscas <span className="text-brand">recentes</span>
         </h1>
         <p className="mt-2 text-sm text-muted">
-          As 12 últimas ficam guardadas neste navegador. Reabra uma lista ou repita a caçada com um clique: o Radar confere a planilha de
+          As 12 últimas ficam guardadas neste navegador. Reabra uma lista ou repita a busca com um clique: o Radar confere a planilha de
           novo e ninguém recebe mensagem repetida.
         </p>
         </div>
@@ -64,8 +64,8 @@ export function HistoryView({
       {!historico.length ? (
         <Card className="grid place-items-center px-6 py-20 text-center">
           <Clock className="size-8 animate-float text-muted/60" />
-          <p className="mt-4 font-semibold text-ink">Nenhuma caçada por aqui ainda</p>
-          <p className="mt-1 text-sm text-muted">Faça a primeira e ela aparece aqui, pronta para reabrir ou repetir quando quiser.</p>
+          <p className="mt-4 font-semibold text-ink">Nenhuma busca ainda</p>
+          <p className="mt-1 text-sm text-muted">Depois da primeira busca, ela aparece aqui para você reabrir ou repetir.</p>
         </Card>
       ) : (
         <div className="stagger grid gap-3 lg:grid-cols-2">
@@ -89,7 +89,7 @@ export function HistoryView({
                   {new Date(h.criadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
                 </span>
                 <span>
-                  <b className="text-ink tabular-nums">{h.total}</b> no radar
+                  <b className="text-ink tabular-nums">{h.total}</b> encontrados
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <Send className="size-3" /> <b className="text-ink tabular-nums">{h.enviados}</b> enviados para a planilha
@@ -100,7 +100,7 @@ export function HistoryView({
                   Abrir lista
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => onRepetir(h)} icon={<RotateCcw className="size-3.5" />}>
-                  Caçar de novo
+                  Buscar de novo
                 </Button>
                 <Button size="sm" variant="ghost" className="ml-auto hover:text-red-600" onClick={() => onRemover(h.id)} aria-label="Remover do histórico">
                   <Trash2 className="size-3.5" />

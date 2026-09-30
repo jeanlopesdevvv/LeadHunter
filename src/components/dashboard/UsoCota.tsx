@@ -30,19 +30,17 @@ export function FonteDoUso({ uso }: { uso: Uso }) {
   if (uso.fonte === "simulacao") {
     return (
       <p className="flex items-center gap-1.5 text-xs text-amber-700">
-        <FlaskConical className="size-3.5" /> Modo simulação: nenhuma consulta real é gasta.
+        <FlaskConical className="size-3.5" /> Modo de demonstração: nenhuma consulta real é usada.
       </p>
     );
   }
   if (uso.fonte === "google") {
-    return <p className="text-xs text-muted">Número do painel do Google Cloud, conferido às {horaBrasilia(uso.atualizadoEm)}.</p>;
+    return <p className="text-xs text-muted">Atualizado às {horaBrasilia(uso.atualizadoEm)}.</p>;
   }
   return (
     <p className="flex items-start gap-1.5 text-xs text-amber-800">
       <AlertTriangle className="mt-px size-3.5 shrink-0" />
-      <span>
-        Contando só as buscas feitas pelo Radar desde {formatarRenovacaoCurta(uso.contandoDesde)}. {uso.aviso}
-      </span>
+      <span>Número aproximado: contado pelo Radar desde {formatarRenovacaoCurta(uso.contandoDesde)}.</span>
     </p>
   );
 }
@@ -63,7 +61,7 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
     <Card className="p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <p className="flex items-center gap-2 text-sm font-bold text-ink">
-          <Gauge className="size-4 text-brand" /> Combustível do radar (grátis)
+          <Gauge className="size-4 text-brand" /> Consultas grátis do mês
         </p>
         {onAtualizar && uso.fonte !== "simulacao" && (
           <button
@@ -81,7 +79,7 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
       <div className="mt-3 flex flex-wrap items-baseline gap-x-2">
         <AnimatedNumber value={uso.restantes} className={cx("text-4xl font-extrabold tracking-tight", t.texto)} />
         <span className="text-sm text-muted">
-          consultas de <b className="text-ink tabular-nums">{n(uso.limite)}</b> ainda no tanque · {n(uso.usadas)} usadas
+          restantes de <b className="text-ink tabular-nums">{n(uso.limite)}</b> · {n(uso.usadas)} usadas
         </span>
       </div>
       <div className="mt-3">
@@ -99,10 +97,8 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
       <div className="mt-3 space-y-1.5 border-t border-line pt-3">
         <FonteDoUso uso={uso} />
         <p className="text-xs text-muted">
-          Cada consulta traz até 20 lava-jatos do Google Maps.{" "}
-          {uso.bloquear
-            ? "Quando as grátis acabam, o Radar para de buscar até a renovação (nada é cobrado)."
-            : "Passando do limite, o Google cobra cerca de US$ 35 a cada 1.000 consultas."}
+          Cada consulta traz até 20 estabelecimentos.{" "}
+          {uso.bloquear ? "Quando acabam, as buscas pausam até a renovação, sem cobrança." : "Acima do limite, o Google cobra pelas consultas extras."}
         </p>
       </div>
     </Card>

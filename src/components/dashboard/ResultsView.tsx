@@ -51,7 +51,7 @@ function situacaoBadge(lead: Lead) {
       );
     case "optout":
       return (
-        <Badge tone="red" title="Na planilha, pediu para não receber mensagens (optout)">
+        <Badge tone="red" title="Pediu para não receber mensagens">
           Não quer contato
         </Badge>
       );
@@ -217,15 +217,15 @@ export function ResultsView({
         <div className="grid size-16 animate-float place-items-center rounded-2xl bg-brand-50 text-brand">
           {rodando ? <Loader2 className="size-7 animate-spin" /> : <Search className="size-7" />}
         </div>
-        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Radar ligado…" : "O mapa está esperando você"}</h1>
+        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Buscando…" : "Nenhuma lista ainda"}</h1>
         <p className="mt-2 max-w-sm text-sm text-muted">
           {rodando
-            ? "As oportunidades pingam aqui assim que o radar encontra."
-            : "Faça uma caçada e os lava-jatos e lavadores autônomos que o radar achar aparecem aqui, prontos para a Carol."}
+            ? "As oportunidades aparecem aqui conforme a busca avança."
+            : "Faça uma busca e os lava-jatos e lavadores autônomos encontrados aparecem aqui."}
         </p>
         {!rodando && (
           <Button className="mt-6" onClick={onNovaBusca} icon={<Search className="size-4" />}>
-            Começar uma caçada
+            Nova prospecção
           </Button>
         )}
       </div>
@@ -238,9 +238,9 @@ export function ResultsView({
     <div className="space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="eyebrow">Oportunidades na mesa</p>
+          <p className="eyebrow">Resultado da busca</p>
           <h1 className="display mt-3 text-4xl text-navy">
-            <AnimatedNumber value={leads.length} /> <span className="text-brand">{leads.length === 1 ? "lava-jato no radar" : "lava-jatos no radar"}</span>
+            <AnimatedNumber value={leads.length} /> <span className="text-brand">{leads.length === 1 ? "estabelecimento encontrado" : "estabelecimentos encontrados"}</span>
           </h1>
           {meta && (
             <p className="mt-2 truncate text-sm text-muted">
@@ -257,7 +257,7 @@ export function ResultsView({
             Baixar lista
           </Button>
           <Button variant="dark" onClick={onNovaBusca} icon={<Search className="size-4" />}>
-            Nova caçada
+            Nova prospecção
           </Button>
         </div>
       </header>
@@ -268,7 +268,7 @@ export function ResultsView({
 
       {check.estado === "checando" && (
         <div className="flex items-center gap-2.5 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-800">
-          <Loader2 className="size-4 animate-spin" /> Batendo com a planilha para ninguém receber mensagem repetida…
+          <Loader2 className="size-4 animate-spin" /> Conferindo a planilha para evitar mensagens repetidas…
         </div>
       )}
       {check.estado === "erro" && (
@@ -288,7 +288,7 @@ export function ResultsView({
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div style={{ "--i": 0 } as CSSProperties}>
-          <Stat label="No radar" value={leads.length} hint={`sem repetidos (${stats.brutos} vistos no Google)`} />
+          <Stat label="Encontrados" value={leads.length} hint={`sem repetidos (${stats.brutos} vistos no Google)`} />
         </div>
         <div style={{ "--i": 1 } as CSSProperties}>
           <Stat label="Com celular" value={celulares} hint="grande chance de ter WhatsApp" tone="green" />
@@ -311,7 +311,7 @@ export function ResultsView({
                 setQ(e.target.value);
                 setPagina(1);
               }}
-              placeholder="Achar alguém na lista: nome, telefone, bairro…"
+              placeholder="Buscar na lista: nome, telefone, bairro…"
               className={cx(inputClass, "pl-10")}
             />
             {q && (
@@ -537,7 +537,7 @@ export function ResultsView({
           })}
         </ul>
 
-        {!filtrados.length && <p className="px-4 py-12 text-center text-sm text-muted">Ninguém aparece com esses filtros. Afrouxa um pouco que eles voltam.</p>}
+        {!filtrados.length && <p className="px-4 py-12 text-center text-sm text-muted">Nenhum resultado com esses filtros. Ajuste os filtros para ver mais.</p>}
 
         {totalPaginas > 1 && (
           <div className="flex items-center justify-between border-t border-line px-4 py-3 text-sm">
@@ -579,8 +579,8 @@ export function ResultsView({
               icon={<Send className="size-4" />}
               className={cx(paraEnviar > 0 && podeEnviarParaPlanilha && !rodando && "animate-glow")}
             >
-              <span className="sm:hidden">Mandar</span>
-              <span className="hidden sm:inline">Mandar para a planilha</span>
+              <span className="sm:hidden">Enviar</span>
+              <span className="hidden sm:inline">Enviar para a planilha</span>
             </Button>
           </div>
         </div>
@@ -606,29 +606,29 @@ function ResumoBusca({ p, podeContinuar, onContinuar }: { p: Progresso; podeCont
         <span>
           {completo ? (
             <>
-              <b>Meta batida!</b> {p.alvo === 1 ? "A oportunidade nova já está marcada" : `As ${n(p.alvo)} oportunidades novas já estão marcadas`}.
-              Dá uma conferida e manda ver em <b>Mandar para a planilha</b>.
+              <b>Meta atingida.</b> {p.alvo === 1 ? "A oportunidade nova já está marcada" : `As ${n(p.alvo)} oportunidades novas já estão marcadas`}.
+              Revise a lista e clique em <b>Enviar para a planilha</b>.
             </>
           ) : p.fim === "esgotado" ? (
             <>
-              Varremos tudo: <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades. O Google não tem mais nada para esses termos e lugares.
-              Bora abrir o mapa com outras cidades, bairros ou termos.
+              Foram encontradas <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades: o Google não tem mais resultados para esses termos e
+              regiões. Tente outras cidades, bairros ou termos.
             </>
           ) : p.fim === "cota" ? (
             <>
-              Pegamos <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades. {p.erro}
+              Foram encontradas <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades. {p.erro}
             </>
           ) : (
             <>
-              Pegamos <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades
-              {p.fim === "limite" ? ` (bateu o teto de ${n(p.limite)} consultas)` : ""}. Faltam {n(faltam)}: quer ir atrás?
+              Foram encontradas <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades
+              {p.fim === "limite" ? ` (limite de ${n(p.limite)} consultas atingido)` : ""}. Faltam {n(faltam)}.
             </>
           )}
         </span>
       </p>
       {continuar && (
         <Button size="sm" variant="outline" onClick={onContinuar} icon={<Play className="size-3.5" />}>
-          Continuar a caçada
+          Continuar a busca
         </Button>
       )}
     </div>

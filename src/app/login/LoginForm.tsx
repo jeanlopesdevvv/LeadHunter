@@ -35,8 +35,7 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
     <form onSubmit={entrar} className="mt-8 space-y-4">
       {semSenha && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          A senha do Radar ainda não foi definida no servidor (ou é a de exemplo). No EasyPanel, coloque em <b>APP_PASSWORD</b> uma senha com 8
-          ou mais caracteres e clique em Implantar.
+          O acesso ao Radar ainda não foi configurado. Fale com o administrador.
         </div>
       )}
       <div className="relative">
@@ -62,7 +61,7 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
       </div>
       {erro && <p className="text-sm font-medium text-red-600">{erro}</p>}
       <Button type="submit" size="lg" className="w-full" loading={carregando} disabled={!senha || semSenha}>
-        Ligar o radar <ArrowRight className="size-4" />
+        Entrar <ArrowRight className="size-4" />
       </Button>
     </form>
   );

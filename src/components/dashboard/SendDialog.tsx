@@ -46,7 +46,6 @@ export function SendDialog({
   aberto,
   onFechar,
   leads,
-  check,
   onEnviado,
   onDisparar,
 }: {
@@ -64,8 +63,6 @@ export function SendDialog({
   const [resultado, setResultado] = useState<SendResult | null>(null);
   const [enviadoEm, setEnviadoEm] = useState<Date | null>(null);
 
-  const aba = check?.aba ?? "leads";
-  const status = check?.statusPadrao ?? "pendente";
   const contagem = useMemo(
     () => ({
       celulares: leads.filter((l) => l.telefoneTipo === "celular").length,
@@ -152,10 +149,10 @@ export function SendDialog({
             </div>
             <div className="min-w-0 text-sm">
               <p className="font-semibold text-ink">
-                Destino: aba <span className="font-mono text-[13px]">{aba}</span>, status <span className="font-mono text-[13px]">{status}</span>
+                Destino: planilha de leads
               </p>
               <p className="mt-0.5 text-muted">
-                Os contatos entram no fim da aba. Na hora de gravar, o Radar confere a planilha de novo e pula quem já estiver lá.
+                Os contatos entram na fila da Carol. Antes de gravar, o Radar confere a planilha de novo e ignora quem já estiver nela.
               </p>
             </div>
           </div>
@@ -249,7 +246,7 @@ export function SendDialog({
                 )}
               </p>
               <p className="text-sm text-muted">
-                Aba <span className="font-mono text-[13px]">{resultado.aba}</span> · status <span className="font-mono text-[13px]">{status}</span>
+                Na fila da Carol, prontos para o disparo
                 {enviadoEm && ` · ${enviadoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
               </p>
             </div>

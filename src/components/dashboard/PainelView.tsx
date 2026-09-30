@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { BotaoAtender, useChatwoot } from "@/components/chatwoot";
 import { AnimatedNumber } from "@/components/motion";
 import { Badge, Button, Card, cx, inputClass } from "@/components/ui";
 import { api } from "@/lib/client/api";
@@ -113,6 +114,7 @@ function ChipEntrega({ c }: { c: ContatoPainel }) {
 }
 
 export function PainelView() {
+  const chatwoot = useChatwoot();
   const [periodo, setPeriodo] = useState<Periodo>("7d");
   const [painel, setPainel] = useState<Painel | null>(null);
   const [erro, setErro] = useState("");
@@ -169,13 +171,13 @@ export function PainelView() {
     <div className="space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="eyebrow">Placar da Carol</p>
+          <p className="eyebrow">Desempenho dos disparos</p>
           <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
-            Quem já respondeu <span className="text-brand">a Carol?</span>
+            Do disparo à <span className="text-brand">conversa.</span>
           </h1>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-            Tudo o que aconteceu depois do disparo: quem recebeu, quem leu, quem respondeu e quem já disse <b>Sim, atendo</b>. Os
-            quentes aparecem primeiro. Atualiza sozinho a cada minuto.
+            Acompanhe cada etapa depois do disparo: quem recebeu, leu, respondeu e disse <b>Sim, atendo</b>. Os contatos que responderam
+            aparecem primeiro, com atalho para atender no Chatwoot. Atualiza sozinho a cada minuto.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -205,7 +207,7 @@ export function PainelView() {
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>
-            <b>Não deu para ler a planilha.</b> {erro}
+            <b>Não foi possível carregar os resultados agora.</b> Tente atualizar em instantes.
           </span>
         </div>
       )}
@@ -278,7 +280,7 @@ export function PainelView() {
           </div>
           {f && f.entregues === null && (
             <p className="mt-4 text-xs text-muted">
-              Entregues e lidas aparecem quando a aba <b>status_meta_carol</b> (do fluxo de status do Meta) tiver dados.
+              Entregues e lidas aparecem assim que o WhatsApp confirmar a entrega e a leitura.
             </p>
           )}
         </Card>
@@ -287,7 +289,7 @@ export function PainelView() {
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-line px-5 py-4">
             <Flame className="size-4 text-orange-500" />
-            <p className="text-sm font-bold text-ink">Quentes agora</p>
+            <p className="text-sm font-bold text-ink">Para atender agora</p>
           </div>
           {!painel ? (
             <div className="space-y-2 p-5">
@@ -295,7 +297,7 @@ export function PainelView() {
               <div className="skeleton h-10 rounded-lg" />
             </div>
           ) : !quentes.length ? (
-            <p className="px-5 py-10 text-center text-sm text-muted">Ninguém respondeu ainda neste período. Bora disparar mais!</p>
+            <p className="px-5 py-10 text-center text-sm text-muted">Nenhuma resposta neste período ainda.</p>
           ) : (
             <ul className="stagger divide-y divide-line">
               {quentes.map((c, i) => (
@@ -304,14 +306,18 @@ export function PainelView() {
                     <p className="truncate text-sm font-semibold text-ink">{c.nome || "(sem nome)"}</p>
                     <p className="truncate text-xs text-muted">{c.ultima?.texto ?? ""}</p>
                   </div>
-                  <a
-                    href={whatsappLink(c.telefone)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
-                  >
-                    <MessageCircle className="size-3.5" /> Abrir
-                  </a>
+                  {chatwoot?.url ? (
+                    <BotaoAtender telefone={c.telefone} nome={c.nome} className="shrink-0" />
+                  ) : (
+                    <a
+                      href={whatsappLink(c.telefone)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+                    >
+                      <MessageCircle className="size-3.5" /> Abrir
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
@@ -352,7 +358,7 @@ export function PainelView() {
           </div>
         ) : !lista.length ? (
           <p className="px-6 py-12 text-center text-sm text-muted">
-            {contatos.length ? "Ninguém com esse filtro." : "Nenhum disparo neste período. Que tal soltar o primeiro na tela Disparo?"}
+            {contatos.length ? "Ninguém com esse filtro." : "Nenhum disparo neste período. Os resultados aparecem aqui depois do primeiro disparo."}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -364,7 +370,7 @@ export function PainelView() {
                   <th className="px-4 py-3">Entrega</th>
                   <th className="px-4 py-3">Resposta</th>
                   <th className="px-4 py-3">Última mensagem</th>
-                  <th className="px-4 py-3 text-right">WhatsApp</th>
+                  <th className="px-4 py-3 text-right">Atender</th>
                 </tr>
               </thead>
               <tbody>
@@ -399,7 +405,8 @@ export function PainelView() {
                         <span className="text-xs text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <BotaoAtender telefone={c.telefone} nome={c.nome} compacto />
                       <a
                         href={whatsappLink(c.telefone)}
                         target="_blank"
@@ -418,29 +425,6 @@ export function PainelView() {
         )}
       </Card>
 
-      {painel && (
-        <details className="rounded-2xl border border-line bg-white px-5 py-4 text-sm text-muted">
-          <summary className="cursor-pointer font-semibold text-ink">Como o placar lê a planilha</summary>
-          <ul className="mt-3 space-y-2 text-xs">
-            {(
-              [
-                ["Conversas", "historico_carol", painel.fontes.historico],
-                ["Status do Meta", "status_meta_carol", painel.fontes.statusMeta],
-                ["Etapa da conversa", "sessoes_carol", painel.fontes.sessoes],
-              ] as const
-            ).map(([rotulo, aba, fonte]) => (
-              <li key={aba}>
-                <b className="text-ink">{rotulo}</b> (aba {aba}):{" "}
-                {!fonte.aba
-                  ? "aba não encontrada."
-                  : fonte.faltando.length
-                    ? `faltam as colunas ${fonte.faltando.join(", ")}. Colunas que existem: ${fonte.colunas.join(", ") || "nenhuma"}.`
-                    : `ok (${fonte.colunas.join(", ")}).`}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </div>
   );
 }

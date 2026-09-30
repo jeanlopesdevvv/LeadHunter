@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Copy,
   Loader2,
   MessageCircle,
   PartyPopper,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
+import { BotaoAtender } from "@/components/chatwoot";
 import { AnimatedNumber, confete } from "@/components/motion";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, cx, inputClass } from "@/components/ui";
@@ -29,8 +29,6 @@ import type { ItemDisparo, ProgressoDisparo, StatusDisparo } from "@/lib/disparo
 import { SEGUNDOS_POR_LEAD } from "@/lib/disparo-regras";
 import { horaBrasilia, quandoCurto } from "@/lib/periodo";
 import { normalizePhone } from "@/lib/phone";
-
-import { InstalarTrava } from "./TravaN8n";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 
@@ -52,67 +50,11 @@ function ativo(a: ProgressoDisparo | null): boolean {
   return Boolean(a && (a.estado === "enviando" || a.estado === "pausado" || a.estado === "parado"));
 }
 
-/**
- * Nó Webhook para colar no Fluxo 1 do n8n. O caminho leva um código aleatório:
- * só quem tem o endereço (o Radar) consegue começar o disparo.
- */
-function noParaN8n(): string {
-  const cod = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
-  return JSON.stringify(
-    {
-      nodes: [
-        {
-          parameters: { httpMethod: "POST", path: `radar-disparo-${cod}`, options: {} },
-          type: "n8n-nodes-base.webhook",
-          typeVersion: 2,
-          position: [0, 220],
-          id: crypto.randomUUID(),
-          name: "Disparo pelo Radar",
-          webhookId: crypto.randomUUID(),
-        },
-      ],
-      connections: { "Disparo pelo Radar": { main: [[{ node: "Inicializar Limite Diário", type: "main", index: 0 }]] } },
-    },
-    null,
-    2,
-  );
-}
-
-function ComoLigar() {
-  const toast = useToast();
+function NaoConfigurado() {
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      <p className="flex items-start gap-2.5">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        <span>
-          O botão ainda não está ligado ao n8n: falta <b>N8N_DISPARO_URL</b> no EasyPanel (serviço radar → Ambiente) e clicar em{" "}
-          <b>Implantar</b>.
-        </span>
-      </p>
-      <details className="mt-2 pl-6.5">
-        <summary className="cursor-pointer text-xs font-semibold text-amber-800">Ver o passo a passo</summary>
-        <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed">
-          <li>Clique em Copiar o nó (abaixo).</li>
-          <li>No n8n, abra o Fluxo 1, clique num espaço vazio do quadro e aperte Ctrl+V. Ligue o nó ao Inicializar Limite Diário.</li>
-          <li>Clique em Publish.</li>
-          <li>Abra o nó, escolha Production URL e copie o endereço.</li>
-          <li>No EasyPanel → radar → Ambiente, acrescente N8N_DISPARO_URL= e o endereço. Salve e Implante.</li>
-        </ol>
-        <Button
-          size="sm"
-          variant="outline"
-          className="mt-2"
-          icon={<Copy className="size-3.5" />}
-          onClick={() =>
-            navigator.clipboard
-              .writeText(noParaN8n())
-              .then(() => toast("Nó copiado. Cole no Fluxo 1 do n8n com Ctrl+V.", "success"))
-              .catch(() => toast("Não deu para copiar. Tente de novo.", "error"))
-          }
-        >
-          Copiar o nó
-        </Button>
-      </details>
+    <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      <span>O disparo ainda não está configurado. Fale com o administrador do Radar.</span>
     </div>
   );
 }
@@ -322,7 +264,7 @@ export function DisparoView({
         // O n8n demorou a responder e pode ter começado: acompanha pela planilha em vez de arriscar disparar de novo.
         lembrarDisparo({ iniciadoEm: inicio - 5_000, chaves: escolhidos, comemorado: false });
         setMarcados(new Set());
-        toast("O n8n demorou a responder, mas pode ter começado. O Radar está acompanhando pela planilha: não dispare de novo.", "info");
+        toast("O serviço de envio demorou a responder, mas o disparo pode ter começado. O Radar está acompanhando: não dispare de novo.", "info");
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         toast((e as Error).message, "error");
@@ -416,9 +358,9 @@ export function DisparoView({
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">Hora do disparo</p>
+          <p className="eyebrow">Disparo</p>
           <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
-            Marcou, disparou: <span className="text-brand">a Carol chama no WhatsApp.</span>
+            A Carol faz o primeiro contato <span className="text-brand">no WhatsApp.</span>
           </h1>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
             Revise a fila, marque quem recebe e confirme. A Carol manda uma mensagem por vez, a cada 10 a 15 segundos, e você acompanha,
@@ -439,18 +381,17 @@ export function DisparoView({
         </div>
       )}
 
-      {s && !s.configurado && <ComoLigar />}
+      {s && !s.configurado && <NaoConfigurado />}
 
       {travaErrada && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="flex items-start gap-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
-              <b>O n8n chamou a trava com uma chave antiga</b> (a senha ou o AUTH_SECRET do Radar mudou). O disparo para por segurança. Copie
-              os nós da trava de novo e troque no Fluxo 1.
+              <b>O controle de pausa precisa ser atualizado.</b> Por segurança, os disparos param no primeiro contato até isso ser ajustado.
+              Fale com o administrador do Radar.
             </span>
           </p>
-          <InstalarTrava className="mt-3" />
         </div>
       )}
 
@@ -458,8 +399,7 @@ export function DisparoView({
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
           <span>
-            A Carol mandou mensagem há pouco: parece que o fluxo está rodando direto no n8n. Espere ele terminar antes de disparar, para
-            ninguém receber duas vezes.
+            Há um envio em andamento. Aguarde ele terminar antes de disparar, para ninguém receber duas vezes.
           </span>
         </div>
       )}
@@ -471,7 +411,7 @@ export function DisparoView({
             {s.bloqueadosNaFila.map((b) => (
               <span key={b.linha} className="block">
                 <b className="text-ink">{b.nome || telefone(b.telefone)}</b> (linha {b.linha} da planilha) é um número bloqueado e nunca recebe
-                disparo. Para tirar de vez, escreva sim na coluna optout.
+                disparo.
               </span>
             ))}
           </span>
@@ -547,11 +487,12 @@ export function DisparoView({
               </Button>
               {s.configurado && (
                 <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted">
-                  n8n: {s.destino}
-                  {s.trava.ultimaEm && (
-                    <span className="inline-flex items-center gap-0.5 text-emerald-700">
-                      · <ShieldCheck className="size-3" /> trava ativa
+                  {s.trava.ultimaEm ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-700">
+                      <ShieldCheck className="size-3" /> Pausar e cancelar disponíveis
                     </span>
+                  ) : (
+                    "Você pode pausar ou cancelar durante o envio."
                   )}
                 </p>
               )}
@@ -693,16 +634,14 @@ export function DisparoView({
             )}
             <p className="flex items-start gap-2 text-muted">
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-              {s.trava.ultimaEm
-                ? "Dá para pausar ou cancelar a qualquer momento na tela do disparo."
-                : "Dá para pausar ou cancelar na tela do disparo (para parar no meio do envio, a trava precisa estar instalada no n8n)."}
+              Você pode pausar ou cancelar a qualquer momento durante o envio.
             </p>
             <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
               <Button variant="ghost" onClick={() => setConfirmar(false)} disabled={disparando}>
                 Voltar
               </Button>
               <Button onClick={disparar} loading={disparando} disabled={qtd === 0} icon={<Send className="size-4" />}>
-                {disparando ? "Chamando o n8n…" : `Disparar para ${n(qtd)}`}
+                {disparando ? "Iniciando…" : `Disparar para ${n(qtd)}`}
               </Button>
             </div>
           </div>
@@ -732,8 +671,8 @@ export function DisparoView({
                 <p className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>
-                    A trava do n8n ainda não respondeu neste disparo. Sem ela, o n8n continua com a lista que já leu: depois de confirmar,
-                    pare também a execução no n8n (<b>Executions</b> → execução em andamento → <b>Stop</b>).
+                    O controle de pausa ainda não foi confirmado neste disparo. Se o envio continuar depois de alguns minutos, fale com o
+                    administrador do Radar.
                   </span>
                 </p>
               </div>
@@ -848,27 +787,27 @@ function CartaoDisparo({
       >
         <p className="min-w-0">
           {atual.estado === "enviando" &&
-            `Uma por vez, para o WhatsApp não bloquear. Faltam cerca de ${minutos(atual.segundosRestantes)}. Pode fechar esta tela: o envio continua no n8n.`}
+            `Uma mensagem por vez, para o WhatsApp não bloquear. Faltam cerca de ${minutos(atual.segundosRestantes)}. Você pode fechar esta tela: o envio continua.`}
           {atual.estado === "pausado" &&
             (esperar > 0
-              ? "Pausando: a mensagem que já estava saindo termina de ir e o n8n para antes da próxima."
+              ? "Pausando: a mensagem em andamento é concluída e as próximas ficam em espera."
               : `Pausado. Ninguém mais recebe até você continuar. ${atual.aguardando === 1 ? "Falta 1 contato" : `Faltam ${n(atual.aguardando)} contatos`}.`)}
           {atual.estado === "parado" && (
             <>
-              O n8n parou com {n(atual.aguardando)} {atual.aguardando === 1 ? "contato" : "contatos"} na vez.{" "}
+              O envio parou com {n(atual.aguardando)} {atual.aguardando === 1 ? "contato restante" : "contatos restantes"}.{" "}
               {limiteBatido ? (
                 <>
                   Motivo provável: <b>limite diário da Carol</b> (hoje: {n(s.hoje.enviadosHoje)} de {n(s.limiteDiario)}). Continue amanhã ou
                   aumente o limite.
                 </>
               ) : (
-                <>Se foi o limite diário, continue amanhã; se não, veja as execuções do Fluxo 1 no n8n.</>
+                <>Você pode continuar agora ou mais tarde. Se o problema se repetir, fale com o administrador do Radar.</>
               )}
             </>
           )}
           {atual.estado === "cancelado" &&
             `Cancelado. ${atual.enviados === 1 ? "1 contato recebeu" : `${n(atual.enviados)} receberam`}; ${atual.aguardando === 1 ? "o que faltava voltou" : `os ${n(atual.aguardando)} que faltavam voltaram`} para a fila, sem mensagem.`}
-          {atual.estado === "concluido" && "Todos os contatos foram processados. Acompanhe as respostas no Placar da Carol."}
+          {atual.estado === "concluido" && "Todos os contatos foram processados. Acompanhe as respostas em Desempenho e atenda pelo Chatwoot."}
         </p>
         <div className="flex shrink-0 flex-wrap gap-2">
           {atual.estado === "enviando" && (
@@ -897,7 +836,7 @@ function CartaoDisparo({
                 disabled={esperar > 0}
                 icon={esperar > 0 ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
               >
-                {esperar > 0 ? `Esperando o n8n parar (${esperar}s)` : `Continuar (${n(atual.aguardando)})`}
+                {esperar > 0 ? `Concluindo o envio atual (${esperar}s)` : `Continuar (${n(atual.aguardando)})`}
               </Button>
               <Button
                 size="sm"
@@ -923,11 +862,8 @@ function CartaoDisparo({
         <div className="border-t border-amber-100 bg-amber-50/50 px-5 py-3 text-sm text-amber-900 sm:px-6">
           <p className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <span>
-              A trava do n8n não respondeu neste disparo: <b>Pausar</b> e <b>Cancelar</b> só conseguem parar o envio no meio com ela instalada.
-            </span>
+            <span>O controle de pausa não respondeu neste disparo. Se precisar interromper o envio, fale com o administrador do Radar.</span>
           </p>
-          <InstalarTrava className="mt-2" />
         </div>
       )}
 
@@ -945,8 +881,11 @@ function CartaoDisparo({
                 {item.quando && item.situacao !== "pendente" && item.situacao !== "aguardando" && ` · ${horaBrasilia(item.quando)}`}
               </p>
             </div>
-            <span key={`${item.situacao}-${item.key === atual.enviandoAgora}`} className="shrink-0 animate-pop-in">
-              <ChipSituacao item={item} atual={atual} />
+            <span className="flex shrink-0 items-center gap-1.5">
+              {item.situacao === "enviado" && <BotaoAtender telefone={item.telefone} nome={item.nome} compacto />}
+              <span key={`${item.situacao}-${item.key === atual.enviandoAgora}`} className="animate-pop-in">
+                <ChipSituacao item={item} atual={atual} />
+              </span>
             </span>
           </li>
         ))}

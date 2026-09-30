@@ -233,6 +233,26 @@ describe("pausar, continuar e cancelar", () => {
 
 });
 
+describe("disparo em seguida de outro", () => {
+  it("começar outro disparo logo depois de um concluído não trava o 'continuar' por movimento recente", async () => {
+    montar([
+      [A, "Lava A", "Empresa", "BH", "pendente", "", ""],
+      [B, "Lava B", "Empresa", "BH", "aguardando", "", ""],
+    ]);
+    const { iniciarDisparo, interromperDisparo, continuarDisparo, consultarTrava, statusDisparo } = await import("@/lib/disparo");
+    await iniciarDisparo([A]);
+    enviou(A);
+    (await import("@/lib/sheets")).esquecerAbaLeads();
+    expect((await statusDisparo()).atual?.estado).toBe("concluido");
+    await iniciarDisparo([B]); // sem fechar o cartão do anterior
+    await interromperDisparo("pausado");
+    await consultarTrava({ telefone: B }, "exec-velha");
+    const s = await continuarDisparo();
+    expect(s.atual?.estado).toBe("enviando");
+    expect(s.movimentoRecente).toBe(false);
+  });
+});
+
 describe("chave da trava e limite do n8n", () => {
   it("a chave vem do código do webhook (trocar a senha não quebra a trava)", async () => {
     vi.stubEnv("N8N_DISPARO_URL", "https://n8n.exemplo.com/webhook/radar-disparo-abc123/");

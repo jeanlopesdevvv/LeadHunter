@@ -188,9 +188,18 @@ Como funciona:
 - Sem a trava instalada, Pausar/Cancelar ainda mudam a planilha, mas o n8n segue a lista que já leu: pare a execução
   no n8n (*Executions → Stop*).
 
-### Placar da Carol
+### Atendimento (Chatwoot)
 
-A tela **Placar da Carol** lê três abas que o n8n já grava na planilha (nomes em `PAINEL_ABA_HISTORICO`,
+- `CHATWOOT_URL`: tela que o botão **Atendimento** abre (padrão: a visão "Carol - IA cuidando",
+  `https://chat.lavacar.app/app/accounts/1/custom_view/6`). Atalho de teclado: **Alt + A**.
+- `CHATWOOT_TOKEN` (opcional, recomendado): token de acesso de um agente (Chatwoot → Perfil → Token de acesso). Com ele,
+  **Atender** abre a conversa exata do contato (busca pelo telefone, com e sem o 9) e o botão mostra quantas conversas
+  estão na visão. Sem ele, **Atender** abre o Chatwoot e copia o telefone para colar na busca.
+- `CHATWOOT_API_URL` (opcional): endereço interno, se o Radar não alcançar o endereço público.
+
+### Desempenho dos disparos
+
+A tela **Desempenho** lê três abas que o n8n já grava na planilha (nomes em `PAINEL_ABA_HISTORICO`,
 `PAINEL_ABA_STATUS` e `PAINEL_ABA_SESSOES`; padrão `historico_carol`, `status_meta_carol`, `sessoes_carol`):
 
 - **historico_carol**: cada mensagem da conversa. O Radar procura as colunas pelo nome (telefone ou remoteJid,
@@ -200,8 +209,8 @@ A tela **Placar da Carol** lê três abas que o n8n já grava na planilha (nomes
   Sem essa aba, as etapas *Entregues* e *Lidas* aparecem como "—".
 - **sessoes_carol** (opcional): etapa da conversa de cada contato (mostrada embaixo da resposta).
 
-Se algum número parecer errado, abra **Como o placar lê a planilha**, no fim da tela: mostra quais abas e colunas foram
-reconhecidas. Nada é gravado nessas abas: o placar só lê.
+Se algum número parecer errado, abra `https://radar.lavacar.app/api/painel?periodo=tudo` logado no Radar: o campo
+`fontes` mostra quais abas e colunas foram reconhecidas. Nada é gravado nessas abas: a tela só lê.
 
 ## 6. Conferir
 
@@ -211,7 +220,7 @@ reconhecidas. Nada é gravado nessas abas: o placar só lê.
 3. Faça uma busca de **20** contatos com 1 termo e 1 cidade, deixe marcado só **um** e envie.
 4. Confira a nova linha no fim da aba `leads` com `status = pendente` e veja se a Carol dispara a mensagem.
 5. Envie o mesmo lead de novo: ele deve aparecer como *Já na planilha* e ser ignorado.
-6. Depois de um disparo, abra **Placar da Carol** e confira se a resposta do contato aparece (período *Hoje*).
+6. Depois de um disparo, abra **Desempenho** e confira se a resposta do contato aparece (período *Hoje*).
 
 ## Atualizações
 

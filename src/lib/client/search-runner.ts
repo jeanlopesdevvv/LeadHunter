@@ -258,7 +258,7 @@ export class SessaoDeBusca {
         if (status === 0) {
           if (tentativa >= 8) {
             this.fila.unshift(item);
-            return { motivo: "erro", mensagem: "A conexão caiu e não voltou. Quando voltar, clique em Continuar a caçada." };
+            return { motivo: "erro", mensagem: "A conexão caiu e não voltou. Quando voltar, clique em Continuar a busca." };
           }
           avisar("Sem conexão… o Radar continua sozinho assim que a internet voltar");
           await esperarConexao(signal);

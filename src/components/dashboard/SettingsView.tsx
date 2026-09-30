@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, KeyRound, Map, RefreshCw, Send, ShieldCheck, Table2, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, Headset, KeyRound, Map, RefreshCw, Send, ShieldCheck, Table2, TriangleAlert, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useToast } from "@/components/toast";
@@ -9,7 +9,6 @@ import { formatarRenovacao, horaBrasilia } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
 import { InstalarTrava } from "./TravaN8n";
-import { FonteDoUso } from "./UsoCota";
 
 export interface StatusResponse {
   simulacao: boolean;
@@ -17,6 +16,7 @@ export interface StatusResponse {
   uso?: Uso;
   projetoGoogle?: string;
   disparo?: { configurado: boolean; destino: string; limiteDiario: number; trava?: { ultimaEm: number | null; chaveErradaEm: number | null } };
+  chatwoot?: { url: string; apiLigada: boolean };
   limites: { maxConsultasPorBusca: number };
   planilha: {
     configurada: boolean;
@@ -41,31 +41,28 @@ export interface StatusResponse {
   };
 }
 
-const OBRIGATORIAS = ["telefone", "nome", "tipo", "cidade", "status"];
+type Situacao = "ok" | "atencao" | "erro";
 
-function Linha({ ok, titulo, children, icon }: { ok: boolean | "aviso"; titulo: string; children?: ReactNode; icon: ReactNode }) {
+const SITUACAO: Record<Situacao, { rotulo: string; tom: "green" | "amber" | "red"; icone: string }> = {
+  ok: { rotulo: "Conectado", tom: "green", icone: "bg-emerald-50 text-emerald-600" },
+  atencao: { rotulo: "Atenção", tom: "amber", icone: "bg-amber-50 text-amber-600" },
+  erro: { rotulo: "Desconectado", tom: "red", icone: "bg-red-50 text-red-600" },
+};
+
+function Item({ situacao, rotulo, titulo, icon, children }: { situacao: Situacao; rotulo?: string; titulo: string; icon: ReactNode; children?: ReactNode }) {
+  const s = SITUACAO[situacao];
   return (
     <div className="flex gap-4 py-5 first:pt-0 last:pb-0">
-      <div
-        className={cx(
-          "grid size-10 shrink-0 place-items-center rounded-xl",
-          ok === true ? "bg-emerald-50 text-emerald-600" : ok === "aviso" ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600",
-        )}
-      >
-        {icon}
-      </div>
+      <div className={cx("grid size-10 shrink-0 place-items-center rounded-xl", s.icone)}>{icon}</div>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 font-bold text-ink">
-          {titulo}
-          {ok === true ? (
-            <CheckCircle2 className="size-4 text-emerald-500" />
-          ) : ok === "aviso" ? (
-            <AlertTriangle className="size-4 text-amber-500" />
-          ) : (
-            <XCircle className="size-4 text-red-500" />
-          )}
-        </p>
-        <div className="mt-1 space-y-2 text-sm text-muted">{children}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-bold text-ink">{titulo}</p>
+          <Badge tone={s.tom}>
+            {situacao === "ok" ? <CheckCircle2 className="size-3" /> : situacao === "atencao" ? <TriangleAlert className="size-3" /> : <XCircle className="size-3" />}
+            {rotulo ?? s.rotulo}
+          </Badge>
+        </div>
+        <div className="mt-1 space-y-1.5 text-sm text-muted">{children}</div>
       </div>
     </div>
   );
@@ -87,6 +84,8 @@ function Copiavel({ texto }: { texto: string }) {
   );
 }
 
+const FALE_COM_ADMIN = "Fale com o administrador do Radar.";
+
 export function SettingsView({ status, uso, onRecarregar }: { status: StatusResponse | null; uso: Uso | null; onRecarregar: () => Promise<void> }) {
   const toast = useToast();
   const [carregando, setCarregando] = useState(false);
@@ -95,10 +94,13 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
     setCarregando(true);
     await onRecarregar();
     setCarregando(false);
-    toast("Conexões conferidas de novo.", "info");
+    toast("Status atualizado.", "info");
   }
 
   const p = status?.planilha;
+  const u = uso ?? status?.uso ?? null;
+  const trava = status?.disparo?.trava;
+  const travaChaveErrada = Boolean(trava?.chaveErradaEm && (!trava.ultimaEm || trava.chaveErradaEm > trava.ultimaEm));
 
   return (
     <div className="space-y-6">
@@ -106,15 +108,12 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
         <div>
           <p className="eyebrow">Configuração</p>
           <h1 className="display mt-3 text-4xl text-navy">
-            Motor do Radar: <span className="text-brand">tudo ligado?</span>
+            Status das <span className="text-brand">integrações</span>
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted">
-            Checagem rápida: Google, planilha e Carol conversando entre si. Verde é tudo certo. As chaves ficam guardadas no servidor
-            (EasyPanel → serviço radar → Ambiente); depois de mudar alguma, clique em Implantar.
-          </p>
+          <p className="mt-2 max-w-2xl text-sm text-muted">Confira se o Radar está conectado a todos os serviços que usa.</p>
         </div>
         <Button variant="outline" onClick={recarregar} loading={carregando} icon={<RefreshCw className="size-4" />}>
-          Conferir de novo
+          Atualizar
         </Button>
       </header>
 
@@ -122,8 +121,7 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <FlaskConical className="mt-0.5 size-4 shrink-0" />
           <span>
-            <b>Modo simulação ligado.</b> As buscas e os envios usam dados de mentira e uma planilha de teste. No servidor de verdade esse
-            modo fica sempre desligado.
+            <b>Modo de demonstração.</b> Buscas e envios usam dados fictícios.
           </span>
         </div>
       )}
@@ -141,160 +139,119 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
           ))}
         </Card>
       ) : (
-        <Card className="stagger divide-y divide-line p-5 sm:p-7">
-          <Linha ok icon={<KeyRound className="size-5" />} titulo="Senha de acesso">
-            <p>Ativa. Para trocar, mude APP_PASSWORD no EasyPanel e clique em Implantar. Quem estiver dentro vai precisar entrar de novo.</p>
-          </Linha>
+        <>
+          <Card className="stagger divide-y divide-line p-5 sm:p-7">
+            <Item situacao="ok" rotulo="Ativo" icon={<KeyRound className="size-5" />} titulo="Acesso">
+              <p>Protegido por senha da equipe.</p>
+            </Item>
 
-          <Linha ok={status.places.configurada} icon={<Map className="size-5" />} titulo="Busca no Google Maps">
-            {status.places.configurada ? (
+            <Item situacao={status.places.configurada ? "ok" : "erro"} icon={<Map className="size-5" />} titulo="Google Maps">
               <p>
-                Conectada. Uma busca pode gastar no máximo <b className="text-ink">{status.limites.maxConsultasPorBusca}</b> consultas
-                (MAX_REQUESTS_PER_SEARCH).
+                {status.places.configurada
+                  ? `Busca de estabelecimentos ativa (até ${status.limites.maxConsultasPorBusca} consultas por busca).`
+                  : `A busca ainda não está configurada. ${FALE_COM_ADMIN}`}
               </p>
-            ) : (
-              <p>
-                Falta a chave do Google Maps (<code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_MAPS_API_KEY</code>). No Google
-                Cloud, ative a &quot;Places API (New)&quot;, crie a chave e cole no EasyPanel.
-              </p>
-            )}
-          </Linha>
+            </Item>
 
-          {(() => {
-            const u = uso ?? status.uso;
-            if (!u) return null;
-            return (
-              <Linha ok={u.fonte === "radar" ? "aviso" : true} icon={<Gauge className="size-5" />} titulo="Contador de consultas grátis">
+            {u && (
+              <Item
+                situacao={u.restantes <= 0 ? "erro" : u.restantes / Math.max(1, u.limite) < 0.15 ? "atencao" : "ok"}
+                rotulo={u.restantes <= 0 ? "Esgotadas" : `${u.restantes.toLocaleString("pt-BR")} disponíveis`}
+                icon={<Gauge className="size-5" />}
+                titulo="Consultas grátis do mês"
+              >
                 <p>
-                  <b className="text-ink tabular-nums">{u.restantes.toLocaleString("pt-BR")}</b> de {u.limite.toLocaleString("pt-BR")} restantes
-                  neste mês. Renova {formatarRenovacao(u.renovaEm)} (horário de Brasília).
+                  <b className="text-ink tabular-nums">{u.restantes.toLocaleString("pt-BR")}</b> de {u.limite.toLocaleString("pt-BR")} disponíveis.
+                  Renovam {formatarRenovacao(u.renovaEm)}.
                 </p>
-                <FonteDoUso uso={u} />
-                {u.fonte === "google" && status.projetoGoogle && (
-                  <p>
-                    Lendo o uso real do projeto <b className="text-ink">{status.projetoGoogle}</b> no Google Cloud (inclui buscas feitas por outros
-                    sistemas do mesmo projeto).
-                  </p>
-                )}
-                {u.fonte === "radar" && p?.contaServico && (
-                  <div>
-                    <p className="mb-1.5">
-                      Para o número exato: Google Cloud → IAM e administrador → IAM → <b className="text-ink">Conceder acesso</b> para este e-mail
-                      com o papel <b className="text-ink">Visualizador de monitoramento</b>:
-                    </p>
-                    <Copiavel texto={p.contaServico} />
-                  </div>
-                )}
-                <p>
-                  {u.bloquear
-                    ? "Quando as consultas grátis acabam, o Radar para de buscar até a renovação, então nada é cobrado."
-                    : "O bloqueio está desligado (BLOQUEAR_NO_LIMITE=0): passando do limite, o Google cobra cerca de US$ 35 a cada 1.000 consultas."}
-                </p>
-              </Linha>
-            );
-          })()}
+                {u.bloquear && <p>Quando acabam, as buscas pausam até a renovação, sem cobrança.</p>}
+              </Item>
+            )}
 
-          <Linha ok={p?.ok ? true : p?.configurada ? "aviso" : false} icon={<Table2 className="size-5" />} titulo="Planilha">
-            {p?.contaServico && (
-              <div>
-                <p className="mb-1.5">
-                  A planilha precisa estar compartilhada com este e-mail como <b className="text-ink">Editor</b>:
-                </p>
-                <Copiavel texto={p.contaServico} />
-              </div>
-            )}
-            {!p?.configurada && (
-              <p>
-                Falta a chave da conta de serviço do Google (
-                <code className="rounded bg-surface px-1.5 py-0.5 text-ink">GOOGLE_SERVICE_ACCOUNT_JSON</code>).
-              </p>
-            )}
-            {p?.erro && <p className="rounded-xl bg-red-50 px-3 py-2 text-red-700">{p.erro}</p>}
-            {p?.titulo && (
-              <p>
-                Conectada a <b className="text-ink">{p.titulo}</b>, aba <b className="text-ink">{p.aba}</b>:{" "}
-                <span className="tabular-nums">{(p.linhas ?? 0).toLocaleString("pt-BR")}</span> linhas,{" "}
-                <span className="tabular-nums">{(p.telefonesUnicos ?? 0).toLocaleString("pt-BR")}</span> telefones diferentes,{" "}
-                <span className="tabular-nums">{p.optout ?? 0}</span> {(p.optout ?? 0) === 1 ? "pediu" : "pediram"} para não receber mensagens.
-              </p>
-            )}
-            {p?.cabecalhos && (
-              <div className="flex flex-wrap gap-1.5">
-                {OBRIGATORIAS.map((c) => (
-                  <Badge key={c} tone={p.colunasFaltando?.includes(c) ? "red" : "green"}>
-                    {c}
-                  </Badge>
-                ))}
-                {p.cabecalhos
-                  .filter((h) => !OBRIGATORIAS.includes(h.trim().toLowerCase()))
-                  .map((h) => (
-                    <Badge key={h} tone="gray">
-                      {h}
-                    </Badge>
-                  ))}
-              </div>
-            )}
-            <p>
-              Os contatos novos entram com status <b className="text-ink">{p?.statusPadrao}</b> (é assim que a Carol sabe quem chamar). Também não
-              são enviados de novo os telefones que aparecem nas abas{" "}
-              <b className="text-ink">{p?.abasExtrasLidas?.length ? p.abasExtrasLidas.join(", ") : "—"}</b>
-              {p?.extraTelefones ? ` (${p.extraTelefones.toLocaleString("pt-BR")} telefones)` : ""}.
-            </p>
-            {p?.extraErro && <p className="text-amber-700">Abas de histórico (DEDUP_EXTRA_TABS) {p.extraErro}</p>}
-            {p?.planilhaUrl && (
-              <a href={p.planilhaUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-brand-700 hover:underline">
-                Abrir planilha <ExternalLink className="size-3.5" />
-              </a>
-            )}
-          </Linha>
-
-          <Linha ok={status.disparo?.configurado ? true : "aviso"} icon={<Send className="size-5" />} titulo="Disparo da Carol (n8n)">
-            {status.disparo?.configurado ? (
-              <p>
-                Ligado ao n8n em <b className="text-ink">{status.disparo.destino}</b>. O botão da tela Disparo chama o Fluxo 1, que manda a
-                primeira mensagem para quem está pendente.
-                {status.disparo.limiteDiario > 0 && ` Limite da Carol: ${status.disparo.limiteDiario} por dia.`}
-              </p>
-            ) : (
-              <p>
-                Ainda não ligado. O passo a passo (com o botão que copia o nó para o n8n) está na tela <b className="text-ink">Disparo</b>.
-              </p>
-            )}
-          </Linha>
-
-          {status.disparo?.configurado && (
-            <Linha
-              ok={
-                status.disparo.trava?.chaveErradaEm && (!status.disparo.trava.ultimaEm || status.disparo.trava.chaveErradaEm > status.disparo.trava.ultimaEm)
-                  ? false
-                  : status.disparo.trava?.ultimaEm
-                    ? true
-                    : "aviso"
-              }
-              icon={<ShieldCheck className="size-5" />}
-              titulo="Trava do disparo (pausar e cancelar)"
-            >
-              {status.disparo.trava?.chaveErradaEm &&
-              (!status.disparo.trava.ultimaEm || status.disparo.trava.chaveErradaEm > status.disparo.trava.ultimaEm) ? (
+            <Item situacao={p?.ok ? "ok" : p?.configurada ? "atencao" : "erro"} icon={<Table2 className="size-5" />} titulo="Planilha de leads">
+              {p?.ok ? (
                 <p>
-                  O n8n chamou a trava com uma chave antiga (a senha ou o AUTH_SECRET mudou) e o disparo parou por segurança. Copie os nós de
-                  novo e troque no Fluxo 1.
-                </p>
-              ) : status.disparo.trava?.ultimaEm ? (
-                <p>
-                  Ativa: o n8n perguntou ao Radar pela última vez às <b className="text-ink">{horaBrasilia(status.disparo.trava.ultimaEm)}</b>.
-                  Pausar e Cancelar param o envio antes da próxima mensagem.
+                  Conectada a <b className="text-ink">{p.titulo}</b>, com{" "}
+                  <b className="text-ink tabular-nums">{(p.telefonesUnicos ?? 0).toLocaleString("pt-BR")}</b>{" "}
+                  {(p.telefonesUnicos ?? 0) === 1 ? "contato" : "contatos"}. Quem já está nela nunca recebe mensagem repetida.
                 </p>
               ) : (
                 <p>
-                  Ainda não confirmada desde que o Radar ligou. Se já instalou, ela aparece como ativa no próximo disparo. Sem ela, o n8n segue
-                  a lista que já leu e Pausar/Cancelar não conseguem parar o envio no meio.
+                  {p?.configurada ? "Não foi possível acessar a planilha." : "A planilha ainda não está configurada."} {FALE_COM_ADMIN}
                 </p>
               )}
-              <InstalarTrava />
-            </Linha>
-          )}
-        </Card>
+              {p?.planilhaUrl && (
+                <a href={p.planilhaUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-brand-700 hover:underline">
+                  Abrir planilha <ExternalLink className="size-3.5" />
+                </a>
+              )}
+            </Item>
+
+            <Item situacao={status.disparo?.configurado ? "ok" : "erro"} icon={<Send className="size-5" />} titulo="Disparo da Carol">
+              <p>
+                {status.disparo?.configurado
+                  ? `Envio pelo WhatsApp ativo, com limite de ${status.disparo.limiteDiario} mensagens por dia.`
+                  : `O disparo ainda não está configurado. ${FALE_COM_ADMIN}`}
+              </p>
+            </Item>
+
+            {status.disparo?.configurado && (
+              <Item
+                situacao={travaChaveErrada ? "erro" : trava?.ultimaEm ? "ok" : "atencao"}
+                rotulo={travaChaveErrada ? "Precisa de ajuste" : trava?.ultimaEm ? "Ativo" : "Aguardando disparo"}
+                icon={<ShieldCheck className="size-5" />}
+                titulo="Pausar e cancelar envios"
+              >
+                <p>
+                  {travaChaveErrada
+                    ? `O controle de pausa precisa ser atualizado. ${FALE_COM_ADMIN}`
+                    : trava?.ultimaEm
+                      ? `Ativo: você pode pausar ou cancelar um disparo a qualquer momento (última verificação às ${horaBrasilia(trava.ultimaEm)}).`
+                      : "Será confirmado automaticamente no próximo disparo."}
+                </p>
+              </Item>
+            )}
+
+            <Item
+              situacao={status.chatwoot?.url ? "ok" : "erro"}
+              rotulo={status.chatwoot?.url ? "Ativo" : "Não configurado"}
+              icon={<Headset className="size-5" />}
+              titulo="Atendimento (Chatwoot)"
+            >
+              <p>
+                {status.chatwoot?.url
+                  ? status.chatwoot.apiLigada
+                    ? "O botão Atendimento abre o Chatwoot e o botão Atender vai direto na conversa do contato."
+                    : "O botão Atendimento abre o Chatwoot. Em Atender, o telefone do contato é copiado para você colar na busca."
+                  : `O atalho do atendimento ainda não está configurado. ${FALE_COM_ADMIN}`}
+              </p>
+            </Item>
+          </Card>
+
+          {/* Só para quem configura o Radar: fechado por padrão. */}
+          <details className="rounded-2xl border border-line bg-white px-5 py-4 text-sm text-muted">
+            <summary className="cursor-pointer font-semibold text-ink">Área do administrador</summary>
+            <div className="mt-4 space-y-5">
+              {p?.contaServico && (
+                <div>
+                  <p className="mb-1.5">Compartilhe a planilha como Editor com este e-mail:</p>
+                  <Copiavel texto={p.contaServico} />
+                </div>
+              )}
+              {p?.erro && <p className="rounded-xl bg-red-50 px-3 py-2 text-red-700">{p.erro}</p>}
+              {p?.colunasFaltando && p.colunasFaltando.length > 0 && (
+                <p className="text-red-700">Colunas que faltam na planilha: {p.colunasFaltando.join(", ")}.</p>
+              )}
+              {status.disparo?.configurado && (
+                <div>
+                  <p className="mb-1.5">Controle de pausa no fluxo de disparo (n8n):</p>
+                  <InstalarTrava />
+                </div>
+              )}
+              <p className="text-xs">Chaves e endereços ficam no servidor (EasyPanel). O passo a passo completo está em docs/SETUP.md no repositório.</p>
+            </div>
+          </details>
+        </>
       )}
     </div>
   );

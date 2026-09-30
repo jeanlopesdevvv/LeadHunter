@@ -150,14 +150,14 @@ describe("iniciar disparo (servidor)", () => {
       ["5531911110002", "B", "Empresa", "BH", "enviado", agora, ""],
     ]);
     const { iniciarDisparo } = await import("@/lib/disparo");
-    await expect(iniciarDisparo()).rejects.toThrow(/fluxo está rodando no n8n/);
+    await expect(iniciarDisparo()).rejects.toThrow(/envio em andamento/);
     expect(chamadas).toHaveLength(0);
   });
 
   it("explica quando o fluxo não está publicado no n8n", async () => {
     mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]], { status: 404 });
     const { iniciarDisparo } = await import("@/lib/disparo");
-    await expect(iniciarDisparo()).rejects.toThrow(/publicado/);
+    await expect(iniciarDisparo()).rejects.toThrow(/não publicado/);
   });
 
   it("com optout marcado o bloqueado sai da fila e o disparo segue", async () => {
@@ -263,7 +263,7 @@ describe("iniciar disparo (servidor)", () => {
       }),
     );
     const { iniciarDisparo } = await import("@/lib/disparo");
-    await expect(iniciarDisparo(["5531911110001"])).rejects.toThrow(/não foi chamado/);
+    await expect(iniciarDisparo(["5531911110001"])).rejects.toThrow(/nada foi enviado/);
     expect(chamadasN8n).toHaveLength(0);
   });
 

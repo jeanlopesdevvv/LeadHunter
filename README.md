@@ -27,9 +27,15 @@ telefone        nome              tipo       cidade           status    mensagem
    Durante o envio dá para **Pausar** (continua depois de onde parou), **Cancelar** (quem não recebeu volta para a
    fila) e **Continuar** um disparo que parou (ex.: limite diário). Para parar no meio, o Fluxo 1 tem uma **trava**:
    antes de cada mensagem ele pergunta ao Radar se ainda pode enviar ([docs/SETUP.md](docs/SETUP.md#trava-pausar-e-cancelar)).
-5. **Placar da Carol**: funil do disparo até o "Sim, atendo" (disparadas → entregues → lidas → responderam →
+5. **Desempenho**: funil do disparo até o "Sim, atendo" (disparadas → entregues → lidas → responderam →
    sim), lista de quentes com atalho para o WhatsApp e tabela filtrável por resposta. Lê as abas `historico_carol`,
    `status_meta_carol` e `sessoes_carol` da planilha (período: hoje, 7 dias, 30 dias ou tudo; atualiza a cada minuto).
+
+### Atendimento no Chatwoot
+
+Botão **Atendimento** fixo no menu (e atalho **Alt + A** em qualquer tela) abre `CHATWOOT_URL` sempre na mesma aba.
+Em Desempenho e no Disparo, **Atender** abre a conversa do contato: com `CHATWOOT_TOKEN`, direto na conversa (e o botão
+mostra quantas conversas estão na visão); sem token, abre o Chatwoot e copia o telefone para colar na busca.
 
 ### Não perde nada e aguenta falhas
 
@@ -104,7 +110,8 @@ src/
     api/disparo/acompanhar  volta a acompanhar um disparo que o navegador lembra (servidor reiniciou)
     api/disparo/pausar|continuar|encerrar  pausa/cancela, retoma e fecha o disparo
     api/n8n/trava       consultada pelo n8n antes de cada mensagem (chave própria, sem sessão)
-    api/painel          placar da Carol (funil, quentes e respostas) lido das abas do n8n
+    api/painel          desempenho dos disparos (funil, quem atender e respostas) lido das abas do n8n
+    api/chatwoot        atalho do atendimento; api/chatwoot/abrir leva à conversa do contato (com CHATWOOT_TOKEN)
     api/sheets/check    quem já está na planilha
     api/sheets/send     grava os novos (com nova checagem de duplicados; idempotente por lote)
     api/status          diagnóstico das conexões

@@ -88,12 +88,19 @@ export function getConfig() {
     n8nDisparoUrl: str("N8N_DISPARO_URL"),
     n8nDisparoToken: str("N8N_DISPARO_TOKEN"),
     n8nDisparoHeader: str("N8N_DISPARO_HEADER", "X-Radar-Token"),
-    // Só para mostrar na tela: limite diário da Carol no n8n (CAROL_LIMITE_DIARIO de lá; sem ela o n8n usa 5).
+    // Só para mostrar na tela até o n8n informar o limite real pela trava (nó "Inicializar Limite Diário").
     limiteDiarioCarol: int("LIMITE_DIARIO_CAROL", 10),
     // Abas que o painel da Carol lê (as que não existirem são ignoradas).
     painelAbaHistorico: str("PAINEL_ABA_HISTORICO", "historico_carol"),
     painelAbaStatus: str("PAINEL_ABA_STATUS", "status_meta_carol"),
     painelAbaSessoes: str("PAINEL_ABA_SESSOES", "sessoes_carol"),
+    // Atendimento no Chatwoot: tela que o atalho do Radar abre (uma visão/pasta ou a caixa de entrada).
+    chatwootUrl: str("CHATWOOT_URL", "https://chat.lavacar.app/app/accounts/1/custom_view/6"),
+    // Opcional: token de acesso de um agente do Chatwoot. Com ele, "Atender" abre a conversa exata
+    // do contato e o atalho mostra quantas conversas estão na visão.
+    chatwootToken: str("CHATWOOT_TOKEN"),
+    // Opcional: endereço da API do Chatwoot visto do servidor (padrão: o mesmo de CHATWOOT_URL).
+    chatwootApiUrl: str("CHATWOOT_API_URL"),
     // Status de quem está na fila mas não foi marcado no disparo (o n8n só dispara "pendente").
     statusAguardando: str("STATUS_AGUARDANDO", "aguardando"),
     // Telefones que nunca entram (ex.: o próprio Lavacar). Separados por vírgula.

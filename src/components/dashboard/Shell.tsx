@@ -1,8 +1,9 @@
 "use client";
 
-import { ExternalLink, FlaskConical, History, ListChecks, LogOut, Search, Send, Settings2, Trophy, WifiOff } from "lucide-react";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, WifiOff } from "lucide-react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
+import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
 import { Logo } from "@/components/Logo";
 import { cx } from "@/components/ui";
 import type { Uso } from "@/lib/types";
@@ -12,10 +13,10 @@ import { UsoMini } from "./UsoCota";
 export type View = "buscar" | "resultados" | "disparo" | "painel" | "historico" | "config";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
-  { id: "buscar", label: "Nova caçada", icon: Search },
+  { id: "buscar", label: "Nova prospecção", icon: Search },
   { id: "resultados", label: "Oportunidades", icon: ListChecks },
   { id: "disparo", label: "Disparo", icon: Send },
-  { id: "painel", label: "Placar da Carol", icon: Trophy },
+  { id: "painel", label: "Desempenho", icon: TrendingUp },
   { id: "historico", label: "Histórico", icon: History },
   { id: "config", label: "Configuração", icon: Settings2 },
 ];
@@ -58,12 +59,28 @@ export function Shell({
     ) : null;
 
   const online = useSyncExternalStore(assinarConexao, () => navigator.onLine, () => true);
+  const chatwoot = useChatwoot();
+  const urlAtendimento = chatwoot?.url ?? "";
+
+  // Alt + A abre o atendimento de qualquer tela (menos quando está digitando).
+  useEffect(() => {
+    if (!urlAtendimento) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== "KeyA") return;
+      const alvo = e.target as HTMLElement | null;
+      if (alvo && (alvo.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(alvo.tagName))) return;
+      e.preventDefault();
+      abrirAtendimento(urlAtendimento);
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [urlAtendimento]);
 
   return (
     <div className="min-h-screen lg:pl-64">
       {!online && (
         <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-semibold text-navy shadow-lg animate-slide-up lg:left-64">
-          <WifiOff className="size-4" /> Sem internet. Relaxa: nada se perde e o Radar continua sozinho quando a conexão voltar.
+          <WifiOff className="size-4" /> Sem conexão com a internet. Nada se perde: o Radar continua sozinho quando a conexão voltar.
         </div>
       )}
       {/* Barra lateral (desktop) */}
@@ -71,7 +88,33 @@ export function Shell({
         <div className="px-2">
           <Logo dark />
         </div>
-        <nav className="mt-10 flex flex-col gap-1">
+        {urlAtendimento && (
+          <a
+            href={urlAtendimento}
+            target="lavacar-chatwoot"
+            onClick={(e) => {
+              e.preventDefault();
+              abrirAtendimento(urlAtendimento);
+            }}
+            title="Abrir o atendimento no Chatwoot (atalho: Alt + A)"
+            className="group mt-8 flex items-center gap-3 rounded-2xl bg-brand px-3.5 py-3 text-white shadow-[0_10px_30px_-12px_rgb(3_171_201_/_0.9)] transition hover:bg-brand-600"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/15">
+              <Headset className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block text-sm font-bold">Atendimento</span>
+              <span className="block text-[11px] text-white/75">Chatwoot · Alt + A</span>
+            </span>
+            {chatwoot?.naVisao != null && (
+              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-extrabold text-brand-700 tabular-nums" title="Conversas nessa visão do Chatwoot">
+                {chatwoot.naVisao}
+              </span>
+            )}
+            <ExternalLink className="size-3.5 shrink-0 text-white/70 transition group-hover:text-white" />
+          </a>
+        )}
+        <nav className={cx("flex flex-col gap-1", urlAtendimento ? "mt-6" : "mt-10")}>
           <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.18em] text-white/35 uppercase">Menu</p>
           {ITEMS.map(({ id, label, icon: Icon }) => (
             <button
@@ -122,6 +165,16 @@ export function Shell({
           <Logo dark />
           <div className="flex items-center gap-1">
             {simulacao && <FlaskConical className="size-4 text-amber-300" aria-label="Modo simulação" />}
+            {urlAtendimento && (
+              <button
+                onClick={() => abrirAtendimento(urlAtendimento)}
+                className="flex items-center gap-1.5 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-bold text-white"
+                aria-label="Abrir o atendimento no Chatwoot"
+              >
+                <Headset className="size-4" /> Atendimento
+                {chatwoot?.naVisao != null && <span className="rounded-full bg-white px-1.5 text-[10px] text-brand-700 tabular-nums">{chatwoot.naVisao}</span>}
+              </button>
+            )}
             <button onClick={onSair} className="rounded-lg p-2 text-white/60 hover:text-white" aria-label="Sair">
               <LogOut className="size-5" />
             </button>

@@ -1,3 +1,4 @@
+import { infoChatwoot } from "@/lib/chatwoot";
 import { estadoDaTrava } from "@/lib/disparo";
 import { getConfig } from "@/lib/env";
 import { sheetStatus } from "@/lib/sheets";
@@ -30,5 +31,9 @@ export async function GET(request: Request) {
       trava: estadoDaTrava(),
     },
     limites: { maxConsultasPorBusca: cfg.maxRequestsPerSearch },
+    chatwoot: (() => {
+      const c = infoChatwoot();
+      return { url: c.url, apiLigada: c.apiLigada };
+    })(),
   });
 }
