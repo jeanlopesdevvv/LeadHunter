@@ -198,6 +198,35 @@ async function readValues(): Promise<unknown[][]> {
   return data.values ?? [];
 }
 
+/**
+ * Só os valores da aba leads (1 chamada ao Google), para acompanhar o disparo.
+ * Guardado por alguns segundos: várias telas abertas não multiplicam as leituras.
+ */
+let cacheValores: { em: number; valor: Promise<{ headers: string[]; map: HeaderMap; rows: unknown[][] }> } | null = null;
+export function lerAbaLeads(maxAgeMs = 6_000): Promise<{ headers: string[]; map: HeaderMap; rows: unknown[][] }> {
+  const agora = Date.now();
+  if (!cacheValores || agora - cacheValores.em > maxAgeMs) {
+    const cfg = getConfig();
+    const valor = (async () => {
+      const values: unknown[][] = cfg.mock ? (mockSheet().tabs[cfg.sheetTab] ?? mockSheet().tabs.leads) : await readValues();
+      const headers = (values[0] ?? []).map((h) => String(h ?? ""));
+      const map = buildHeaderMap(headers);
+      const missing = headers.length ? missingRequired(map) : ["telefone", "nome", "tipo", "cidade", "status"];
+      if (missing.length) throw new SheetsError(`Faltam colunas na linha 1 da aba "${cfg.sheetTab}": ${missing.join(", ")}.`, 400);
+      return { headers, map, rows: values.slice(1) };
+    })();
+    cacheValores = { em: agora, valor };
+    valor.catch(() => {
+      if (cacheValores?.valor === valor) cacheValores = null;
+    });
+  }
+  return cacheValores.valor;
+}
+
+export function esquecerAbaLeads() {
+  cacheValores = null;
+}
+
 export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
   return exclusivo(async () => {
     const cfg = getConfig();
@@ -246,6 +275,7 @@ export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
     }
 
     esquecerExistentes();
+    esquecerAbaLeads();
     return { adicionados, ignorados, planilhaUrl: sheetUrl(), aba: cfg.sheetTab };
   });
 }

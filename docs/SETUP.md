@@ -112,7 +112,39 @@ Não mexa nos outros registros (o `lavacar.app` principal aponta para o Lovable)
    `EASYPANEL_DEPLOY_WEBHOOK` (*Settings → Secrets and variables → Actions → New repository secret*).
    A cada push na `main`, o GitHub testa, publica a imagem e avisa o EasyPanel.
 
-## 5. Conferir
+## 5. Botão de disparo (n8n)
+
+A tela **Disparo** manda o n8n rodar o *Fluxo 1 - Disparo de Leads* e mostra o progresso lendo a aba `leads`
+(`status` vira `enviado` ou `sem_whatsapp` e `mensagem_enviada_em` é preenchida). O fluxo continua igual; só ganha
+uma segunda forma de começar, além do botão *Execute workflow*.
+
+1. **Senha do disparo**: invente uma senha longa (ou use a que o Claude gerou no seu PC). Ela vai em dois lugares.
+2. **n8n → Fluxo 1**: copie o conteúdo de [`docs/n8n-no-disparo-pelo-radar.json`](n8n-no-disparo-pelo-radar.json), clique no
+   canvas e aperte **Ctrl+V**. Aparece o nó **Disparo pelo Radar** (Webhook, POST, caminho `radar-disparo`).
+   - Se a linha até **Inicializar Limite Diário** não aparecer, arraste da bolinha do novo nó até ele.
+   - Abra o nó → *Credential for Header Auth* → **Create new credential**:
+     *Name* `X-Radar-Token`, *Value* a senha do passo 1. Salve.
+   - Copie a **Production URL** do nó (termina em `/webhook/radar-disparo`).
+   - Salve o fluxo e clique em **Publish** (sem publicar, o endereço de produção não responde).
+3. **EasyPanel → radar → Ambiente**: acrescente e clique em **Implantar**:
+
+   ```
+   N8N_DISPARO_URL=cole-a-Production-URL
+   N8N_DISPARO_TOKEN=a-senha-do-passo-1
+   LIMITE_DIARIO_CAROL=o-mesmo-valor-de-CAROL_LIMITE_DIARIO-no-n8n
+   ```
+
+Proteções:
+- O Radar nunca começa um segundo disparo enquanto o primeiro está enviando, nem se a Carol mandou mensagem nos
+  últimos 90 segundos (alguém rodando o fluxo direto no n8n). Assim ninguém recebe duas vezes.
+- O progresso vem da planilha: se ficar mais de 4 minutos sem novidade com gente aguardando, a tela mostra
+  "O disparo parou" (quase sempre o limite diário da Carol; quem sobrou continua `pendente`).
+
+Atenção ao limite diário: o nó *Checar Limite Diário* usa `CAROL_LIMITE_DIARIO` (ou **5**, se a variável não existir
+no n8n). O contador do dia só é guardado em execuções de produção (webhook). Então, pelo botão do Radar, o limite
+passa a valer para o dia inteiro, e não mais a cada execução manual.
+
+## 6. Conferir
 
 1. Abra <https://radar.lavacar.app> (o certificado HTTPS pode levar 1–2 minutos na primeira vez) e entre com a senha.
 2. Menu **Configuração**: senha, busca no Google Maps, contador de consultas e planilha devem ficar verdes, com as
@@ -139,6 +171,8 @@ Não mexa nos outros registros (o `lavacar.app` principal aponta para o Lovable)
 | "GOOGLE_SERVICE_ACCOUNT_JSON está inválido" | Gere de novo a linha base64 (passo 4.3) e cole sem espaços extras. |
 | "Faltam colunas na linha 1 da aba leads" | A linha 1 precisa ter `telefone, nome, tipo, cidade, status`. |
 | Contador amarelo: "Contando só as buscas feitas pelo Radar…" | Passo 2.5: papel **Visualizador de monitoramento** para a conta de serviço. |
+| Disparo: "O n8n não reconheceu o endereço" | O Fluxo 1 precisa estar publicado (**Publish**) e `N8N_DISPARO_URL` tem que ser a *Production URL*. |
+| Disparo: "O n8n recusou a senha do disparo" | `N8N_DISPARO_TOKEN` diferente do *Value* da credencial Header Auth do nó. |
 | "As 1.000 consultas grátis deste mês acabaram" | Espere a renovação (dia 1º, 04:00) ou, se aceitar pagar o excedente, `BLOQUEAR_NO_LIMITE=0`. |
 
 Trocar a senha: altere `APP_PASSWORD` no *Ambiente* do EasyPanel e clique **Implantar** (todas as sessões abertas caem).

@@ -4,6 +4,14 @@ import { obterUso } from "@/lib/usage";
 
 export const maxDuration = 60;
 
+function destinoN8n(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "";
+  }
+}
+
 export async function GET(request: Request) {
   void request; // rota sempre dinâmica
   const cfg = getConfig();
@@ -14,6 +22,11 @@ export async function GET(request: Request) {
     planilha,
     uso,
     projetoGoogle: cfg.googleProjectId || cfg.serviceAccount?.project_id || "",
+    disparo: {
+      configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl && cfg.n8nDisparoToken),
+      destino: cfg.mock ? "simulação" : destinoN8n(cfg.n8nDisparoUrl),
+      limiteDiario: cfg.limiteDiarioCarol,
+    },
     limites: { maxConsultasPorBusca: cfg.maxRequestsPerSearch },
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, KeyRound, Map, RefreshCw, Table2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, KeyRound, Map, RefreshCw, Send, Table2, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useToast } from "@/components/toast";
@@ -15,6 +15,7 @@ export interface StatusResponse {
   places: { configurada: boolean };
   uso?: Uso;
   projetoGoogle?: string;
+  disparo?: { configurado: boolean; destino: string; limiteDiario: number };
   limites: { maxConsultasPorBusca: number };
   planilha: {
     configurada: boolean;
@@ -233,6 +234,22 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
               <a href={p.planilhaUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-brand-700 hover:underline">
                 Abrir planilha <ExternalLink className="size-3.5" />
               </a>
+            )}
+          </Linha>
+
+          <Linha ok={status.disparo?.configurado ? true : "aviso"} icon={<Send className="size-5" />} titulo="Disparo da Carol (n8n)">
+            {status.disparo?.configurado ? (
+              <p>
+                Ligado ao n8n em <b className="text-ink">{status.disparo.destino}</b>. O botão da tela Disparo chama o Fluxo 1, que manda a
+                primeira mensagem para quem está pendente.
+                {status.disparo.limiteDiario > 0 && ` Limite da Carol: ${status.disparo.limiteDiario} por dia.`}
+              </p>
+            ) : (
+              <p>
+                Ainda não ligado. No Fluxo 1 do n8n, cole o nó <b className="text-ink">Disparo pelo Radar</b> e publique. Depois, no EasyPanel,
+                preencha <b className="text-ink">N8N_DISPARO_URL</b> (Production URL do nó) e <b className="text-ink">N8N_DISPARO_TOKEN</b> (a
+                mesma senha da credencial Header Auth) e clique em Implantar.
+              </p>
             )}
           </Linha>
         </Card>

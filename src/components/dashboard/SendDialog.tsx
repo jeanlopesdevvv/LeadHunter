@@ -21,12 +21,16 @@ export function SendDialog({
   leads,
   check,
   onEnviado,
+  disparoConfigurado,
+  onDisparar,
 }: {
   aberto: boolean;
   onFechar: () => void;
   leads: Lead[];
   check?: CheckResult;
   onEnviado: (r: SendResult) => void;
+  disparoConfigurado: boolean;
+  onDisparar: () => void;
 }) {
   const toast = useToast();
   const [enviando, setEnviando] = useState(false);
@@ -165,6 +169,11 @@ export function SendDialog({
               </ul>
             </div>
           )}
+          {resultado.adicionados.length > 0 && disparoConfigurado && (
+            <div className="mx-auto max-w-sm rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-left text-sm text-brand-800">
+              Quer que a Carol já mande a primeira mensagem? Você acompanha o envio na tela <b>Disparo</b>.
+            </div>
+          )}
           <div className="flex flex-col-reverse justify-center gap-2 sm:flex-row">
             <Button variant="ghost" onClick={fechar}>
               Fechar
@@ -173,10 +182,21 @@ export function SendDialog({
               href={resultado.planilhaUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-navy px-4 text-sm font-semibold text-white hover:bg-navy-800"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink hover:bg-surface"
             >
               <ExternalLink className="size-4" /> Abrir planilha
             </a>
+            {resultado.adicionados.length > 0 && disparoConfigurado && (
+              <Button
+                onClick={() => {
+                  setResultado(null);
+                  onDisparar();
+                }}
+                icon={<Send className="size-4" />}
+              >
+                Disparar agora
+              </Button>
+            )}
           </div>
         </div>
       )}

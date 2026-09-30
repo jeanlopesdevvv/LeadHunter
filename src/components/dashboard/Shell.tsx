@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, FlaskConical, History, ListChecks, LogOut, Search, Settings2 } from "lucide-react";
+import { ExternalLink, FlaskConical, History, ListChecks, LogOut, Search, Send, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/Logo";
@@ -9,11 +9,12 @@ import type { Uso } from "@/lib/types";
 
 import { UsoMini } from "./UsoCota";
 
-export type View = "buscar" | "resultados" | "historico" | "config";
+export type View = "buscar" | "resultados" | "disparo" | "historico" | "config";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
   { id: "buscar", label: "Nova busca", icon: Search },
   { id: "resultados", label: "Resultados", icon: ListChecks },
+  { id: "disparo", label: "Disparo", icon: Send },
   { id: "historico", label: "Histórico", icon: History },
   { id: "config", label: "Configuração", icon: Settings2 },
 ];

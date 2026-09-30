@@ -1,5 +1,6 @@
 import "server-only";
 
+import { DisparoError } from "./disparo";
 import { PlacesError } from "./places";
 import { SheetsError } from "./sheets";
 
@@ -8,7 +9,7 @@ export function jsonError(message: string, status = 400) {
 }
 
 export function handleError(e: unknown) {
-  if (e instanceof PlacesError || e instanceof SheetsError) return jsonError(e.message, e.status);
+  if (e instanceof PlacesError || e instanceof SheetsError || e instanceof DisparoError) return jsonError(e.message, e.status);
   console.error("[leadhunter]", e);
   return jsonError("Algo deu errado no servidor. Tente de novo.", 500);
 }

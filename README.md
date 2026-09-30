@@ -20,6 +20,9 @@ telefone        nome              tipo       cidade           status    mensagem
    editável), nota, site e link do Maps. Os que já estão na planilha aparecem como *Já na planilha*.
    Exatamente a quantidade pedida já vem marcada.
 3. **Enviar**: os marcados vão para o fim da aba `leads` com `status = pendente`.
+4. **Disparar**: na tela *Disparo*, um botão manda o n8n (Fluxo 1) enviar a primeira mensagem da Carol para quem
+   está pendente, e a tela acompanha o envio lendo a planilha (enviado / sem WhatsApp / aguardando).
+   Nunca começa um segundo disparo por cima do primeiro. Configuração em [docs/SETUP.md](docs/SETUP.md#5-botão-de-disparo-n8n).
 
 ### Consultas grátis do mês
 
@@ -78,6 +81,7 @@ src/
     api/search/plan     planeja a busca (termos × cidades) e acha o contorno de cada cidade
     api/search/page     uma página de resultados da Places API (confere a cota antes)
     api/uso             consultas grátis usadas/restantes no mês e data da renovação
+    api/disparo         fila da Carol, chama o webhook do n8n e acompanha o progresso
     api/sheets/check    quem já está na planilha
     api/sheets/send     grava os novos (com nova checagem de duplicados)
     api/status          diagnóstico das conexões

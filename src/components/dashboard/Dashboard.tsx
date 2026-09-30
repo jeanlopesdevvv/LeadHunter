@@ -11,6 +11,7 @@ import { planejarBusca, SessaoDeBusca, type Progresso } from "@/lib/client/searc
 import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
 
+import { DisparoView } from "./DisparoView";
 import { HistoryView } from "./HistoryView";
 import { ResultsView } from "./ResultsView";
 import { calcularLimite, SearchView, type SearchForm } from "./SearchView";
@@ -79,6 +80,7 @@ export function Dashboard() {
   const [uso, setUso] = useState<Uso | null>(null);
   const [atualizandoUso, setAtualizandoUso] = useState(false);
   const [enviarAberto, setEnviarAberto] = useState(false);
+  const [confirmarDisparo, setConfirmarDisparo] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const sessaoRef = useRef<SessaoDeBusca | null>(null);
@@ -378,7 +380,8 @@ export function Dashboard() {
       setSelecionados(new Set());
       atualizarLeads(entry.leads);
       setView("resultados");
-      await conferirPlanilha(entry.alvo ?? Number.POSITIVE_INFINITY); // a planilha pode ter mudado desde então
+      // A planilha pode ter mudado desde então. Nada vem marcado: reabrir é para conferir, e evita mandar sem querer.
+      await conferirPlanilha(0);
     },
     [conferirPlanilha, toast, rodando, atualizarLeads],
   );
@@ -393,6 +396,8 @@ export function Dashboard() {
     router.replace("/login");
     router.refresh();
   }, [router]);
+
+  const confirmacaoVista = useCallback(() => setConfirmarDisparo(false), []);
 
   const podeEnviarParaPlanilha = check.estado !== "erro" && check.estado !== "checando";
 
@@ -448,6 +453,7 @@ export function Dashboard() {
           onConfig={() => irPara("config")}
         />
       )}
+      {view === "disparo" && <DisparoView confirmarAoAbrir={confirmarDisparo} onConfirmacaoVista={confirmacaoVista} />}
       {view === "historico" && (
         <HistoryView
           historico={historico}
@@ -469,6 +475,12 @@ export function Dashboard() {
         leads={leadsParaEnviar}
         check={check.info}
         onEnviado={aoEnviar}
+        disparoConfigurado={Boolean(status?.disparo?.configurado)}
+        onDisparar={() => {
+          setEnviarAberto(false);
+          setConfirmarDisparo(true);
+          setView("disparo");
+        }}
       />
     </Shell>
   );

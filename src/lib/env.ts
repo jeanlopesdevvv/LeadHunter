@@ -84,6 +84,12 @@ export function getConfig() {
     bloquearNoLimite: str("BLOQUEAR_NO_LIMITE", "1") !== "0",
     // Projeto do Google Cloud onde a chave do Places foi criada (padrão: o da conta de serviço).
     googleProjectId: str("GOOGLE_CLOUD_PROJECT"),
+    // Disparo da Carol pelo n8n (nó Webhook "Disparo pelo Radar" no Fluxo 1).
+    n8nDisparoUrl: str("N8N_DISPARO_URL"),
+    n8nDisparoToken: str("N8N_DISPARO_TOKEN"),
+    n8nDisparoHeader: str("N8N_DISPARO_HEADER", "X-Radar-Token"),
+    // Só para mostrar na tela: limite diário da Carol no n8n (CAROL_LIMITE_DIARIO de lá). Vazio = não mostra.
+    limiteDiarioCarol: int("LIMITE_DIARIO_CAROL", 0),
   };
 }
 

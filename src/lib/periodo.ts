@@ -95,3 +95,13 @@ export function horaBrasilia(iso: string | number): string {
   const p = partes(t, FUSO_BRASIL);
   return `${String(p.hora).padStart(2, "0")}:${String(p.minuto).padStart(2, "0")}`;
 }
+
+/** "às 21:26" se for hoje; "em 10/09 às 10:00" se for outro dia (Brasília). */
+export function quandoCurto(iso: string | number, agora = Date.now()): string {
+  const t = typeof iso === "number" ? iso : Date.parse(iso);
+  const p = partes(t, FUSO_BRASIL);
+  const h = partes(agora, FUSO_BRASIL);
+  const hora = `${String(p.hora).padStart(2, "0")}:${String(p.minuto).padStart(2, "0")}`;
+  if (p.ano === h.ano && p.mes === h.mes && p.dia === h.dia) return `às ${hora}`;
+  return `em ${String(p.dia).padStart(2, "0")}/${String(p.mes).padStart(2, "0")} às ${hora}`;
+}
