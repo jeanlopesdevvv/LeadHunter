@@ -249,7 +249,8 @@ export function SearchView({
               <>
                 <p>
                   Vai usar <b>no máximo {n(limite)} consulta{limite === 1 ? "" : "s"}</b>
-                  {form.alvo > 0 && <> para achar {n(form.alvo)} contatos</>}. A busca para assim que chegar lá, então costuma usar menos.
+                  {form.alvo > 0 && <> para achar {form.alvo === 1 ? "1 contato" : `${n(form.alvo)} contatos`}</>}. A busca para assim que
+                  chegar lá, então costuma usar menos.
                   {uso && uso.bloquear && (
                     <span className="text-muted">
                       {" "}
@@ -311,7 +312,7 @@ export function SearchView({
             <div className="flex flex-wrap gap-3">
               {!rodando ? (
                 <Button size="lg" onClick={onBuscar} disabled={!podeBuscar} icon={<Search className="size-4" />}>
-                  Buscar {form.alvo > 0 ? n(form.alvo) : ""} contatos
+                  Buscar {form.alvo === 1 ? "1 contato" : `${form.alvo > 0 ? n(form.alvo) : ""} contatos`}
                 </Button>
               ) : (
                 <Button size="lg" variant="danger" onClick={onParar} icon={<CircleStop className="size-4" />}>
@@ -381,7 +382,10 @@ function CartaoProgresso({
     if (!final) return null;
     switch (p.fim) {
       case "alvo":
-        return { tom: "ok", texto: `Pronto! Achamos os ${n(p.alvo)} contatos novos usando ${n(p.consultas)} consultas.` };
+        return {
+          tom: "ok",
+          texto: `Pronto! Achamos ${p.alvo === 1 ? "o contato novo" : `os ${n(p.alvo)} contatos novos`} usando ${n(p.consultas)} consulta${p.consultas === 1 ? "" : "s"}.`,
+        };
       case "limite":
         return {
           tom: "aviso",

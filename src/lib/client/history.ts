@@ -55,3 +55,12 @@ export function removeHistory(id: string): HistoryEntry[] {
   save(loadHistory().filter((e) => e.id !== id));
   return loadHistory();
 }
+
+export function clearHistory(): HistoryEntry[] {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* navegador sem acesso ao armazenamento: nada a limpar */
+  }
+  return [];
+}

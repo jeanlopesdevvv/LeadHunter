@@ -248,7 +248,7 @@ export function ResultsView({
       </header>
 
       {progresso && !rodando && progresso.fim && (
-        <ResumoBusca p={progresso} marcados={paraEnviar} podeContinuar={podeContinuar} onContinuar={onContinuar} />
+        <ResumoBusca p={progresso} podeContinuar={podeContinuar} onContinuar={onContinuar} />
       )}
 
       {check.estado === "checando" && (
@@ -552,7 +552,7 @@ export function ResultsView({
   );
 }
 
-function ResumoBusca({ p, marcados, podeContinuar, onContinuar }: { p: Progresso; marcados: number; podeContinuar: boolean; onContinuar: () => void }) {
+function ResumoBusca({ p, podeContinuar, onContinuar }: { p: Progresso; podeContinuar: boolean; onContinuar: () => void }) {
   const n = (v: number) => v.toLocaleString("pt-BR");
   const faltam = Math.max(0, p.alvo - p.novos);
   const completo = p.novos >= p.alvo;
@@ -569,8 +569,8 @@ function ResumoBusca({ p, marcados, podeContinuar, onContinuar }: { p: Progresso
         <span>
           {completo ? (
             <>
-              Você pediu <b>{n(p.alvo)}</b> contatos novos e eles já estão marcados ({n(marcados)} marcados). Confira e clique em{" "}
-              <b>Enviar para a planilha</b>.
+              Você pediu <b>{n(p.alvo)}</b> {p.alvo === 1 ? "contato novo e ele já está marcado" : "contatos novos e eles já estão marcados"}.
+              Confira e clique em <b>Enviar para a planilha</b>.
             </>
           ) : p.fim === "esgotado" ? (
             <>

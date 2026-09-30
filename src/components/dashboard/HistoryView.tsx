@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock, FolderOpen, MapPin, RotateCcw, Send, Tag, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { Badge, Button, Card } from "@/components/ui";
 import type { HistoryEntry } from "@/lib/client/history";
@@ -11,16 +12,20 @@ export function HistoryView({
   onAbrir,
   onRepetir,
   onRemover,
+  onLimpar,
 }: {
   historico: HistoryEntry[];
   rodando: boolean;
   onAbrir: (e: HistoryEntry) => void;
   onRepetir: (e: HistoryEntry) => void;
   onRemover: (id: string) => void;
+  onLimpar: () => void;
 }) {
+  const [confirmar, setConfirmar] = useState(false);
   return (
     <div className="space-y-6">
-      <header>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
         <p className="eyebrow">Histórico</p>
         <h1 className="display mt-3 text-4xl text-navy">
           Buscas <span className="text-brand">anteriores</span>
@@ -28,7 +33,32 @@ export function HistoryView({
         <p className="mt-2 text-sm text-muted">
           As 12 últimas ficam guardadas só neste navegador. Ao reabrir, o Radar confere a planilha de novo para não repetir ninguém.
         </p>
+        </div>
+        {historico.length > 0 &&
+          (confirmar ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted">Apagar as {historico.length} buscas deste navegador?</span>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => {
+                  onLimpar();
+                  setConfirmar(false);
+                }}
+              >
+                Sim, limpar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmar(false)}>
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <Button variant="outline" onClick={() => setConfirmar(true)} disabled={rodando} icon={<Trash2 className="size-4" />}>
+              Limpar histórico
+            </Button>
+          ))}
       </header>
+      <p className="-mt-3 text-xs text-muted">Limpar o histórico não mexe na planilha: quem já foi enviado continua lá e não recebe de novo.</p>
 
       {!historico.length ? (
         <Card className="grid place-items-center px-6 py-20 text-center">

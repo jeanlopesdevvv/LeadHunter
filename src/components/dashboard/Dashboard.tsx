@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/components/toast";
 import { splitLines, sugerirLimite } from "@/lib/geo";
 import { api } from "@/lib/client/api";
-import { loadHistory, removeHistory, upsertHistory, type HistoryEntry } from "@/lib/client/history";
+import { clearHistory, loadHistory, removeHistory, upsertHistory, type HistoryEntry } from "@/lib/client/history";
 import { planejarBusca, SessaoDeBusca, type Progresso } from "@/lib/client/search-runner";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
@@ -455,6 +455,10 @@ export function Dashboard() {
           onAbrir={abrirHistorico}
           onRepetir={repetirBusca}
           onRemover={(id) => setHistorico(removeHistory(id))}
+          onLimpar={() => {
+            setHistorico(clearHistory());
+            toast("Histórico limpo.", "success");
+          }}
         />
       )}
       {view === "config" && <SettingsView status={status} uso={uso} onRecarregar={carregarStatus} />}
