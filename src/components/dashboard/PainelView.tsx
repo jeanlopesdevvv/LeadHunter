@@ -2,25 +2,25 @@
 
 import {
   AlertTriangle,
-  CheckCheck,
-  Eye,
+  BadgeCheck,
+  Clock,
   Flame,
+  Headset,
   MessageCircle,
   MessagesSquare,
   RefreshCw,
   Search,
   Send,
   ThumbsDown,
-  Trophy,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { BotaoAtender, useChatwoot } from "@/components/chatwoot";
 import { AnimatedNumber } from "@/components/motion";
-import { Badge, Button, Card, cx, inputClass } from "@/components/ui";
+import { Button, Card, cx, inputClass } from "@/components/ui";
 import { api } from "@/lib/client/api";
-import type { ContatoPainel, Painel, Periodo } from "@/lib/painel-regras";
+import type { ContatoPainel, Painel, Periodo, Situacao } from "@/lib/painel-regras";
 import { quandoCurto } from "@/lib/periodo";
 import { normalizePhone, whatsappLink } from "@/lib/phone";
 
@@ -31,86 +31,83 @@ const PERIODOS: { id: Periodo; rotulo: string }[] = [
   { id: "tudo", rotulo: "Tudo" },
 ];
 
-type Filtro = "todos" | "sim" | "respondeu" | "sem_resposta" | "nao" | "sem_whatsapp";
-const FILTROS: { id: Filtro; rotulo: string }[] = [
-  { id: "todos", rotulo: "Todos" },
-  { id: "sim", rotulo: "Sim, atendo" },
-  { id: "respondeu", rotulo: "Responderam" },
-  { id: "sem_resposta", rotulo: "Sem resposta" },
-  { id: "nao", rotulo: "Sem interesse" },
-  { id: "sem_whatsapp", rotulo: "Sem WhatsApp" },
+/** Como cada situação aparece: nome, cor da barra e do selo. Ordem = ordem da barra e dos filtros. */
+const SITUACOES: { id: Situacao; rotulo: string; icone: typeof Send; barra: string; selo: string }[] = [
+  { id: "atendente", rotulo: "Pediu atendente", icone: Headset, barra: "#f59e0b", selo: "bg-amber-50 text-amber-700 ring-amber-200" },
+  { id: "sim", rotulo: "Sim, atendo", icone: Flame, barra: "#10b981", selo: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  { id: "conversando", rotulo: "Em conversa", icone: MessageCircle, barra: "#03abc9", selo: "bg-brand-50 text-brand-700 ring-brand-200" },
+  { id: "cliente", rotulo: "Cliente Lavacar", icone: BadgeCheck, barra: "#8b7cf6", selo: "bg-[#8b7cf6]/12 text-[#7c6cf2] ring-[#8b7cf6]/30" },
+  { id: "sem_resposta", rotulo: "Sem resposta", icone: Clock, barra: "#94a3b8", selo: "bg-slate-100 text-slate-600 ring-slate-200" },
+  { id: "sem_interesse", rotulo: "Sem interesse", icone: ThumbsDown, barra: "#f43f5e", selo: "bg-red-50 text-red-700 ring-red-200" },
+  { id: "nao_recebeu", rotulo: "Não recebeu", icone: XCircle, barra: "#64748b", selo: "bg-slate-100 text-slate-600 ring-slate-200" },
 ];
+const INFO = Object.fromEntries(SITUACOES.map((s) => [s.id, s])) as Record<Situacao, (typeof SITUACOES)[number]>;
+const DICA: Record<Situacao, string> = {
+  atendente: "A Carol parou e está esperando alguém da equipe",
+  sim: "Respondeu \"Sim, atendo\"",
+  conversando: "Respondeu e está conversando com a Carol",
+  cliente: "Já é cliente do Lavacar",
+  sem_resposta: "Recebeu e ainda não respondeu",
+  sem_interesse: "Disse que não tem interesse (não recebe mais mensagens)",
+  nao_recebeu: "A mensagem não chegou (sem WhatsApp ou bloqueio do Meta)",
+};
+
+type Filtro = "todos" | Situacao;
 
 const n = (v: number) => v.toLocaleString("pt-BR");
-const pct = (parte: number | null, total: number) => (parte === null || !total ? null : Math.round((parte / total) * 100));
+const pct = (parte: number, total: number) => (total ? Math.round((parte / total) * 100) : 0);
 
-function passaNoFiltro(c: ContatoPainel, f: Filtro): boolean {
-  switch (f) {
-    case "sim":
-      return c.resposta === "sim";
-    case "respondeu":
-      return c.mensagensDoContato > 0;
-    case "sem_resposta":
-      return c.mensagensDoContato === 0 && !c.semWhatsapp;
-    case "nao":
-      return c.resposta === "nao" || c.resposta === "optout";
-    case "sem_whatsapp":
-      return c.semWhatsapp;
-    default:
-      return true;
-  }
+function Selo({ s }: { s: Situacao }) {
+  const i = INFO[s];
+  const Icone = i.icone;
+  return (
+    <span className={cx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ring-1 ring-inset", i.selo)} title={DICA[s]}>
+      <Icone className="size-3" /> {i.rotulo}
+    </span>
+  );
 }
 
-function ChipResposta({ c }: { c: ContatoPainel }) {
-  if (c.resposta === "sim")
-    return (
-      <Badge tone="green">
-        <Flame className="size-3" /> Sim, atendo
-      </Badge>
-    );
-  if (c.resposta === "respondeu")
-    return (
-      <Badge tone="brand">
-        <MessageCircle className="size-3" /> Respondeu
-      </Badge>
-    );
-  if (c.resposta === "nao")
-    return (
-      <Badge tone="gray">
-        <ThumbsDown className="size-3" /> Sem interesse
-      </Badge>
-    );
-  if (c.resposta === "optout") return <Badge tone="red">Pediu para sair</Badge>;
-  if (c.semWhatsapp)
-    return (
-      <Badge tone="amber">
-        <XCircle className="size-3" /> Sem WhatsApp
-      </Badge>
-    );
-  return <Badge tone="gray">Sem resposta</Badge>;
+function UltimaMensagem({ c, className }: { c: ContatoPainel; className?: string }) {
+  if (!c.ultima) return <span className="text-xs text-muted">—</span>;
+  return (
+    <p className={cx("line-clamp-2 text-xs text-ink", className)}>
+      <b className={c.ultima.deCarol ? "text-brand-700" : "text-emerald-700"}>{c.ultima.deCarol ? "Carol: " : "Contato: "}</b>
+      {c.ultima.texto}
+    </p>
+  );
 }
 
-function ChipEntrega({ c }: { c: ContatoPainel }) {
-  switch (c.entrega) {
-    case "lida":
-      return (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600" title="O contato abriu a mensagem">
-          <CheckCheck className="size-3.5" /> Lida
-        </span>
-      );
-    case "entregue":
-      return (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted" title="Chegou no celular do contato">
-          <CheckCheck className="size-3.5" /> Entregue
-        </span>
-      );
-    case "enviada":
-      return <span className="text-xs text-muted">Enviada</span>;
-    case "falhou":
-      return <span className="text-xs font-semibold text-amber-600">Não entregue</span>;
-    default:
-      return <span className="text-xs text-muted">—</span>;
-  }
+function Indicador({
+  rotulo,
+  valor,
+  dica,
+  icone,
+  cor,
+  destaque,
+  carregando,
+  i,
+}: {
+  rotulo: string;
+  valor: number;
+  dica: ReactNode;
+  icone: ReactNode;
+  cor: string;
+  destaque?: string;
+  carregando: boolean;
+  i: number;
+}) {
+  return (
+    <Card className={cx("relative overflow-hidden p-4 sm:p-5", destaque)} style={{ "--i": i } as CSSProperties}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-muted sm:text-sm">{rotulo}</span>
+        <span className={cx("grid size-8 place-items-center rounded-lg", cor)}>{icone}</span>
+      </div>
+      <div className="mt-2 text-3xl font-extrabold tracking-tight text-strong tabular-nums sm:text-4xl">
+        {carregando ? <span className="skeleton inline-block h-9 w-14 rounded" /> : <AnimatedNumber value={valor} />}
+      </div>
+      <div className="mt-1 text-xs text-muted">{dica}</div>
+    </Card>
+  );
 }
 
 export function PainelView() {
@@ -122,6 +119,7 @@ export function PainelView() {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [busca, setBusca] = useState("");
   const pedido = useRef(0);
+  const listaRef = useRef<HTMLDivElement>(null);
 
   const carregar = useCallback(async (p: Periodo) => {
     const meu = ++pedido.current;
@@ -149,23 +147,19 @@ export function PainelView() {
     };
   }, [periodo, carregar]);
 
-  const f = painel?.funil;
+  const r = painel?.resumo;
   const contatos = painel?.contatos ?? [];
   const termo = busca.trim().toLowerCase();
   const lista = contatos.filter(
-    (c) => passaNoFiltro(c, filtro) && (!termo || `${c.nome} ${c.telefone} ${c.cidade}`.toLowerCase().includes(termo)),
+    (c) => (filtro === "todos" || c.situacao === filtro) && (!termo || `${c.nome} ${c.telefone} ${c.cidade}`.toLowerCase().includes(termo)),
   );
-  const quentes = contatos.filter((c) => c.resposta === "sim" || c.resposta === "respondeu").slice(0, 6);
+  const paraAtender = contatos.filter((c) => c.situacao === "atendente" || c.situacao === "sim" || c.situacao === "conversando").slice(0, 8);
+  const semDados = painel !== null && !contatos.length;
 
-  const etapas: { rotulo: string; valor: number | null; icone: typeof Send; cor: string }[] = f
-    ? [
-        { rotulo: "Disparadas", valor: f.disparadas, icone: Send, cor: "bg-bar" },
-        { rotulo: "Entregues", valor: f.entregues, icone: CheckCheck, cor: "bg-bar-2" },
-        { rotulo: "Lidas", valor: f.lidas, icone: Eye, cor: "bg-brand-700" },
-        { rotulo: "Responderam", valor: f.responderam, icone: MessagesSquare, cor: "bg-brand" },
-        { rotulo: "Sim, atendo", valor: f.sim, icone: Flame, cor: "bg-emerald-500" },
-      ]
-    : [];
+  function filtrar(f: Filtro) {
+    setFiltro(f);
+    requestAnimationFrame(() => listaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   return (
     <div className="space-y-6">
@@ -175,7 +169,7 @@ export function PainelView() {
           <h1 className="display mt-3 text-[32px] text-strong sm:text-5xl">
             Do disparo à <span className="texto-marca">conversa.</span>
           </h1>
-          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Quem recebeu, leu, respondeu e quer atender. Quem respondeu aparece primeiro.</p>
+          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Quem respondeu, quem quer conhecer o Lavacar e quem não tem interesse.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-xl border border-line bg-card p-1" role="radiogroup" aria-label="Período">
@@ -211,110 +205,151 @@ export function PainelView() {
 
       {/* Números principais */}
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          { rotulo: "Disparadas", valor: f?.disparadas, extra: f ? `${n(f.semWhatsapp)} sem WhatsApp` : "", cor: "text-strong", i: Send },
-          {
-            rotulo: "Leram",
-            valor: f?.lidas ?? null,
-            extra: f && f.lidas !== null ? `${pct(f.lidas, f.disparadas)}% das disparadas` : "sem dados do Meta",
-            cor: "text-brand-700",
-            i: Eye,
-          },
-          {
-            rotulo: "Responderam",
-            valor: f?.responderam,
-            extra: f ? `${pct(f.responderam, f.disparadas) ?? 0}% de resposta` : "",
-            cor: "text-brand",
-            i: MessagesSquare,
-          },
-          { rotulo: "Sim, atendo", valor: f?.sim, extra: f ? `${n(f.nao)} sem interesse` : "", cor: "text-emerald-600", i: Trophy },
-        ].map((c, idx) => (
-          <Card key={c.rotulo} className={cx("relative overflow-hidden p-4 sm:p-5", idx === 3 && f && f.sim > 0 && "ring-2 ring-emerald-200")} >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted">{c.rotulo}</span>
-              <c.i className={cx("size-4", idx === 3 && f && f.sim > 0 ? "text-emerald-500 animate-float" : "text-muted/60")} />
-            </div>
-            <div className={cx("mt-1.5 text-3xl font-extrabold tracking-tight", c.cor)}>
-              {painel === null ? (
-                <span className="skeleton inline-block h-8 w-14 rounded" />
-              ) : c.valor === null || c.valor === undefined ? (
-                "—"
-              ) : (
-                <AnimatedNumber value={c.valor} />
-              )}
-            </div>
-            <div className="mt-0.5 text-xs text-muted">{c.extra}</div>
-          </Card>
-        ))}
+        <Indicador
+          i={0}
+          rotulo="Disparadas"
+          valor={r?.disparadas ?? 0}
+          carregando={!painel}
+          icone={<Send className="size-4" />}
+          cor="bg-slate-100 text-slate-600"
+          dica={r && r.naoRecebeu > 0 ? `${n(r.naoRecebeu)} não ${r.naoRecebeu === 1 ? "recebeu" : "receberam"}` : "mensagens da Carol"}
+        />
+        <Indicador
+          i={1}
+          rotulo="Responderam"
+          valor={r?.responderam ?? 0}
+          carregando={!painel}
+          icone={<MessagesSquare className="size-4" />}
+          cor="bg-brand-50 text-brand-700"
+          dica={r ? `${pct(r.responderam, r.receberam)}% de quem recebeu` : ""}
+        />
+        <Indicador
+          i={2}
+          rotulo="Sim, atendo"
+          valor={r?.sim ?? 0}
+          carregando={!painel}
+          icone={<Flame className="size-4" />}
+          cor="bg-emerald-50 text-emerald-700"
+          destaque={r && r.sim > 0 ? "ring-2 ring-emerald-200" : undefined}
+          dica="querem conhecer o Lavacar"
+        />
+        <Indicador
+          i={3}
+          rotulo="Sem interesse"
+          valor={r?.semInteresse ?? 0}
+          carregando={!painel}
+          icone={<ThumbsDown className="size-4" />}
+          cor="bg-red-50 text-red-700"
+          dica="não recebem mais mensagens"
+        />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* Funil */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        {/* Onde está cada contato */}
         <Card className="p-5 sm:p-6">
-          <p className="text-sm font-bold text-ink">Do disparo ao “Sim, atendo”</p>
-          <p className="text-xs text-muted">Quanto sobra em cada etapa, sobre o total disparado no período.</p>
-          <div className="mt-5 space-y-3">
-            {etapas.map((e) => {
-              const largura = f && f.disparadas ? Math.max(e.valor ? 4 : 0, ((e.valor ?? 0) / f.disparadas) * 100) : 0;
-              return (
-                <div key={e.rotulo} className="grid grid-cols-[110px_minmax(0,1fr)_64px] items-center gap-3 text-sm">
-                  <span className="flex items-center gap-1.5 font-semibold text-ink">
-                    <e.icone className="size-3.5 text-muted" /> {e.rotulo}
-                  </span>
-                  <div className="h-7 overflow-hidden rounded-lg bg-surface">
-                    <div className={cx("h-full rounded-lg transition-[width] duration-700 ease-out", e.cor)} style={{ width: `${largura}%` }} />
-                  </div>
-                  <span className="text-right font-bold text-ink tabular-nums">
-                    {e.valor === null ? "—" : <AnimatedNumber value={e.valor} />}
-                    {e.valor !== null && f && f.disparadas > 0 && e.rotulo !== "Disparadas" && (
-                      <span className="block text-[11px] font-medium text-muted">{pct(e.valor, f.disparadas)}%</span>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-            {!etapas.length && <div className="skeleton h-40 rounded-xl" />}
-          </div>
-          {f && f.entregues === null && (
-            <p className="mt-4 text-xs text-muted">
-              Entregues e lidas aparecem assim que o WhatsApp confirmar a entrega e a leitura.
+          <p className="text-base font-bold text-ink">Onde está cada contato</p>
+          <p className="text-xs text-muted sm:text-sm">Toque numa situação para ver quem está nela.</p>
+
+          {!painel ? (
+            <div className="skeleton mt-5 h-40 rounded-xl" />
+          ) : semDados ? (
+            <p className="mt-6 rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
+              Nenhum disparo neste período. Os resultados aparecem aqui depois do primeiro disparo.
             </p>
+          ) : (
+            <>
+              <div className="mt-5 flex h-4 overflow-hidden rounded-full bg-surface" role="img" aria-label="Distribuição dos contatos por situação">
+                {SITUACOES.map((s) => {
+                  const v = r?.porSituacao[s.id] ?? 0;
+                  if (!v) return null;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => filtrar(s.id)}
+                      title={`${s.rotulo}: ${n(v)}`}
+                      className="h-full transition-[width,filter] duration-700 ease-out hover:brightness-110"
+                      style={{ width: `${pct(v, r?.disparadas ?? 0)}%`, minWidth: 6, background: s.barra }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {SITUACOES.map((s) => {
+                  const v = r?.porSituacao[s.id] ?? 0;
+                  if (!v && (s.id === "cliente" || s.id === "atendente" || s.id === "nao_recebeu")) return null;
+                  const Icone = s.icone;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => filtrar(s.id)}
+                      className={cx(
+                        "flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition",
+                        filtro === s.id ? "border-brand bg-brand-50" : "border-line bg-card hover:border-brand-200",
+                        !v && "opacity-60",
+                      )}
+                    >
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg text-white" style={{ background: s.barra }}>
+                        <Icone className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-ink">{s.rotulo}</span>
+                        <span className="block truncate text-[11px] text-muted">{DICA[s.id]}</span>
+                      </span>
+                      <span className="text-right">
+                        <span className="block text-lg font-extrabold text-strong tabular-nums">{n(v)}</span>
+                        <span className="block text-[11px] text-muted tabular-nums">{pct(v, r?.disparadas ?? 0)}%</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </Card>
 
-        {/* Quentes */}
+        {/* Para atender agora */}
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-line px-5 py-4">
             <Flame className="size-4 text-orange-500" />
-            <p className="text-sm font-bold text-ink">Para atender agora</p>
+            <p className="text-base font-bold text-ink">Para atender agora</p>
+            {paraAtender.length > 0 && (
+              <span className="ml-auto rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700 tabular-nums">{paraAtender.length}</span>
+            )}
           </div>
           {!painel ? (
             <div className="space-y-2 p-5">
-              <div className="skeleton h-10 rounded-lg" />
-              <div className="skeleton h-10 rounded-lg" />
+              <div className="skeleton h-12 rounded-lg" />
+              <div className="skeleton h-12 rounded-lg" />
             </div>
-          ) : !quentes.length ? (
-            <p className="px-5 py-10 text-center text-sm text-muted">Nenhuma resposta neste período ainda.</p>
+          ) : !paraAtender.length ? (
+            <p className="px-5 py-10 text-center text-sm text-muted">Ninguém esperando resposta agora.</p>
           ) : (
             <ul className="stagger divide-y divide-line">
-              {quentes.map((c, i) => (
-                <li key={c.key} style={{ ["--i" as string]: i }} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink">{c.nome || "(sem nome)"}</p>
-                    <p className="truncate text-xs text-muted">{c.ultima?.texto ?? ""}</p>
+              {paraAtender.map((c, i) => (
+                <li key={c.key} style={{ "--i": i } as CSSProperties} className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">{c.nome || "(sem nome)"}</p>
+                      <div className="mt-1">
+                        <Selo s={c.situacao} />
+                      </div>
+                    </div>
+                    {chatwoot?.url ? (
+                      <BotaoAtender telefone={c.telefone} nome={c.nome} className="shrink-0" />
+                    ) : (
+                      <a
+                        href={whatsappLink(c.telefone)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+                      >
+                        <MessageCircle className="size-3.5" /> Abrir
+                      </a>
+                    )}
                   </div>
-                  {chatwoot?.url ? (
-                    <BotaoAtender telefone={c.telefone} nome={c.nome} className="shrink-0" />
-                  ) : (
-                    <a
-                      href={whatsappLink(c.telefone)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
-                    >
-                      <MessageCircle className="size-3.5" /> Abrir
-                    </a>
-                  )}
+                  {c.ultima && <UltimaMensagem c={c} className="mt-2 rounded-lg bg-surface px-3 py-2" />}
                 </li>
               ))}
             </ul>
@@ -323,146 +358,130 @@ export function PainelView() {
       </div>
 
       {/* Lista */}
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-1.5">
-            {FILTROS.map((x) => {
-              const qtd = contatos.filter((c) => passaNoFiltro(c, x.id)).length;
-              return (
-                <button
-                  key={x.id}
-                  onClick={() => setFiltro(x.id)}
-                  className={cx(
-                    "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                    filtro === x.id ? "border-navy bg-navy text-white" : "border-line bg-card text-muted hover:text-ink",
-                  )}
-                >
-                  {x.rotulo} <span className="tabular-nums opacity-70">{qtd}</span>
-                </button>
-              );
-            })}
+      <div ref={listaRef} className="scroll-mt-36 lg:scroll-mt-8">
+        <Card className="overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-1.5">
+              {(["todos", ...SITUACOES.map((s) => s.id)] as Filtro[]).map((id) => {
+                const qtd = id === "todos" ? contatos.length : (r?.porSituacao[id] ?? 0);
+                if (id !== "todos" && !qtd && id !== filtro && id !== "sem_interesse") return null;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setFiltro(id)}
+                    className={cx(
+                      "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                      filtro === id ? "border-navy bg-navy text-white" : "border-line bg-card text-muted hover:text-ink",
+                    )}
+                  >
+                    {id === "todos" ? "Todos" : INFO[id].rotulo} <span className="tabular-nums opacity-70">{qtd}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative lg:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Procurar contato…" className={cx(inputClass, "pl-9")} />
+            </div>
           </div>
-          <div className="relative lg:w-72">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Procurar contato…" className={cx(inputClass, "pl-9")} />
-          </div>
-        </div>
-        {!painel ? (
-          <div className="space-y-2 p-5">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="skeleton h-12 rounded-lg" />
-            ))}
-          </div>
-        ) : !lista.length ? (
-          <p className="px-6 py-12 text-center text-sm text-muted">
-            {contatos.length ? "Ninguém com esse filtro." : "Nenhum disparo neste período. Os resultados aparecem aqui depois do primeiro disparo."}
-          </p>
-        ) : (
-          <>
-          {/* Cartões (celular) */}
-          <ul className="divide-y divide-line md:hidden">
-            {lista.slice(0, 300).map((c) => (
-              <li key={c.key} className="px-4 py-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">{c.nome || "(sem nome)"}</p>
-                    <p className="truncate text-xs text-muted">
-                      {normalizePhone(c.telefone).display || c.telefone}
-                      {c.cidade && ` · ${c.cidade}`}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <BotaoAtender telefone={c.telefone} nome={c.nome} compacto />
-                    <a
-                      href={whatsappLink(c.telefone)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex rounded-lg p-2 text-muted transition hover:bg-emerald-50 hover:text-emerald-600"
-                      aria-label="Abrir no WhatsApp"
-                    >
-                      <MessageCircle className="size-4" />
-                    </a>
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <ChipEntrega c={c} />
-                  <ChipResposta c={c} />
-                  {c.enviadoEm && <span className="text-[11px] text-muted">{quandoCurto(c.enviadoEm)}</span>}
-                </div>
-                {c.ultima && (
-                  <p className="mt-2 line-clamp-2 rounded-lg bg-surface px-3 py-2 text-xs text-ink">
-                    <b className={c.ultima.deCarol ? "text-brand-700" : "text-emerald-700"}>{c.ultima.deCarol ? "Carol: " : "Contato: "}</b>
-                    {c.ultima.texto}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="text-[11px] font-bold tracking-wider text-muted uppercase">
-                <tr className="border-b border-line">
-                  <th className="px-4 py-3">Contato</th>
-                  <th className="px-4 py-3">Disparo</th>
-                  <th className="px-4 py-3">Entrega</th>
-                  <th className="px-4 py-3">Resposta</th>
-                  <th className="px-4 py-3">Última mensagem</th>
-                  <th className="px-4 py-3 text-right">Atender</th>
-                </tr>
-              </thead>
-              <tbody>
+          {!painel ? (
+            <div className="space-y-2 p-5">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-12 rounded-lg" />
+              ))}
+            </div>
+          ) : !lista.length ? (
+            <p className="px-6 py-12 text-center text-sm text-muted">
+              {contatos.length ? "Ninguém nesta situação." : "Nenhum disparo neste período. Os resultados aparecem aqui depois do primeiro disparo."}
+            </p>
+          ) : (
+            <>
+              {/* Cartões (celular) */}
+              <ul className="divide-y divide-line md:hidden">
                 {lista.slice(0, 300).map((c) => (
-                  <tr key={c.key} className="border-b border-line/70 align-top last:border-0 hover:bg-surface/70">
-                    <td className="max-w-[260px] px-4 py-3">
-                      <p className="truncate font-semibold text-ink">{c.nome || "(sem nome)"}</p>
-                      <p className="truncate text-xs text-muted">
-                        {normalizePhone(c.telefone).display || c.telefone}
-                        {c.cidade && ` · ${c.cidade}`}
-                        {c.tipo && ` · ${c.tipo}`}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-xs whitespace-nowrap text-muted">{c.enviadoEm ? quandoCurto(c.enviadoEm) : "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <ChipEntrega c={c} />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <ChipResposta c={c} />
-                      {c.etapa && <p className="mt-1 text-[11px] text-muted">{c.etapa.replace(/_/g, " ").toLowerCase()}</p>}
-                    </td>
-                    <td className="max-w-[320px] px-4 py-3">
-                      {c.ultima ? (
-                        <>
-                          <p className="line-clamp-2 text-xs text-ink">
-                            <b className={c.ultima.deCarol ? "text-brand-700" : "text-emerald-700"}>{c.ultima.deCarol ? "Carol: " : "Contato: "}</b>
-                            {c.ultima.texto}
-                          </p>
-                          {c.ultima.quando && <p className="mt-0.5 text-[11px] text-muted">{quandoCurto(c.ultima.quando)}</p>}
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <BotaoAtender telefone={c.telefone} nome={c.nome} compacto />
-                      <a
-                        href={whatsappLink(c.telefone)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-lg p-1.5 text-muted transition hover:bg-emerald-50 hover:text-emerald-600"
-                        title="Abrir no WhatsApp"
-                      >
-                        <MessageCircle className="size-4" />
-                      </a>
-                    </td>
-                  </tr>
+                  <li key={c.key} className="px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-ink">{c.nome || "(sem nome)"}</p>
+                        <p className="truncate text-xs text-muted">
+                          {normalizePhone(c.telefone).display || c.telefone}
+                          {c.cidade && ` · ${c.cidade}`}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <BotaoAtender telefone={c.telefone} nome={c.nome} compacto />
+                        <a
+                          href={whatsappLink(c.telefone)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex rounded-lg p-2 text-muted transition hover:bg-emerald-50 hover:text-emerald-600"
+                          aria-label="Abrir no WhatsApp"
+                        >
+                          <MessageCircle className="size-4" />
+                        </a>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Selo s={c.situacao} />
+                      {c.enviadoEm && <span className="text-[11px] text-muted">disparo {quandoCurto(c.enviadoEm)}</span>}
+                    </div>
+                    {c.ultima && <UltimaMensagem c={c} className="mt-2 rounded-lg bg-surface px-3 py-2" />}
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          </>
-        )}
-      </Card>
+              </ul>
 
+              {/* Tabela (computador) */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-[11px] font-bold tracking-wider text-muted uppercase">
+                    <tr className="border-b border-line">
+                      <th className="px-4 py-3">Contato</th>
+                      <th className="px-4 py-3">Disparo</th>
+                      <th className="px-4 py-3">Situação</th>
+                      <th className="px-4 py-3">Última mensagem</th>
+                      <th className="px-4 py-3 text-right">Atender</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lista.slice(0, 300).map((c) => (
+                      <tr key={c.key} className="border-b border-line/70 align-top last:border-0 hover:bg-surface/70">
+                        <td className="max-w-[260px] px-4 py-3">
+                          <p className="truncate font-semibold text-ink">{c.nome || "(sem nome)"}</p>
+                          <p className="truncate text-xs text-muted">
+                            {normalizePhone(c.telefone).display || c.telefone}
+                            {c.cidade && ` · ${c.cidade}`}
+                            {c.tipo && ` · ${c.tipo}`}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap text-muted">{c.enviadoEm ? quandoCurto(c.enviadoEm) : "—"}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Selo s={c.situacao} />
+                        </td>
+                        <td className="max-w-[340px] px-4 py-3">
+                          <UltimaMensagem c={c} />
+                          {c.ultima?.quando && <p className="mt-0.5 text-[11px] text-muted">{quandoCurto(c.ultima.quando)}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <BotaoAtender telefone={c.telefone} nome={c.nome} compacto />
+                          <a
+                            href={whatsappLink(c.telefone)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex rounded-lg p-1.5 text-muted transition hover:bg-emerald-50 hover:text-emerald-600"
+                            title="Abrir no WhatsApp"
+                          >
+                            <MessageCircle className="size-4" />
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

@@ -202,12 +202,16 @@ Como funciona:
 A tela **Desempenho** lê três abas que o n8n já grava na planilha (nomes em `PAINEL_ABA_HISTORICO`,
 `PAINEL_ABA_STATUS` e `PAINEL_ABA_SESSOES`; padrão `historico_carol`, `status_meta_carol`, `sessoes_carol`):
 
-- **historico_carol**: cada mensagem da conversa. O Radar procura as colunas pelo nome (telefone ou remoteJid,
-  remetente, mensagem, timestamp/data). Resposta do contato com "Sim, atendo" conta como **sim**; "Não tenho interesse"
-  como **sem interesse**; qualquer outro texto como **respondeu**.
-- **status_meta_carol** (opcional): status de entrega da Meta (`sent`, `delivered`, `read`, `failed`) por telefone.
-  Sem essa aba, as etapas *Entregues* e *Lidas* aparecem como "—".
-- **sessoes_carol** (opcional): etapa da conversa de cada contato (mostrada embaixo da resposta).
+- **historico_carol**: cada mensagem da conversa (Fluxo 1 grava a da Carol, Fluxo 2 grava as do contato com
+  remetente `lead`). "Sim, atendo" conta como **sim**; "Não tenho interesse" como **sem interesse**; qualquer outro
+  texto como **em conversa**.
+- **sessoes_carol** (opcional): estado da conversa. `AGUARDANDO_SUPORTE` vira **pediu atendente**, `LEAD_PERDIDO`
+  vira **sem interesse**, `CLIENTE_ATIVO` vira **cliente Lavacar** e `SEM_WHATSAPP` vira **não recebeu**.
+- **status_meta_carol** (opcional): o Fluxo 6 grava aqui **só as falhas** do Meta. Quem aparece com falha depois do
+  disparo (e não respondeu) conta como **não recebeu**. Entregue e lida não são gravados em lugar nenhum, por isso
+  o Desempenho não mostra essas etapas.
+- A coluna `optout` da aba `leads` (preenchida quando o contato clica em "Não tenho interesse") também conta como
+  **sem interesse**.
 
 Se algum número parecer errado, abra `https://radar.lavacar.app/api/painel?periodo=tudo` logado no Radar: o campo
 `fontes` mostra quais abas e colunas foram reconhecidas. Nada é gravado nessas abas: a tela só lê.

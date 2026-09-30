@@ -425,7 +425,7 @@ export function DisparoView({
         />
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* Resumo e botão */}
         <Card className="h-fit p-5 sm:p-6 lg:sticky lg:top-6">
           <p className="flex items-center gap-2 text-sm font-bold text-ink">

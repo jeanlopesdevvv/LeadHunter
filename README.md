@@ -29,9 +29,10 @@ telefone        nome              tipo       cidade           status    mensagem
    Durante o envio dá para **Pausar** (continua depois de onde parou), **Cancelar** (quem não recebeu volta para a
    fila) e **Continuar** um disparo que parou (ex.: limite diário). Para parar no meio, o Fluxo 1 tem uma **trava**:
    antes de cada mensagem ele pergunta ao Radar se ainda pode enviar ([docs/SETUP.md](docs/SETUP.md#trava-pausar-e-cancelar)).
-5. **Desempenho**: funil do disparo até o "Sim, atendo" (disparadas → entregues → lidas → responderam →
-   sim), lista de quentes com atalho para o WhatsApp e tabela filtrável por resposta. Lê as abas `historico_carol`,
-   `status_meta_carol` e `sessoes_carol` da planilha (período: hoje, 7 dias, 30 dias ou tudo; atualiza a cada minuto).
+5. **Desempenho**: disparadas, responderam, "Sim, atendo" e sem interesse; onde está cada contato (pediu
+   atendente, sim, em conversa, cliente, sem resposta, sem interesse, não recebeu); "Para atender agora" e lista
+   filtrável. Usa só o que os fluxos já gravam: abas `leads`, `historico_carol`, `sessoes_carol` e as falhas de
+   `status_meta_carol` (período: hoje, 7 dias, 30 dias ou tudo; atualiza a cada minuto).
 
 ### Atendimento no Chatwoot
 

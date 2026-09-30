@@ -25,33 +25,67 @@ const HIST = [
   ["5531900000003", "2026-09-30T00:12:00Z", "lead", "quanto custa?", ""],
 ];
 
+// O Fluxo 6 grava só as falhas do Meta (entregue/lida não vão para a planilha).
 const META = [
-  ["telefone", "wamid", "status", "timestamp"],
-  ["5531900000001", "w1", "sent", ""],
-  ["5531900000001", "w1", "read", ""],
-  ["5531900000002", "w2", "delivered", ""],
-  ["5531900000003", "w3", "read", ""],
+  ["timestamp", "telefone", "wamid", "status", "erro_codigo", "erro_detalhe", "categoria_cobranca"],
+  ["2026-09-30T00:05:00Z", "31900000008", "w8", "failed", "131049", "qualidade", ""],
 ];
 
+const SESSOES = [
+  ["remoteJid", "telefone", "nome", "estado", "ultimo_contato"],
+  ["5531900000001@s.whatsapp.net", "31900000001", "Lava A", "FALANDO_COM_CAROL", ""],
+  ["5531900000002@s.whatsapp.net", "31900000002", "Lava B", "LEAD_PERDIDO", ""],
+  ["5531900000003@s.whatsapp.net", "31900000003", "Lava C", "FALANDO_COM_CAROL", ""],
+  ["5531900000009@s.whatsapp.net", "31900000009", "Lava I", "AGUARDANDO_SUPORTE", ""],
+  ["5531900000010@s.whatsapp.net", "31900000010", "Lava J", "CLIENTE_ATIVO", ""],
+];
+
+const LEADS_HOJE = [
+  ...LEADS,
+  ["5531900000008", "Lava H", "Empresa", "BH", "enviado", "29/09/2026, 21:04:30", ""], // o Meta não entregou
+  ["5531900000009", "Lava I", "Empresa", "BH", "enviado", "29/09/2026, 21:05:00", ""], // pediu atendente
+  ["5531900000010", "Lava J", "Empresa", "BH", "enviado", "29/09/2026, 21:06:00", ""], // já é cliente
+  ["5531900000011", "Lava K", "Empresa", "BH", "enviado", "29/09/2026, 21:07:00", ""], // não respondeu
+];
+
+const HIST_HOJE = [...HIST, ["31900000009", "2026-09-30T00:20:00Z", "lead", "quero falar com uma pessoa", ""]];
+
 describe("painel da Carol", () => {
-  it("monta o funil de hoje: disparadas, entregues, lidas, responderam, sim e não", () => {
-    const p = montarPainel({ leads: LEADS, historico: HIST, statusMeta: META, sessoes: [["telefone", "estado"], ["5531900000001", "FALANDO_COM_CAROL"]] }, "hoje", AGORA);
-    expect(p.funil).toEqual({ disparadas: 5, entregues: 3, lidas: 2, responderam: 3, sim: 1, nao: 1, semWhatsapp: 1, optout: 1 });
+  it("coloca cada contato numa situação usando só o que os fluxos gravam", () => {
+    const p = montarPainel({ leads: LEADS_HOJE, historico: HIST_HOJE, statusMeta: META, sessoes: SESSOES }, "hoje", AGORA);
+    const sit = Object.fromEntries(p.contatos.map((c) => [c.nome, c.situacao]));
+    expect(sit).toEqual({
+      "Lava A": "sim",
+      "Lava B": "sem_interesse", // clicou em "Não tenho interesse"
+      "Lava C": "conversando",
+      "Lava D": "nao_recebeu", // sem WhatsApp na aba leads
+      "Lava G": "sem_interesse", // optout na aba leads
+      "Lava H": "nao_recebeu", // falha gravada pelo Fluxo 6
+      "Lava I": "atendente",
+      "Lava J": "cliente",
+      "Lava K": "sem_resposta",
+    });
+    expect(p.resumo).toMatchObject({ disparadas: 9, receberam: 7, responderam: 5, sim: 1, semInteresse: 2, naoRecebeu: 2 });
+    expect(p.resumo.porSituacao).toEqual({ atendente: 1, sim: 1, conversando: 1, cliente: 1, sem_resposta: 1, sem_interesse: 2, nao_recebeu: 2 });
+    // quem precisa de atenção vem primeiro
+    expect(p.contatos.slice(0, 3).map((c) => c.nome)).toEqual(["Lava I", "Lava A", "Lava C"]);
     const a = p.contatos.find((c) => c.nome === "Lava A")!;
-    expect(a).toMatchObject({ resposta: "sim", entrega: "lida", etapa: "FALANDO_COM_CAROL", mensagensDoContato: 1 });
     expect(a.ultima?.texto).toBe("Sim, atendo");
-    expect(p.contatos.find((c) => c.nome === "Lava C")?.resposta).toBe("respondeu");
-    expect(p.contatos.find((c) => c.nome === "Lava D")).toMatchObject({ semWhatsapp: true, entrega: "falhou" });
-    expect(p.contatos[0].nome).toBe("Lava A"); // "Sim, atendo" aparece primeiro
+    expect(a.mensagensDoContato).toBe(1);
     expect(p.contatos.some((c) => c.nome === "Lava F")).toBe(false); // pendente não conta
   });
 
-  it("período 'tudo' inclui os antigos; sem aba de status do Meta, entregues/lidas ficam em branco", () => {
+  it("quem respondeu recebeu, mesmo se houver uma falha antiga do Meta", () => {
+    const meta = [...META, ["2026-09-30T00:00:10Z", "31900000001", "w1", "failed", "131047", "janela", ""]];
+    const p = montarPainel({ leads: LEADS, historico: HIST, statusMeta: meta }, "hoje", AGORA);
+    expect(p.contatos.find((c) => c.nome === "Lava A")?.situacao).toBe("sim");
+  });
+
+  it("período 'tudo' inclui os antigos e funciona sem as abas opcionais", () => {
     const p = montarPainel({ leads: LEADS, historico: HIST }, "tudo", AGORA);
-    expect(p.funil.disparadas).toBe(6);
-    expect(p.funil.entregues).toBeNull();
-    expect(p.funil.lidas).toBeNull();
+    expect(p.resumo.disparadas).toBe(6);
     expect(p.fontes.statusMeta.aba).toBe(false);
+    expect(p.contatos.find((c) => c.nome === "Lava E")?.situacao).toBe("sem_resposta");
   });
 
   it("aponta colunas que faltam para o painel ler", () => {

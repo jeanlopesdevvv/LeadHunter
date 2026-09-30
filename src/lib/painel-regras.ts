@@ -1,11 +1,13 @@
 /**
  * Painel da Carol (funções puras, testadas em tests/painel.test.ts).
  *
- * Junta, por telefone:
- *  - aba leads: quem recebeu o disparo e quando (status + mensagem_enviada_em);
- *  - historico_carol: mensagens da Carol e respostas do contato (botões "Sim, atendo" / "Não tenho interesse");
- *  - status_meta_carol (se existir): entregue / lida / falhou, vindo do Meta;
- *  - sessoes_carol (se existir): em que etapa da conversa o contato está.
+ * Usa só o que os fluxos já gravam na planilha, por telefone:
+ *  - aba leads: quem recebeu o disparo e quando (status, mensagem_enviada_em) e quem pediu para sair (optout);
+ *  - historico_carol: mensagens da Carol e do contato (remetente "carol" / "lead"), inclusive os botões
+ *    "Sim, atendo" e "Não tenho interesse";
+ *  - sessoes_carol: em que ponto a conversa está (AGUARDANDO_SUPORTE, LEAD_PERDIDO, CLIENTE_ATIVO…);
+ *  - status_meta_carol: o Fluxo 6 grava só as FALHAS do Meta (entregue/lida não são gravados), então ela
+ *    serve apenas para saber quem não recebeu.
  * As colunas são encontradas pelo nome (vários nomes aceitos), porque cada fluxo do n8n grava do seu jeito.
  */
 
@@ -14,8 +16,10 @@ import { phoneKeysFromCell } from "./phone";
 import { buildHeaderMap, normalizeHeader } from "./sheet-mapping";
 
 export type Periodo = "hoje" | "7d" | "30d" | "tudo";
-export type Entrega = "lida" | "entregue" | "enviada" | "falhou";
 export type Resposta = "sim" | "nao" | "respondeu" | "optout";
+
+/** Onde cada contato está agora (uma situação por contato). */
+export type Situacao = "atendente" | "sim" | "conversando" | "sem_resposta" | "sem_interesse" | "nao_recebeu" | "cliente";
 
 export interface MensagemPainel {
   texto: string;
@@ -29,31 +33,28 @@ export interface ContatoPainel {
   telefone: string;
   cidade: string;
   tipo: string;
-  statusPlanilha: string;
   enviadoEm: number | null;
-  semWhatsapp: boolean;
-  entrega: Entrega | null;
+  situacao: Situacao;
   resposta: Resposta | null;
   respondeuEm: number | null;
   ultima: MensagemPainel | null;
   mensagensDoContato: number;
-  etapa: string;
 }
 
-export interface Funil {
+export interface Resumo {
   disparadas: number;
-  entregues: number | null;
-  lidas: number | null;
+  /** Chegaram ao WhatsApp do contato (disparadas menos quem não recebeu). */
+  receberam: number;
   responderam: number;
   sim: number;
-  nao: number;
-  semWhatsapp: number;
-  optout: number;
+  semInteresse: number;
+  naoRecebeu: number;
+  porSituacao: Record<Situacao, number>;
 }
 
 export interface Painel {
   periodo: Periodo;
-  funil: Funil;
+  resumo: Resumo;
   contatos: ContatoPainel[];
   fontes: {
     historico: { aba: boolean; colunas: string[]; faltando: string[] };
@@ -130,17 +131,12 @@ export function lerResposta(texto: string): "sim" | "nao" | null {
   return null;
 }
 
-function mapaEntrega(v: unknown): Entrega | null {
-  const s = normalizeHeader(v);
-  if (!s) return null;
-  if (/read|lida|lido|visualiz/.test(s)) return "lida";
-  if (/deliver|entreg/.test(s)) return "entregue";
-  if (/fail|falh|erro|undeliver/.test(s)) return "falhou";
-  if (/sent|enviad|accepted|aceit/.test(s)) return "enviada";
-  return null;
+/** O Fluxo 6 grava só falhas; ainda assim, confere o texto do status para não contar outra coisa. */
+function ehFalha(status: unknown, erro: unknown): boolean {
+  const st = normalizeHeader(status);
+  if (/fail|falh|undeliver|erro/.test(st)) return true;
+  return !st && String(erro ?? "").trim() !== "";
 }
-
-const ORDEM_ENTREGA: Record<Entrega, number> = { falhou: 0, enviada: 1, entregue: 2, lida: 3 };
 
 function chave(cel: unknown): string {
   return phoneKeysFromCell(cel)[0] ?? "";
@@ -186,20 +182,21 @@ export function montarPainel(
     }
   }
 
-  // --- status do Meta
+  // --- falhas do Meta (o Fluxo 6 só grava falhas: número sem WhatsApp, fora da janela, limite de qualidade…)
   const sm = entrada.statusMeta ?? [];
   const sCab = (sm[0] ?? []) as unknown[];
   const sTel = acharColuna(sCab, COL_TELEFONE);
   const sJid = acharColuna(sCab, ["remotejid", "remote_jid", "jid", "wa_id", "recipient_id"]);
   const sSt = acharColuna(sCab, COL_STATUS);
-  const entregas = new Map<string, Entrega>();
-  if (sTel >= 0 && sSt >= 0) {
+  const sErro = acharColuna(sCab, ["erro_codigo", "erro_detalhe", "erro", "error"]);
+  const sData = acharColuna(sCab, COL_DATA);
+  const falhas = new Map<string, number | null>();
+  if (sTel >= 0 || sJid >= 0) {
     for (const row of sm.slice(1)) {
-      const k = chave(row?.[sTel]) || (sJid >= 0 ? chave(row?.[sJid]) : "");
-      const e = mapaEntrega(row?.[sSt]);
-      if (!k || !e) continue;
-      const atual = entregas.get(k);
-      if (!atual || ORDEM_ENTREGA[e] > ORDEM_ENTREGA[atual]) entregas.set(k, e);
+      const k = (sTel >= 0 ? chave(row?.[sTel]) : "") || (sJid >= 0 ? chave(row?.[sJid]) : "");
+      if (!k || !ehFalha(sSt >= 0 ? row?.[sSt] : "", sErro >= 0 ? row?.[sErro] : "")) continue;
+      const quando = sData >= 0 ? lerQuando(row?.[sData]) : null;
+      falhas.set(k, Math.max(falhas.get(k) ?? 0, quando ?? 0) || null);
     }
   }
 
@@ -213,7 +210,7 @@ export function montarPainel(
   if (eTel >= 0 && eEst >= 0) {
     for (const row of ss.slice(1)) {
       const k = chave(row?.[eTel]) || (eJid >= 0 ? chave(row?.[eJid]) : "");
-      const est = String(row?.[eEst] ?? "").trim();
+      const est = String(row?.[eEst] ?? "").trim().toUpperCase();
       if (k && est) etapas.set(k, est);
     }
   }
@@ -234,40 +231,50 @@ export function montarPainel(
     for (const m of doContato) resposta = lerResposta(m.texto) ?? resposta;
     if (!resposta && doContato.length) resposta = "respondeu";
     if (l.optout) resposta = "optout";
-    const entrega = entregas.get(l.key) ?? (l.situacao === "sem_whatsapp" ? "falhou" : null);
+
+    const estado = etapas.get(l.key) ?? "";
+    const falhouEm = falhas.has(l.key) ? falhas.get(l.key) : undefined;
+    const falhaDesteDisparo = falhouEm !== undefined && (falhouEm === null || l.quando === null || falhouEm >= l.quando - 60_000);
+    let situacao: Situacao;
+    if (l.situacao === "sem_whatsapp" || estado === "SEM_WHATSAPP" || (falhaDesteDisparo && !doContato.length)) situacao = "nao_recebeu";
+    else if (estado === "CLIENTE_ATIVO") situacao = "cliente";
+    else if (resposta === "optout" || resposta === "nao" || estado === "LEAD_PERDIDO") situacao = "sem_interesse";
+    else if (estado === "AGUARDANDO_SUPORTE") situacao = "atendente";
+    else if (resposta === "sim") situacao = "sim";
+    else if (doContato.length) situacao = "conversando";
+    else situacao = "sem_resposta";
+
     contatos.push({
       key: l.key,
       nome: l.nome,
       telefone: l.telefone,
       cidade: l.cidade,
       tipo: l.tipo,
-      statusPlanilha: l.status,
       enviadoEm: l.quando,
-      semWhatsapp: l.situacao === "sem_whatsapp",
-      entrega,
+      situacao,
       resposta,
       respondeuEm: doContato[0]?.quando ?? null,
       ultima: msgs.length ? msgs[msgs.length - 1] : null,
       mensagensDoContato: doContato.length,
-      etapa: etapas.get(l.key) ?? "",
     });
   }
 
-  const temMeta = sTel >= 0 && sSt >= 0 && sm.length > 1;
-  const funil: Funil = {
+  const porSituacao: Record<Situacao, number> = { atendente: 0, sim: 0, conversando: 0, sem_resposta: 0, sem_interesse: 0, nao_recebeu: 0, cliente: 0 };
+  for (const c of contatos) porSituacao[c.situacao]++;
+  const resumo: Resumo = {
     disparadas: contatos.length,
-    entregues: temMeta ? contatos.filter((c) => c.entrega === "entregue" || c.entrega === "lida").length : null,
-    lidas: temMeta ? contatos.filter((c) => c.entrega === "lida").length : null,
-    responderam: contatos.filter((c) => c.mensagensDoContato > 0).length,
+    receberam: contatos.length - porSituacao.nao_recebeu,
+    responderam: contatos.filter((c) => c.mensagensDoContato > 0 || c.resposta === "optout").length,
     sim: contatos.filter((c) => c.resposta === "sim").length,
-    nao: contatos.filter((c) => c.resposta === "nao").length,
-    semWhatsapp: contatos.filter((c) => c.semWhatsapp).length,
-    optout: contatos.filter((c) => c.resposta === "optout").length,
+    semInteresse: porSituacao.sem_interesse,
+    naoRecebeu: porSituacao.nao_recebeu,
+    porSituacao,
   };
 
-  // Quem respondeu primeiro (mais recente no topo), depois o resto por data de envio.
-  const peso = (c: ContatoPainel) => (c.resposta === "sim" ? 3 : c.resposta === "respondeu" ? 2 : c.resposta === "nao" ? 1 : 0);
-  contatos.sort((a, b) => peso(b) - peso(a) || (b.respondeuEm ?? b.enviadoEm ?? 0) - (a.respondeuEm ?? a.enviadoEm ?? 0));
+  // Quem precisa de atenção primeiro (pediu atendente, disse sim, está conversando), o mais recente no topo.
+  const PESO: Record<Situacao, number> = { atendente: 6, sim: 5, conversando: 4, cliente: 3, sem_interesse: 2, sem_resposta: 1, nao_recebeu: 0 };
+  const recente = (c: ContatoPainel) => c.ultima?.quando ?? c.respondeuEm ?? c.enviadoEm ?? 0;
+  contatos.sort((a, b) => PESO[b.situacao] - PESO[a.situacao] || recente(b) - recente(a));
 
   const fonte = (cab: unknown[], tem: boolean, falta: [string, number][]) => ({
     aba: tem,
@@ -277,7 +284,7 @@ export function montarPainel(
 
   return {
     periodo,
-    funil,
+    resumo,
     contatos: contatos.slice(0, 1000),
     fontes: {
       historico: fonte(hCab, entrada.historico !== undefined, [
@@ -287,8 +294,8 @@ export function montarPainel(
         ["data", hData],
       ]),
       statusMeta: fonte(sCab, entrada.statusMeta !== undefined, [
-        ["telefone", sTel],
-        ["status", sSt],
+        ["telefone", Math.max(sTel, sJid)],
+        ["status", Math.max(sSt, sErro)],
       ]),
       sessoes: fonte(eCab, entrada.sessoes !== undefined, [
         ["telefone", eTel],

@@ -113,11 +113,12 @@ export function mockSheet(): MockSheet {
     const iso = (ms: number) => new Date(ms).toISOString();
     // Alguns disparos antigos para o painel da Carol ter o que mostrar.
     const antigos = [
-      { tel: "5531977001001", nome: "Lava Jato Estrela Guia", tipo: "Empresa", quando: h(20), resposta: "Sim, atendo", status: "read" },
-      { tel: "5531977001002", nome: "Marcos Lavagem a Domicílio", tipo: "Autônomo", quando: h(19), resposta: "Não tenho interesse", status: "read" },
-      { tel: "5531977001003", nome: "Auto Spa Savassi", tipo: "Empresa", quando: h(5), resposta: "Oi Carol, quanto custa pra entrar?", status: "read" },
-      { tel: "5531977001004", nome: "Ducha Prime", tipo: "Empresa", quando: h(4), resposta: "", status: "delivered" },
-      { tel: "5531977001005", nome: "Lavador Rafael", tipo: "Autônomo", quando: h(3), resposta: "", status: "sent" },
+      { tel: "5531977001001", nome: "Lava Jato Estrela Guia", tipo: "Empresa", quando: h(20), resposta: "Sim, atendo", estado: "FALANDO_COM_CAROL" },
+      { tel: "5531977001002", nome: "Marcos Lavagem a Domicílio", tipo: "Autônomo", quando: h(19), resposta: "Não tenho interesse", estado: "LEAD_PERDIDO", optout: true },
+      { tel: "5531977001003", nome: "Auto Spa Savassi", tipo: "Empresa", quando: h(5), resposta: "Oi Carol, quanto custa pra entrar?", estado: "FALANDO_COM_CAROL" },
+      { tel: "5531977001006", nome: "Lava Rápido Central", tipo: "Empresa", quando: h(4.5), resposta: "Prefiro falar com um atendente", estado: "AGUARDANDO_SUPORTE" },
+      { tel: "5531977001004", nome: "Ducha Prime", tipo: "Empresa", quando: h(4), resposta: "", estado: "FALANDO_COM_CAROL" },
+      { tel: "5531977001005", nome: "Lavador Rafael", tipo: "Autônomo", quando: h(3), resposta: "", estado: "FALANDO_COM_CAROL", falhou: true },
     ];
     g.__lhMockSheet = {
       title: "Leads Lava-jatos (simulação)",
@@ -126,7 +127,7 @@ export function mockSheet(): MockSheet {
           ["telefone", "nome", "tipo", "cidade", "status", "mensagem_enviada_em", "optout"],
           ["5531982999779", "Jean Lopes", "Autônomo", "Belo Horizonte", "pendente", "", ""],
           ["5531991112233", "Lava Jato Teste Opt-out", "Empresa", "Belo Horizonte", "enviado", "10/09/2026 10:00", "sim"],
-          ...antigos.map((a) => [a.tel, a.nome, a.tipo, "Belo Horizonte", "enviado", dataN8n(a.quando), ""]),
+          ...antigos.map((a) => [a.tel, a.nome, a.tipo, "Belo Horizonte", "enviado", dataN8n(a.quando), a.optout ? dataN8n(a.quando + 41 * 60_000) : ""]),
         ],
         historico_carol: [
           ["telefone", "timestamp", "remetente", "mensagem", "remoteJid"],
@@ -137,13 +138,16 @@ export function mockSheet(): MockSheet {
             return linhas;
           }),
         ],
+        // O Fluxo 6 grava só as falhas do Meta.
         status_meta_carol: [
-          ["telefone", "wamid", "status", "timestamp", "erro"],
-          ...antigos.map((a, i) => [a.tel, `wamid.mock${i}`, a.status, iso(a.quando + 60_000), ""]),
+          ["timestamp", "telefone", "wamid", "status", "erro_codigo", "erro_detalhe", "categoria_cobranca"],
+          ...antigos
+            .filter((a) => a.falhou)
+            .map((a, i) => [iso(a.quando + 60_000), a.tel.slice(2), `wamid.mock${i}`, "failed", "131049", "Mensagem não entregue para manter a qualidade", ""]),
         ],
         sessoes_carol: [
           ["remoteJid", "telefone", "nome", "estado", "ultimo_contato", "tentativas_reativacao"],
-          ...antigos.map((a) => [`${a.tel}@s.whatsapp.net`, a.tel, a.nome, a.resposta ? "FALANDO_COM_CAROL" : "AGUARDANDO_RESPOSTA", iso(a.quando), "0"]),
+          ...antigos.map((a) => [`${a.tel}@s.whatsapp.net`, a.tel.slice(2), a.nome, a.estado, iso(a.quando), "0"]),
         ],
         historico_sofia: [["data", "telefone", "mensagem"]],
       },
