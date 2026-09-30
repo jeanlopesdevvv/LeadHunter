@@ -158,19 +158,6 @@ describe("iniciar disparo (servidor)", () => {
     await expect(iniciarDisparo()).rejects.toThrow(/publicado/);
   });
 
-  it("trava se um número bloqueado (o próprio Lavacar) está pendente na planilha", async () => {
-    const chamadas = mockGoogle([
-      CAB,
-      ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
-      ["5531982149012", "Lavacar - Lava Jato Delivery", "Autônomo", "BH", "pendente", "", ""],
-    ]);
-    const { iniciarDisparo, statusDisparo } = await import("@/lib/disparo");
-    await expect(iniciarDisparo()).rejects.toThrow(/Lavacar - Lava Jato Delivery.*bloqueado.*linha 3.*optout/);
-    expect(chamadas).toHaveLength(0);
-    const s = await statusDisparo();
-    expect(s.bloqueadosNaFila).toEqual([{ nome: "Lavacar - Lava Jato Delivery", telefone: "5531982149012", linha: 3 }]);
-  });
-
   it("com optout marcado o bloqueado sai da fila e o disparo segue", async () => {
     const chamadas = mockGoogle([
       CAB,
@@ -191,10 +178,96 @@ describe("iniciar disparo (servidor)", () => {
     expect(Object.keys(chamadas[0].headers as Record<string, string>)).toEqual(["Content-Type"]);
   });
 
+  it("dispara só para os marcados: os outros pendentes (e o Lavacar) viram 'aguardando' antes de chamar o n8n", async () => {
+    const planilha: unknown[][] = [
+      CAB,
+      ["5531982999779", "Jean Lopes", "Autônomo", "BH", "pendente", "", ""],
+      ["5531982149012", "Lavacar - Lava Jato Delivery", "Autônomo", "BH", "pendente", "", ""],
+      ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
+      ["5531911110002", "B", "Empresa", "BH", "aguardando", "", ""],
+      ["5531911110003", "C", "Empresa", "BH", "enviado", "01/09/2026, 10:00:00", ""],
+    ];
+    const escritas: { range: string; values: string[][] }[] = [];
+    const chamadasN8n: RequestInit[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.startsWith("https://n8n.exemplo.com")) {
+          chamadasN8n.push(init ?? {});
+          return new Response("{}", { status: 200 });
+        }
+        if (url.includes("values:batchUpdate")) {
+          const body = JSON.parse(String(init?.body)) as { data: { range: string; values: string[][] }[] };
+          for (const d of body.data) {
+            escritas.push(d);
+            const linha = Number(/(\d+)$/.exec(d.range)![1]);
+            planilha[linha - 1][4] = d.values[0][0];
+          }
+          return new Response("{}", { status: 200 });
+        }
+        return new Response(JSON.stringify({ values: planilha }), { status: 200 });
+      }),
+    );
+    const { iniciarDisparo, statusDisparo } = await import("@/lib/disparo");
+    const antes = await statusDisparo();
+    expect(antes.itensFila.map((i) => i.nome)).toEqual(["Jean Lopes", "A", "B"]); // o Lavacar não aparece
+    const s = await iniciarDisparo(["5531982999779"]);
+    expect(escritas.map((e) => [e.range, e.values[0][0]])).toEqual([
+      ["'leads'!E3", "aguardando"],
+      ["'leads'!E4", "aguardando"],
+    ]);
+    expect(planilha.slice(1).map((r) => r[4])).toEqual(["pendente", "aguardando", "aguardando", "aguardando", "enviado"]);
+    expect(chamadasN8n).toHaveLength(1);
+    expect(s.atual?.total).toBe(1);
+    expect(s.itensFila.map((i) => [i.nome, i.situacao])).toEqual([
+      ["Jean Lopes", "pendente"],
+      ["A", "aguardando"],
+      ["B", "aguardando"],
+    ]);
+  });
+
+  it("um marcado que estava 'aguardando' volta a 'pendente'", async () => {
+    const planilha: unknown[][] = [CAB, ["5531911110002", "B", "Empresa", "BH", "aguardando", "", ""]];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.startsWith("https://n8n.exemplo.com")) return new Response("{}", { status: 200 });
+        if (url.includes("values:batchUpdate")) {
+          const body = JSON.parse(String(init?.body)) as { data: { range: string; values: string[][] }[] };
+          for (const d of body.data) planilha[Number(/(\d+)$/.exec(d.range)![1]) - 1][4] = d.values[0][0];
+          return new Response("{}", { status: 200 });
+        }
+        return new Response(JSON.stringify({ values: planilha }), { status: 200 });
+      }),
+    );
+    const { iniciarDisparo } = await import("@/lib/disparo");
+    await iniciarDisparo(["5531911110002"]);
+    expect(planilha[1][4]).toBe("pendente");
+  });
+
+  it("se a planilha não ficar como esperado, não chama o n8n", async () => {
+    const planilha: unknown[][] = [CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""], ["5531911110002", "B", "Empresa", "BH", "pendente", "", ""]];
+    const chamadasN8n: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("https://n8n.exemplo.com")) {
+          chamadasN8n.push(1);
+          return new Response("{}", { status: 200 });
+        }
+        if (url.includes("values:batchUpdate")) return new Response("{}", { status: 200 }); // "gravou" mas não mudou nada
+        return new Response(JSON.stringify({ values: planilha }), { status: 200 });
+      }),
+    );
+    const { iniciarDisparo } = await import("@/lib/disparo");
+    await expect(iniciarDisparo(["5531911110001"])).rejects.toThrow(/não foi chamado/);
+    expect(chamadasN8n).toHaveLength(0);
+  });
+
   it("sem pendentes não chama o n8n", async () => {
     const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "enviado", "01/09/2026, 10:00:00", ""]]);
     const { iniciarDisparo } = await import("@/lib/disparo");
-    await expect(iniciarDisparo()).rejects.toThrow(/Não há ninguém pendente/);
+    await expect(iniciarDisparo()).rejects.toThrow(/Não há ninguém na fila/);
     expect(chamadas).toHaveLength(0);
   });
 });

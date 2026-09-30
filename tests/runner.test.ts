@@ -129,6 +129,13 @@ describe("busca por quantidade de contatos novos", () => {
     expect(s.progresso.fim).toBe("esgotado");
   });
 
+  it("com 'incluir telefone fixo', o fixo conta para a quantidade pedida", async () => {
+    mockPaginas(() => ({ leads: [lead({ telefoneTipo: "fixo" }), lead()], nextPageToken: null }));
+    const s = new SessaoDeBusca(plano(1), { ignorarFechados: false, incluirFixos: true });
+    await s.executar({ alvo: 2, limite: 3, signal: new AbortController().signal, onUpdate: () => {} });
+    expect(s.progresso).toMatchObject({ novos: 2, semCelular: 0, fim: "alvo" });
+  });
+
   it("respeita o máximo de consultas e dá para continuar depois", async () => {
     const pedidos = mockPaginas(() => ({ leads: [lead({ planilha: "existente" })], nextPageToken: "MAIS" }));
     const s = new SessaoDeBusca(plano(4), { ignorarFechados: true });

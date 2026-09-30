@@ -19,16 +19,36 @@ export interface SearchForm {
   /** Máximo de consultas desta busca; null = automático. */
   limite: number | null;
   ignorarFechados: boolean;
+  /** Fixo também conta (alguns têm WhatsApp Business). */
+  incluirFixos: boolean;
+}
+
+/** Atalhos de "quem procurar": preenchem o campo de termos (que continua editável). */
+export const PUBLICOS = {
+  lavajatos: { rotulo: "Lava-jatos", termos: ["lava jato", "estética automotiva", "lava rápido"] },
+  autonomos: { rotulo: "Lavadores autônomos", termos: ["lavagem a domicílio", "lavador de carros", "lava jato delivery"] },
+  todos: { rotulo: "Os dois", termos: ["lava jato", "estética automotiva", "lavagem a domicílio", "lavador de carros"] },
+} as const;
+type Publico = keyof typeof PUBLICOS;
+
+function publicoAtual(termos: string[]): Publico | null {
+  const atual = termos.map((t) => t.toLowerCase()).sort().join("|");
+  for (const k of Object.keys(PUBLICOS) as Publico[]) {
+    if ([...PUBLICOS[k].termos].sort().join("|") === atual) return k;
+  }
+  return null;
 }
 
 const SUGESTOES_TERMOS = [
   "lava jato",
   "lava rápido",
   "estética automotiva",
+  "lavagem a domicílio",
+  "lavador de carros",
+  "lava jato delivery",
   "lavagem automotiva",
   "higienização automotiva",
   "polimento automotivo",
-  "lavagem a domicílio",
 ];
 const SUGESTOES_CIDADES = ["Belo Horizonte - MG", "Contagem - MG", "Nova Lima - MG", "Betim - MG", "São Paulo - SP", "Rio de Janeiro - RJ"];
 
@@ -108,11 +128,11 @@ export function SearchView({
       <header>
         <p className="eyebrow">Nova busca</p>
         <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
-          Encontre lava-jatos novos. <span className="text-brand">A Carol faz o primeiro contato.</span>
+          Encontre lava-jatos e lavadores autônomos. <span className="text-brand">A Carol faz o primeiro contato.</span>
         </h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-          Diga o que procurar, onde e quantos contatos você quer. O Radar procura no Google Maps, tira os repetidos e quem já está na
-          planilha, e separa só quem tem celular (WhatsApp).
+          Diga quem procurar, onde e quantos contatos você quer. O Radar procura no Google Maps, tira os repetidos e quem já está na
+          planilha, e separa quem tem WhatsApp provável.
         </p>
       </header>
 
@@ -127,6 +147,31 @@ export function SearchView({
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="p-5 sm:p-7">
+          <div className="mb-6">
+            <p className="text-sm font-semibold text-ink">Quem você quer encontrar?</p>
+            <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Quem procurar">
+              {(Object.keys(PUBLICOS) as Publico[]).map((k) => {
+                const ativo = publicoAtual(termos) === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={ativo}
+                    disabled={rodando}
+                    onClick={() => set({ termos: PUBLICOS[k].termos.join("\n") })}
+                    className={cx(
+                      "h-10 rounded-xl border px-4 text-sm font-bold transition-all",
+                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-white text-ink hover:border-brand-200",
+                    )}
+                  >
+                    {PUBLICOS[k].rotulo}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-xs text-muted">Escolhe os termos de busca para você. Dá para ajustar no campo logo abaixo.</p>
+          </div>
           <div className="grid gap-6 lg:grid-cols-2">
             <Field label="1. O que procurar?" hint="um por linha" htmlFor="termos">
               <div className="relative">
@@ -175,7 +220,9 @@ export function SearchView({
 
           <div className="mt-7">
             <p className="text-sm font-semibold text-ink">3. Quantos contatos novos você quer?</p>
-            <p className="mt-0.5 text-xs text-muted">Contam só os que têm celular e ainda não estão na planilha.</p>
+            <p className="mt-0.5 text-xs text-muted">
+              Contam os que têm {form.incluirFixos ? "celular ou telefone fixo" : "celular"} e ainda não estão na planilha.
+            </p>
             <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Quantidade de contatos">
               {QUANTIDADES.map((q) => {
                 const ativo = !outro && form.alvo === q;
@@ -302,14 +349,22 @@ export function SearchView({
             )}
           </div>
 
-          <div className="mt-6 flex flex-col gap-5 border-t border-line pt-6 lg:flex-row lg:items-center lg:justify-between">
-            <Toggle
-              checked={form.ignorarFechados}
-              onChange={(v) => set({ ignorarFechados: v })}
-              label="Pular estabelecimentos fechados"
-              hint="Quem o Google marca como fechado temporária ou definitivamente."
-            />
-            <div className="flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-col gap-5 border-t border-line pt-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
+              <Toggle
+                checked={form.incluirFixos}
+                onChange={(v) => set({ incluirFixos: v })}
+                label="Incluir telefone fixo"
+                hint="Alguns fixos têm WhatsApp Business."
+              />
+              <Toggle
+                checked={form.ignorarFechados}
+                onChange={(v) => set({ ignorarFechados: v })}
+                label="Pular estabelecimentos fechados"
+                hint="Os que o Google marca como fechados."
+              />
+            </div>
+            <div className="flex flex-wrap gap-3 sm:justify-end">
               {!rodando ? (
                 <Button size="lg" onClick={onBuscar} disabled={!podeBuscar} icon={<Search className="size-4" />}>
                   Buscar {form.alvo === 1 ? "1 contato" : `${form.alvo > 0 ? n(form.alvo) : ""} contatos`}
@@ -332,6 +387,7 @@ export function SearchView({
         <CartaoProgresso
           p={progresso}
           ignorarFechados={form.ignorarFechados}
+          incluirFixos={form.incluirFixos}
           podeContinuar={podeContinuar && !rodando}
           onContinuar={onContinuar}
           onVerResultados={onVerResultados}
@@ -341,9 +397,9 @@ export function SearchView({
       {!progresso && (
         <div className="grid gap-3 sm:grid-cols-3">
           {[
-            ["1", "Busque", "Diga o que procurar, onde e quantos contatos quer."],
-            ["2", "Confira", "Veja a lista: celular ou fixo, empresa ou autônomo, nota no Google."],
-            ["3", "Envie", "Um clique manda os escolhidos para a planilha. A Carol chama no WhatsApp."],
+            ["1", "Busque", "Diga quem procurar, onde e quantos contatos quer."],
+            ["2", "Confira e envie", "Veja a lista (empresa ou autônomo, celular ou fixo) e mande os escolhidos para a planilha."],
+            ["3", "Dispare", "Na tela Disparo, marque quem recebe: a Carol chama no WhatsApp."],
           ].map(([num, t, d]) => (
             <div key={num} className="flex gap-3 rounded-2xl border border-dashed border-line p-4">
               <Badge tone="brand" className="size-6 justify-center p-0 text-xs">
@@ -364,12 +420,14 @@ export function SearchView({
 function CartaoProgresso({
   p,
   ignorarFechados,
+  incluirFixos,
   podeContinuar,
   onContinuar,
   onVerResultados,
 }: {
   p: Progresso;
   ignorarFechados: boolean;
+  incluirFixos: boolean;
   podeContinuar: boolean;
   onContinuar: () => void;
   onVerResultados: () => void;
@@ -426,7 +484,7 @@ function CartaoProgresso({
           <div className="text-3xl font-extrabold text-navy tabular-nums">
             {n(p.novos)} <span className="text-lg font-bold text-muted">de {n(p.alvo)}</span>
           </div>
-          <div className="text-xs font-semibold text-muted">contatos novos com celular</div>
+          <div className="text-xs font-semibold text-muted">contatos novos</div>
         </div>
       </div>
       <div className="h-2 bg-surface">
@@ -436,7 +494,7 @@ function CartaoProgresso({
         <Numero rotulo="consultas usadas" valor={`${n(p.consultas)} / ${n(p.limite)}`} />
         <Numero rotulo="vistos no Google" valor={n(p.vistos)} />
         <Numero rotulo="já na planilha" valor={n(p.jaNaPlanilha)} />
-        <Numero rotulo="sem celular" valor={n(p.semCelular)} />
+        <Numero rotulo={incluirFixos ? "sem telefone" : "sem celular"} valor={n(p.semCelular)} />
         <Numero rotulo="repetidos" valor={n(p.repetidos)} />
         {ignorarFechados && <Numero rotulo="fechados" valor={n(p.fechados)} />}
       </div>

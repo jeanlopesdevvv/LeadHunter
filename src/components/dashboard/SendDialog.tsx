@@ -31,7 +31,8 @@ export function SendDialog({
   check?: CheckResult;
   onEnviado: (r: SendResult) => void;
   disparoConfigurado: boolean;
-  onDisparar: () => void;
+  /** Vai para a tela Disparo com estes telefones já marcados. */
+  onDisparar: (keys: string[]) => void;
 }) {
   const toast = useToast();
   const [enviando, setEnviando] = useState(false);
@@ -198,8 +199,9 @@ export function SendDialog({
             {resultado.adicionados.length > 0 && (
               <Button
                 onClick={() => {
+                  const keys = resultado.adicionados.map((a) => a.key);
                   setResultado(null);
-                  onDisparar();
+                  onDisparar(disparoConfigurado ? keys : []);
                 }}
                 icon={<Send className="size-4" />}
               >

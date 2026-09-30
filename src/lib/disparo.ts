@@ -2,7 +2,9 @@ import "server-only";
 
 import {
   linhasDaFila,
+  mudancasParaDisparo,
   naFila,
+  paraON8n,
   PARADO_APOS_MS,
   progressoDoDisparo,
   resumoDoDia,
@@ -13,7 +15,8 @@ import {
 import { telefonesBloqueados } from "./bloqueio";
 import { getConfig } from "./env";
 import { mockSheet } from "./mock";
-import { esquecerAbaLeads, lerAbaLeads } from "./sheets";
+import { phoneKey } from "./phone";
+import { atualizarStatusLinhas, esquecerAbaLeads, lerAbaLeads } from "./sheets";
 
 /**
  * Disparo da Carol: o Radar chama o webhook do n8n ("Disparo pelo Radar", no Fluxo 1)
@@ -52,20 +55,28 @@ async function lerLinhas(maxAgeMs?: number): Promise<LinhaFila[]> {
 export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> {
   const cfg = getConfig();
   const linhas = await lerLinhas();
-  const fila = linhas.filter(naFila);
-  const hoje = resumoDoDia(linhas, agora);
   const bloqueados = telefonesBloqueados();
+  const naFilaTodos = linhas.filter(naFila);
+  const fila = naFilaTodos.filter((l) => !bloqueados.has(l.key));
+  const hoje = resumoDoDia(linhas, agora);
   const atual = g.__radarDisparo ? progressoDoDisparo(g.__radarDisparo.chaves, g.__radarDisparo.iniciadoEm, linhas, agora) : null;
   return {
     configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
     simulacao: cfg.mock,
     destino: cfg.mock ? "simulação" : destinoDe(cfg.n8nDisparoUrl),
     fila: fila.length,
-    proximos: fila.slice(0, 100).map((l) => ({ nome: l.nome, telefone: l.telefone, cidade: l.cidade })),
+    itensFila: fila.slice(0, 1000).map((l) => ({
+      key: l.key,
+      linha: l.linha,
+      nome: l.nome,
+      telefone: l.telefone,
+      cidade: l.cidade,
+      situacao: l.situacao === "pendente" ? ("pendente" as const) : ("aguardando" as const),
+    })),
     hoje,
     limiteDiario: cfg.limiteDiarioCarol,
     movimentoRecente: atual?.estado !== "enviando" && movimentoDeFora(hoje.ultimoMovimento, atual, agora),
-    bloqueadosNaFila: fila.filter((l) => bloqueados.has(l.key)).map((l) => ({ nome: l.nome, telefone: l.telefone, linha: l.linha })),
+    bloqueadosNaFila: naFilaTodos.filter((l) => bloqueados.has(l.key)).map((l) => ({ nome: l.nome, telefone: l.telefone, linha: l.linha })),
     atual,
     atualizadoEm: agora,
   };
@@ -88,7 +99,15 @@ function exclusivo<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export function iniciarDisparo(): Promise<StatusDisparo> {
+/**
+ * Dispara para os contatos escolhidos (telefones) ou para toda a fila ("todos").
+ *
+ * O n8n manda mensagem para todo "pendente" da planilha. Para disparar só para os escolhidos,
+ * o Radar deixa como "pendente" apenas eles e muda os outros pendentes para "aguardando"
+ * (continuam na fila do Radar para um próximo disparo). Depois relê a planilha e só chama o n8n
+ * se os pendentes forem exatamente os escolhidos.
+ */
+export function iniciarDisparo(pedido: string[] | "todos" = "todos"): Promise<StatusDisparo> {
   return exclusivo(async () => {
     const cfg = getConfig();
     if (!cfg.mock && !cfg.n8nDisparoUrl) {
@@ -96,19 +115,17 @@ export function iniciarDisparo(): Promise<StatusDisparo> {
     }
     const agora = Date.now();
     const linhas = await lerLinhas(0); // leitura fresca na hora de disparar
-    const pendentes = linhas.filter(naFila);
-    if (!pendentes.length) throw new DisparoError("Não há ninguém pendente na planilha para a Carol chamar.");
-
-    // O n8n dispara para todo pendente da planilha: um número bloqueado ali receberia mensagem.
     const bloqueados = telefonesBloqueados();
-    const barrado = pendentes.find((l) => bloqueados.has(l.key));
-    if (barrado) {
-      throw new DisparoError(
-        `"${barrado.nome || barrado.telefone}" é um número bloqueado e está pendente na planilha (linha ${barrado.linha}). ` +
-          "Escreva sim na coluna optout dessa linha (ou apague a linha) e tente de novo.",
-        409,
-      );
+    const fila = linhas.filter((l) => naFila(l) && !bloqueados.has(l.key));
+    if (!fila.length) throw new DisparoError("Não há ninguém na fila da Carol.");
+
+    let escolhidos = fila;
+    if (pedido !== "todos") {
+      const quero = new Set(pedido.map((t) => phoneKey(t)).filter(Boolean));
+      escolhidos = fila.filter((l) => quero.has(l.key));
+      if (!escolhidos.length) throw new DisparoError("Marque pelo menos um contato da fila.");
     }
+    const chaves = [...new Set(escolhidos.map((l) => l.key))];
 
     // Nunca dois disparos ao mesmo tempo: a mesma pessoa receberia duas mensagens.
     const anterior = g.__radarDisparo ? progressoDoDisparo(g.__radarDisparo.chaves, g.__radarDisparo.iniciadoEm, linhas, agora) : null;
@@ -124,12 +141,28 @@ export function iniciarDisparo(): Promise<StatusDisparo> {
       );
     }
 
+    // Só os escolhidos ficam "pendente"; o resto (inclusive números bloqueados) vira "aguardando".
+    await atualizarStatusLinhas(mudancasParaDisparo(linhas, new Set(chaves), cfg.statusAguardando));
+
+    // Confere na planilha antes de chamar o n8n.
+    const conferencia = (await lerLinhas(0)).filter(paraON8n).map((l) => l.key);
+    const esperado = new Set(chaves);
+    const sobrando = conferencia.filter((k) => !esperado.has(k));
+    const faltando = chaves.filter((k) => !conferencia.includes(k));
+    const repetidos = conferencia.length - new Set(conferencia).size;
+    if (sobrando.length || faltando.length || repetidos) {
+      throw new DisparoError(
+        `A planilha não ficou como esperado (${sobrando.length} pendente(s) a mais, ${faltando.length} a menos). Por segurança o n8n não foi chamado. Tente de novo.`,
+        409,
+      );
+    }
+
     if (cfg.mock) {
       simularN8n();
     } else {
-      await chamarN8n(pendentes.length);
+      await chamarN8n(chaves.length);
     }
-    g.__radarDisparo = { iniciadoEm: agora, chaves: [...new Set(pendentes.map((l) => l.key).filter(Boolean))] };
+    g.__radarDisparo = { iniciadoEm: agora, chaves };
     esquecerAbaLeads();
     return statusDisparo();
   });

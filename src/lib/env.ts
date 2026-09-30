@@ -90,6 +90,8 @@ export function getConfig() {
     n8nDisparoHeader: str("N8N_DISPARO_HEADER", "X-Radar-Token"),
     // Só para mostrar na tela: limite diário da Carol no n8n (CAROL_LIMITE_DIARIO de lá; sem ela o n8n usa 5).
     limiteDiarioCarol: int("LIMITE_DIARIO_CAROL", 5),
+    // Status de quem está na fila mas não foi marcado no disparo (o n8n só dispara "pendente").
+    statusAguardando: str("STATUS_AGUARDANDO", "aguardando"),
     // Telefones que nunca entram (ex.: o próprio Lavacar). Separados por vírgula.
     telefonesBloqueados: str("TELEFONES_BLOQUEADOS", "5531982149012")
       .split(/[,;\s]+/)

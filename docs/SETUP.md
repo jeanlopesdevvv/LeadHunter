@@ -137,11 +137,19 @@ O passo a passo também aparece dentro do Radar, na tela **Disparo**, enquanto o
 Opcional: para uma senha a mais, ligue *Header Auth* no nó (credencial com *Name* `X-Radar-Token`) e coloque o
 mesmo valor em `N8N_DISPARO_TOKEN`.
 
+Como o disparo escolhe quem recebe:
+- A fila do Radar mostra quem está `pendente` ou `aguardando` na planilha (com telefone e sem optout). Você marca quem vai
+  receber (um, alguns ou todos) e clica em **Disparar**.
+- O n8n manda mensagem para todo `pendente`. Por isso, antes de chamar o n8n, o Radar deixa como `pendente` só os marcados
+  e muda os outros pendentes para `aguardando` (status `STATUS_AGUARDANDO`). Eles continuam na fila do Radar para o próximo
+  disparo. Depois o Radar relê a planilha e só chama o n8n se os pendentes forem exatamente os marcados.
+- Quem ficou `aguardando` não é pego pelo botão manual do n8n; para disparar, use o Radar (ou volte o status para `pendente`).
+
 Proteções:
 - O Radar nunca começa um segundo disparo enquanto o primeiro está enviando, nem se a Carol mandou mensagem nos
   últimos 90 segundos (alguém rodando o fluxo direto no n8n). Assim ninguém recebe duas vezes.
 - Números bloqueados (`TELEFONES_BLOQUEADOS`, padrão: o do próprio Lavacar) não aparecem nas buscas, não vão para a
-  planilha e travam o disparo se estiverem pendentes na planilha.
+  planilha e nunca entram num disparo (se estiverem pendentes na planilha, viram `aguardando`).
 - O progresso vem da planilha: se ficar mais de 4 minutos sem novidade com gente aguardando, a tela mostra
   "O disparo parou" (quase sempre o limite diário da Carol; quem sobrou continua `pendente`).
 

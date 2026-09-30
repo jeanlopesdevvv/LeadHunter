@@ -4,6 +4,11 @@ import { classifyLead } from "@/lib/classify";
 import { cityFromInput, splitLines, splitRect, sugerirLimite } from "@/lib/geo";
 
 describe("classifyLead", () => {
+  it("lavador autônomo: nome com 'lavador' ou atendimento a domicílio", () => {
+    expect(classifyLead({ nome: "João Lavador", avaliacoes: 3 }).tipo).toBe("Autônomo");
+    expect(classifyLead({ nome: "Lava Jato Delivery BH", semPontoFisico: true, avaliacoes: 12 }).tipo).toBe("Autônomo");
+  });
+
   it("lava-jato com ponto físico e muitas avaliações é Empresa", () => {
     expect(classifyLead({ nome: "Lava Jato Brilho", endereco: "R. X, 10", avaliacoes: 180 }).tipo).toBe("Empresa");
   });

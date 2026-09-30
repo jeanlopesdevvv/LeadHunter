@@ -33,6 +33,9 @@ function strip(text: string): string {
 /** Palavras inteiras (evita "automovel" casar com "movel"). */
 const MOBILE_RE = /(^|[^a-z])(domicili\w*|delivery|movel|itinerante|vai ate voce|em casa|no seu endereco)([^a-z]|$)/;
 
+/** "João Lavador", "Lavadora Ana": pessoa que lava carros. */
+const LAVADOR_RE = /(^|[^a-z])(lavador|lavadora|lavadores)([^a-z]|$)/;
+
 const CORPORATE_RE =
   /(^|[^a-z])(ltda|eireli|s\/a|s\.a|epp|rede|franquia|unidade|filial|shopping|posto|centro automotivo|center|grupo|matriz)([^a-z]|$)/;
 
@@ -74,6 +77,11 @@ export function classifyLead(input: ClassifyInput): ClassifyResult {
   if (MOBILE_RE.test(nome)) {
     autonomo += 3;
     motivos.push("nome indica serviço a domicílio");
+  }
+
+  if (LAVADOR_RE.test(nome)) {
+    autonomo += 2;
+    motivos.push("nome indica lavador autônomo");
   }
 
   if (looksLikePersonName(input.nome)) {

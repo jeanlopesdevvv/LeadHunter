@@ -11,7 +11,7 @@ telefone        nome              tipo       cidade           status    mensagem
 
 ## Como funciona
 
-1. **Buscar**: o que procurar (ex.: `lava jato`, `estética automotiva`), onde, e **quantos contatos novos**
+1. **Buscar**: quem procurar (lava-jatos, lavadores autônomos ou os dois), onde, e **quantos contatos novos**
    você quer (20, 50, 100, 200, 500 ou outro número). A busca vai por rodadas (1ª página de cada termo × cidade,
    depois as seguintes) e para assim que achar essa quantidade de contatos com celular que ainda não estão na
    planilha. Quando o Google esgota os 60 resultados de uma consulta, o Radar divide o mapa da cidade em 4
@@ -20,8 +20,9 @@ telefone        nome              tipo       cidade           status    mensagem
    editável), nota, site e link do Maps. Os que já estão na planilha aparecem como *Já na planilha*.
    Exatamente a quantidade pedida já vem marcada.
 3. **Enviar**: os marcados vão para o fim da aba `leads` com `status = pendente`.
-4. **Disparar**: na tela *Disparo*, um botão manda o n8n (Fluxo 1) enviar a primeira mensagem da Carol para quem
-   está pendente, e a tela acompanha o envio lendo a planilha (enviado / sem WhatsApp / aguardando).
+4. **Disparar**: na tela *Disparo*, você marca quem recebe (um, alguns ou todos da fila) e um botão manda o n8n
+   (Fluxo 1) enviar a primeira mensagem da Carol; a tela acompanha o envio lendo a planilha (enviado / sem WhatsApp).
+   Os não marcados ficam como `aguardando` na planilha, para um próximo disparo.
    Nunca começa um segundo disparo por cima do primeiro. Configuração em [docs/SETUP.md](docs/SETUP.md#5-botão-de-disparo-n8n).
 
 ### Consultas grátis do mês

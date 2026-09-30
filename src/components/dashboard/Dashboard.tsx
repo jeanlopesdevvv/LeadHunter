@@ -43,19 +43,20 @@ export function podeEnviar(lead: Lead, incluirFixos: boolean): boolean {
 }
 
 const FORM_INICIAL: SearchForm = {
-  termos: "lava jato\nestética automotiva",
+  termos: "lava jato\nestética automotiva\nlavagem a domicílio\nlavador de carros",
   cidades: "Belo Horizonte - MG",
   alvo: 50,
   limite: null,
-  ignorarFechados: true,
+  ignorarFechados: false,
+  incluirFixos: true,
 };
 
-/** Marca os primeiros `max` que podem ir para a planilha (celular, fora da planilha). */
-function primeirosElegiveis(lista: Lead[], max: number): Set<string> {
+/** Marca os primeiros `max` que podem ir para a planilha (celular ou fixo permitido, fora da planilha). */
+function primeirosElegiveis(lista: Lead[], max: number, incluirFixos: boolean): Set<string> {
   const ids = new Set<string>();
   for (const l of lista) {
     if (ids.size >= max) break;
-    if (podeEnviar(l, false)) ids.add(l.id);
+    if (podeEnviar(l, incluirFixos)) ids.add(l.id);
   }
   return ids;
 }
@@ -73,14 +74,19 @@ export function Dashboard() {
   const [meta, setMeta] = useState<SearchMeta | null>(null);
   const [check, setCheck] = useState<CheckState>({ estado: "idle" });
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
-  const [incluirFixos, setIncluirFixos] = useState(false);
+  const [incluirFixos, setIncluirFixosState] = useState(FORM_INICIAL.incluirFixos);
+  const incluirFixosRef = useRef(FORM_INICIAL.incluirFixos);
+  const setIncluirFixos = useCallback((v: boolean) => {
+    incluirFixosRef.current = v;
+    setIncluirFixosState(v);
+  }, []);
   // O histórico só aparece na aba Histórico (nunca no primeiro desenho), então pode ser lido já na criação.
   const [historico, setHistorico] = useState<HistoryEntry[]>(() => (typeof window === "undefined" ? [] : loadHistory()));
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [uso, setUso] = useState<Uso | null>(null);
   const [atualizandoUso, setAtualizandoUso] = useState(false);
   const [enviarAberto, setEnviarAberto] = useState(false);
-  const [confirmarDisparo, setConfirmarDisparo] = useState(false);
+  const [preSelecaoDisparo, setPreSelecaoDisparo] = useState<string[] | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const sessaoRef = useRef<SessaoDeBusca | null>(null);
@@ -161,7 +167,7 @@ export function Dashboard() {
       const minha = geracao.current;
       const keys = [...new Set(leadsRef.current.map((l) => l.telefoneKey).filter(Boolean))];
       const aplicarSelecao = (lista: Lead[]) => {
-        if (selecionar !== false) setSelecionados(primeirosElegiveis(lista, selecionar));
+        if (selecionar !== false) setSelecionados(primeirosElegiveis(lista, selecionar, incluirFixosRef.current));
       };
       if (!keys.length) {
         setCheck({ estado: "ok" });
@@ -229,11 +235,11 @@ export function Dashboard() {
       if (!conferidos) return;
       const anterior = loadHistory().find((h) => h.id === metaBusca.id);
       setHistorico(upsertHistory({ ...metaBusca, total: conferidos.length, enviados: anterior?.enviados ?? 0, leads: conferidos }));
-      const novos = conferidos.filter((l) => podeEnviar(l, false)).length;
+      const novos = conferidos.filter((l) => podeEnviar(l, incluirFixosRef.current)).length;
       toast(
         novos
-          ? `${novos} contato${novos === 1 ? "" : "s"} novo${novos === 1 ? "" : "s"} com celular pronto${novos === 1 ? "" : "s"} para enviar.`
-          : "Nenhum contato novo desta vez: quem apareceu já está na planilha ou não tem celular.",
+          ? `${novos} contato${novos === 1 ? "" : "s"} novo${novos === 1 ? "" : "s"} pronto${novos === 1 ? "" : "s"} para enviar.`
+          : "Nenhum contato novo desta vez: quem apareceu já está na planilha ou não tem telefone.",
         novos ? "success" : "info",
       );
       setView("resultados");
@@ -254,6 +260,7 @@ export function Dashboard() {
     const novaMeta: SearchMeta = { id: crypto.randomUUID(), criadoEm: new Date().toISOString(), termos, cidades, alvo: form.alvo };
 
     sessaoRef.current = null;
+    setIncluirFixos(form.incluirFixos);
     setRodando(true);
     setTemMais(false);
     atualizarLeads([]);
@@ -285,7 +292,7 @@ export function Dashboard() {
       setUso(plano.uso);
       const { limite } = calcularLimite(form, plano.uso, maxPorBusca);
       if (limite <= 0) throw new Error(`As consultas grátis deste mês acabaram. Voltam em ${formatarRenovacaoCurta(plano.uso.renovaEm)}.`);
-      sessao = new SessaoDeBusca(plano, { ignorarFechados: form.ignorarFechados });
+      sessao = new SessaoDeBusca(plano, { ignorarFechados: form.ignorarFechados, incluirFixos: form.incluirFixos });
       sessaoRef.current = sessao;
       await executar(sessao, form.alvo, limite, controller, minha);
       const p = sessao.progresso;
@@ -304,7 +311,7 @@ export function Dashboard() {
       }
     }
     await finalizar(minha, novaMeta, sessao, falhou);
-  }, [form, uso, maxPorBusca, toast, atualizarLeads, executar, finalizar]);
+  }, [form, uso, maxPorBusca, toast, atualizarLeads, executar, finalizar, setIncluirFixos]);
 
   const continuar = useCallback(async () => {
     const sessao = sessaoRef.current;
@@ -397,7 +404,7 @@ export function Dashboard() {
     router.refresh();
   }, [router]);
 
-  const confirmacaoVista = useCallback(() => setConfirmarDisparo(false), []);
+  const preSelecaoVista = useCallback(() => setPreSelecaoDisparo(null), []);
 
   const podeEnviarParaPlanilha = check.estado !== "erro" && check.estado !== "checando";
 
@@ -453,7 +460,7 @@ export function Dashboard() {
           onConfig={() => irPara("config")}
         />
       )}
-      {view === "disparo" && <DisparoView confirmarAoAbrir={confirmarDisparo} onConfirmacaoVista={confirmacaoVista} />}
+      {view === "disparo" && <DisparoView preSelecao={preSelecaoDisparo} onPreSelecaoVista={preSelecaoVista} />}
       {view === "historico" && (
         <HistoryView
           historico={historico}
@@ -476,9 +483,9 @@ export function Dashboard() {
         check={check.info}
         onEnviado={aoEnviar}
         disparoConfigurado={Boolean(status?.disparo?.configurado)}
-        onDisparar={() => {
+        onDisparar={(keys) => {
           setEnviarAberto(false);
-          setConfirmarDisparo(true);
+          setPreSelecaoDisparo(keys);
           setView("disparo");
         }}
       />

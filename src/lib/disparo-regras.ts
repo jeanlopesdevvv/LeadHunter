@@ -12,7 +12,7 @@
 import { phoneKey } from "./phone";
 import { isOptout, type HeaderMap } from "./sheet-mapping";
 
-export type SituacaoDisparo = "pendente" | "enviado" | "sem_whatsapp" | "outro";
+export type SituacaoDisparo = "pendente" | "aguardando" | "enviado" | "sem_whatsapp" | "outro";
 
 export interface LinhaFila {
   /** Número da linha na planilha (a 1 é o cabeçalho). */
@@ -52,6 +52,7 @@ export function lerDataHora(valor: unknown): number | null {
 export function situacaoDoStatus(status: string): SituacaoDisparo {
   const s = status.trim().toLowerCase();
   if (s === "pendente") return "pendente";
+  if (s === "aguardando") return "aguardando";
   if (s === "enviado" || s === "enviada") return "enviado";
   if (s === "sem_whatsapp" || s === "sem whatsapp") return "sem_whatsapp";
   return "outro";
@@ -83,9 +84,33 @@ export function linhasDaFila(rows: unknown[][], map: HeaderMap): LinhaFila[] {
   return out;
 }
 
-/** Quem o n8n vai disparar: status pendente, com telefone e sem optout (mesma regra do fluxo). */
-export function naFila(l: LinhaFila): boolean {
+/** Quem o n8n dispara quando roda: status pendente, com telefone e sem optout (mesma regra do fluxo). */
+export function paraON8n(l: LinhaFila): boolean {
   return l.situacao === "pendente" && !l.optout && l.telefone.replace(/\D/g, "").length > 0;
+}
+
+/** Fila do Radar: pendentes + quem ficou "aguardando" num disparo anterior (com telefone e sem optout). */
+export function naFila(l: LinhaFila): boolean {
+  return (l.situacao === "pendente" || l.situacao === "aguardando") && !l.optout && l.telefone.replace(/\D/g, "").length > 0;
+}
+
+/**
+ * Mudanças de status para disparar só para os escolhidos: eles viram "pendente" e todo outro
+ * pendente (que o n8n pegaria) vira "aguardando". Quem já está certo não é tocado.
+ */
+export function mudancasParaDisparo(linhas: LinhaFila[], escolhidos: Set<string>, statusAguardando: string) {
+  const mudancas: { linha: number; key: string; status: string }[] = [];
+  const jaVai = new Set<string>(); // o mesmo telefone em duas linhas recebe uma vez só
+  for (const l of linhas) {
+    if (!l.key) continue;
+    if (escolhidos.has(l.key) && naFila(l) && !jaVai.has(l.key)) {
+      jaVai.add(l.key);
+      if (l.situacao !== "pendente") mudancas.push({ linha: l.linha, key: l.key, status: "pendente" });
+    } else if (paraON8n(l)) {
+      mudancas.push({ linha: l.linha, key: l.key, status: statusAguardando });
+    }
+  }
+  return mudancas;
 }
 
 /** "2026-09-29" em Brasília. */
@@ -198,7 +223,8 @@ export interface StatusDisparo {
   /** Só o endereço do n8n (sem caminho), para mostrar na tela. */
   destino: string;
   fila: number;
-  proximos: { nome: string; telefone: string; cidade: string }[];
+  /** Quem está na fila (pendente ou aguardando), na ordem da planilha. */
+  itensFila: { key: string; linha: number; nome: string; telefone: string; cidade: string; situacao: "pendente" | "aguardando" }[];
   hoje: ResumoDia;
   limiteDiario: number;
   /** A Carol mexeu na planilha há pouco e não foi o disparo acompanhado pelo Radar: alguém rodou o fluxo no n8n. */

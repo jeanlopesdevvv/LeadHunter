@@ -43,9 +43,10 @@ const CHEIA = PAGINAS_POR_CONSULTA * LUGARES_POR_PAGINA - 5;
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Conta como "novo" para o alvo: celular e fora da planilha. */
-export function contaComoNovo(lead: Lead): boolean {
-  return lead.telefoneTipo === "celular" && (lead.planilha === "novo" || lead.planilha === "desconhecido");
+/** Conta como "novo" para o alvo: celular (ou fixo, se permitido) e fora da planilha. */
+export function contaComoNovo(lead: Lead, incluirFixos = false): boolean {
+  const fone = lead.telefoneTipo === "celular" || (incluirFixos && lead.telefoneTipo === "fixo");
+  return fone && (lead.planilha === "novo" || lead.planilha === "desconhecido");
 }
 
 /**
@@ -62,13 +63,15 @@ export class SessaoDeBusca {
   private porTelefone = new Set<string>();
   private semArea = new Set<string>();
   readonly ignorarFechados: boolean;
+  readonly incluirFixos: boolean;
   readonly progresso: Progresso;
   ultimoUso: Uso | null;
 
-  constructor(plano: PlanResult, opts: { ignorarFechados: boolean }) {
+  constructor(plano: PlanResult, opts: { ignorarFechados: boolean; incluirFixos?: boolean }) {
     this.fila = plano.tarefas.map((t) => ({ ...t, paginas: 0, pageToken: null, recebidos: 0 }));
     this.areas = plano.areas;
     this.ignorarFechados = opts.ignorarFechados;
+    this.incluirFixos = Boolean(opts.incluirFixos);
     this.ultimoUso = plano.uso;
     this.progresso = {
       alvo: 0,
@@ -239,7 +242,7 @@ export class SessaoDeBusca {
       if (lead.telefoneKey) this.porTelefone.add(lead.telefoneKey);
       p.unicos++;
       if (lead.planilha === "existente" || lead.planilha === "optout") p.jaNaPlanilha++;
-      else if (lead.telefoneTipo !== "celular") p.semCelular++;
+      else if (!(lead.telefoneTipo === "celular" || (this.incluirFixos && lead.telefoneTipo === "fixo"))) p.semCelular++;
       else p.novos++;
     }
   }

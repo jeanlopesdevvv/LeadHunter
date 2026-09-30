@@ -1,5 +1,5 @@
 import { iniciarDisparo, statusDisparo } from "@/lib/disparo";
-import { handleError } from "@/lib/http";
+import { handleError, isString, jsonError, readJson } from "@/lib/http";
 
 export const maxDuration = 60;
 
@@ -13,10 +13,13 @@ export async function GET(request: Request) {
   }
 }
 
-/** Manda o n8n disparar a primeira mensagem para todos os pendentes. */
-export async function POST() {
+/** Manda o n8n disparar a primeira mensagem para os contatos escolhidos (ou toda a fila). */
+export async function POST(request: Request) {
+  const body = await readJson<{ telefones?: unknown; todos?: unknown }>(request);
+  const telefones = Array.isArray(body?.telefones) ? body.telefones.filter(isString).slice(0, 2000) : null;
+  if (!telefones && body?.todos !== true) return jsonError("Diga para quem disparar: marque os contatos da fila.");
   try {
-    return Response.json(await iniciarDisparo());
+    return Response.json(await iniciarDisparo(telefones ?? "todos"));
   } catch (e) {
     return handleError(e);
   }

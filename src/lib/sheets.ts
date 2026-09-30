@@ -227,6 +227,45 @@ export function esquecerAbaLeads() {
   cacheValores = null;
 }
 
+/**
+ * Troca o status de algumas linhas da aba leads (usado pelo disparo: "pendente" para quem vai
+ * receber agora, "aguardando" para quem fica para depois). Antes de gravar, confere se cada
+ * linha ainda tem o mesmo telefone; se a planilha mudou, não grava nada.
+ */
+export function atualizarStatusLinhas(mudancas: { linha: number; key: string; status: string }[]): Promise<void> {
+  return exclusivo(async () => {
+    if (!mudancas.length) return;
+    const cfg = getConfig();
+    const values: unknown[][] = cfg.mock ? (mockSheet().tabs[cfg.sheetTab] ?? mockSheet().tabs.leads) : await readValues();
+    const map = buildHeaderMap(values[0] ?? []);
+    if (map.status === undefined || map.telefone === undefined) throw new SheetsError(`A aba "${cfg.sheetTab}" precisa das colunas telefone e status.`, 400);
+    for (const m of mudancas) {
+      const row = values[m.linha - 1];
+      if (!row || phoneKey(row[map.telefone]) !== m.key) {
+        throw new SheetsError("A planilha mudou enquanto o Radar preparava o disparo (linhas mexidas). Nada foi alterado; tente de novo.", 409);
+      }
+    }
+    if (cfg.mock) {
+      for (const m of mudancas) {
+        const row = values[m.linha - 1] as unknown[];
+        while (row.length <= map.status) row.push("");
+        row[map.status] = m.status;
+      }
+    } else {
+      const col = columnLetter(map.status);
+      await sheetsFetch(`/values:batchUpdate`, {
+        method: "POST",
+        body: JSON.stringify({
+          valueInputOption: "RAW",
+          data: mudancas.map((m) => ({ range: `${quoteTab(cfg.sheetTab)}!${col}${m.linha}`, values: [[m.status]] })),
+        }),
+      });
+    }
+    esquecerAbaLeads();
+    esquecerExistentes();
+  });
+}
+
 export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
   return exclusivo(async () => {
     const cfg = getConfig();
