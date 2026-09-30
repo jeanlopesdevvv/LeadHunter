@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     uso,
     projetoGoogle: cfg.googleProjectId || cfg.serviceAccount?.project_id || "",
     disparo: {
-      configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl && cfg.n8nDisparoToken),
+      configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
       destino: cfg.mock ? "simulação" : destinoN8n(cfg.n8nDisparoUrl),
       limiteDiario: cfg.limiteDiarioCarol,
     },

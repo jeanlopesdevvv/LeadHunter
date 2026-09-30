@@ -92,7 +92,7 @@ export interface SendResultItem {
   key: string;
   telefone: string;
   nome: string;
-  motivo?: "ja_na_planilha" | "optout" | "repetido_no_lote" | "telefone_invalido";
+  motivo?: "ja_na_planilha" | "optout" | "repetido_no_lote" | "telefone_invalido" | "bloqueado";
 }
 
 export interface SendResult {

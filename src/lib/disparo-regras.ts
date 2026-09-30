@@ -15,6 +15,8 @@ import { isOptout, type HeaderMap } from "./sheet-mapping";
 export type SituacaoDisparo = "pendente" | "enviado" | "sem_whatsapp" | "outro";
 
 export interface LinhaFila {
+  /** Número da linha na planilha (a 1 é o cabeçalho). */
+  linha: number;
   key: string;
   telefone: string;
   nome: string;
@@ -59,13 +61,14 @@ export function situacaoDoStatus(status: string): SituacaoDisparo {
 export function linhasDaFila(rows: unknown[][], map: HeaderMap): LinhaFila[] {
   const col = (row: unknown[], i: number | undefined) => (i === undefined ? "" : row[i]);
   const out: LinhaFila[] = [];
-  for (const row of rows) {
-    if (!row || row.every((c) => String(c ?? "").trim() === "")) continue;
+  rows.forEach((row, i) => {
+    if (!row || row.every((c) => String(c ?? "").trim() === "")) return;
     const telefoneBruto = String(col(row, map.telefone) ?? "").trim();
     const status = String(col(row, map.status) ?? "").trim();
     const enviadaEm = col(row, map.mensagem_enviada_em);
     const optoutCel = col(row, map.optout);
     out.push({
+      linha: i + 2,
       key: phoneKey(telefoneBruto),
       telefone: telefoneBruto,
       nome: String(col(row, map.nome) ?? "").trim(),
@@ -76,7 +79,7 @@ export function linhasDaFila(rows: unknown[][], map: HeaderMap): LinhaFila[] {
       quando: lerDataHora(enviadaEm),
       detalhe: typeof enviadaEm === "string" && /erro/i.test(enviadaEm) ? enviadaEm.replace(/\s*-\s*\d{1,2}\/\d{1,2}\/\d{4}.*$/, "") : "",
     });
-  }
+  });
   return out;
 }
 
@@ -200,6 +203,8 @@ export interface StatusDisparo {
   limiteDiario: number;
   /** A Carol mexeu na planilha há pouco e não foi o disparo acompanhado pelo Radar: alguém rodou o fluxo no n8n. */
   movimentoRecente: boolean;
+  /** Números bloqueados (ex.: o próprio Lavacar) que estão pendentes na planilha: travam o disparo. */
+  bloqueadosNaFila: { nome: string; telefone: string; linha: number }[];
   atual: ProgressoDisparo | null;
   atualizadoEm: number;
 }

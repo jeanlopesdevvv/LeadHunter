@@ -158,6 +158,39 @@ describe("iniciar disparo (servidor)", () => {
     await expect(iniciarDisparo()).rejects.toThrow(/publicado/);
   });
 
+  it("trava se um número bloqueado (o próprio Lavacar) está pendente na planilha", async () => {
+    const chamadas = mockGoogle([
+      CAB,
+      ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
+      ["5531982149012", "Lavacar - Lava Jato Delivery", "Autônomo", "BH", "pendente", "", ""],
+    ]);
+    const { iniciarDisparo, statusDisparo } = await import("@/lib/disparo");
+    await expect(iniciarDisparo()).rejects.toThrow(/Lavacar - Lava Jato Delivery.*bloqueado.*linha 3.*optout/);
+    expect(chamadas).toHaveLength(0);
+    const s = await statusDisparo();
+    expect(s.bloqueadosNaFila).toEqual([{ nome: "Lavacar - Lava Jato Delivery", telefone: "5531982149012", linha: 3 }]);
+  });
+
+  it("com optout marcado o bloqueado sai da fila e o disparo segue", async () => {
+    const chamadas = mockGoogle([
+      CAB,
+      ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
+      ["5531982149012", "Lavacar - Lava Jato Delivery", "Autônomo", "BH", "pendente", "", "sim"],
+    ]);
+    const { iniciarDisparo } = await import("@/lib/disparo");
+    const s = await iniciarDisparo();
+    expect(chamadas).toHaveLength(1);
+    expect(s.atual?.total).toBe(1);
+  });
+
+  it("sem senha configurada, chama o webhook sem cabeçalho extra", async () => {
+    vi.stubEnv("N8N_DISPARO_TOKEN", "");
+    const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
+    const { iniciarDisparo } = await import("@/lib/disparo");
+    await iniciarDisparo();
+    expect(Object.keys(chamadas[0].headers as Record<string, string>)).toEqual(["Content-Type"]);
+  });
+
   it("sem pendentes não chama o n8n", async () => {
     const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "enviado", "01/09/2026, 10:00:00", ""]]);
     const { iniciarDisparo } = await import("@/lib/disparo");

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Clock, Loader2, MessageCircle, PauseCircle, RefreshCw, Send, Users, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Copy, Loader2, MessageCircle, PauseCircle, RefreshCw, Send, Users, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useToast } from "@/components/toast";
@@ -20,6 +20,85 @@ function minutos(segundos: number): string {
 
 function telefone(t: string): string {
   return normalizePhone(t).display || t;
+}
+
+/**
+ * Nó Webhook para colar no Fluxo 1 do n8n. O caminho leva um código aleatório:
+ * só quem tem o endereço (o Radar) consegue começar o disparo.
+ */
+function noParaN8n(): string {
+  const cod = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return JSON.stringify(
+    {
+      nodes: [
+        {
+          parameters: { httpMethod: "POST", path: `radar-disparo-${cod}`, options: {} },
+          type: "n8n-nodes-base.webhook",
+          typeVersion: 2,
+          position: [0, 220],
+          id: crypto.randomUUID(),
+          name: "Disparo pelo Radar",
+          webhookId: crypto.randomUUID(),
+        },
+      ],
+      connections: { "Disparo pelo Radar": { main: [[{ node: "Inicializar Limite Diário", type: "main", index: 0 }]] } },
+    },
+    null,
+    2,
+  );
+}
+
+function ComoLigar() {
+  const toast = useToast();
+  const passos: React.ReactNode[] = [
+    <>
+      Clique em <b>Copiar o nó</b> aqui embaixo.
+    </>,
+    <>
+      No n8n, abra o <b>Fluxo 1 - Disparo de Leads</b>, clique num espaço vazio do quadro e aperte <b>Ctrl+V</b>. Aparece o nó{" "}
+      <b>Disparo pelo Radar</b>. Se ele não vier ligado ao <b>Inicializar Limite Diário</b>, arraste da bolinha dele até esse nó.
+    </>,
+    <>
+      Clique em <b>Publish</b> (no alto, à direita) e confirme. Sem isso o endereço do nó não funciona.
+    </>,
+    <>
+      Dê dois cliques no nó <b>Disparo pelo Radar</b>, escolha <b>Production URL</b> e copie o endereço (termina com
+      /webhook/radar-disparo-…).
+    </>,
+    <>
+      No EasyPanel → serviço <b>radar</b> → <b>Ambiente</b>, acrescente uma linha <code className="rounded bg-white px-1">N8N_DISPARO_URL=</code>{" "}
+      seguida do endereço copiado. Salve e clique em <b>Implantar</b>.
+    </>,
+  ];
+  return (
+    <Card className="p-5 sm:p-6">
+      <p className="text-sm font-bold text-ink">Ligar o botão ao n8n (uma vez só, uns 3 minutos)</p>
+      <p className="mt-1 text-sm text-muted">O fluxo da Carol continua igual: ele só ganha um jeito de começar pelo Radar, além do botão manual.</p>
+      <ol className="mt-4 space-y-3 text-sm text-ink">
+        {passos.map((passo, i) => (
+          <li key={i} className="flex gap-3">
+            <Badge tone="brand" className="mt-0.5 size-6 shrink-0 justify-center p-0 text-xs">
+              {i + 1}
+            </Badge>
+            <span className="leading-relaxed">{passo}</span>
+          </li>
+        ))}
+      </ol>
+      <Button
+        className="mt-5"
+        variant="dark"
+        icon={<Copy className="size-4" />}
+        onClick={() =>
+          navigator.clipboard
+            .writeText(noParaN8n())
+            .then(() => toast("Nó copiado. Agora cole no Fluxo 1 do n8n com Ctrl+V.", "success"))
+            .catch(() => toast("Não deu para copiar. Tente de novo.", "error"))
+        }
+      >
+        Copiar o nó
+      </Button>
+    </Card>
+  );
 }
 
 function ChipSituacao({ item }: { item: ItemDisparo }) {
@@ -137,7 +216,7 @@ export function DisparoView({
 
   const s = status;
   const atual = s?.atual ?? null;
-  const bloqueado = !s || !s.configurado || s.fila === 0 || enviando || s.movimentoRecente;
+  const bloqueado = !s || !s.configurado || s.fila === 0 || enviando || s.movimentoRecente || s.bloqueadosNaFila.length > 0;
 
   return (
     <div className="space-y-6">
@@ -166,12 +245,19 @@ export function DisparoView({
         </div>
       )}
 
-      {s && !s.configurado && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      {s && !s.configurado && <ComoLigar />}
+
+      {s && s.bloqueadosNaFila.length > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>
-            O botão ainda não está ligado ao n8n. Falta colocar o nó <b>Disparo pelo Radar</b> no Fluxo 1 e as variáveis{" "}
-            <b>N8N_DISPARO_URL</b> e <b>N8N_DISPARO_TOKEN</b> no EasyPanel (passo a passo em docs/SETUP.md).
+            {s.bloqueadosNaFila.map((b) => (
+              <span key={b.linha} className="block">
+                <b>{b.nome || telefone(b.telefone)}</b> é um número bloqueado e está pendente na planilha (linha {b.linha}).
+              </span>
+            ))}
+            O n8n manda mensagem para todo pendente, então o disparo fica travado até você escrever <b>sim</b> na coluna <b>optout</b> dessa
+            linha (ou apagar a linha).
           </span>
         </div>
       )}

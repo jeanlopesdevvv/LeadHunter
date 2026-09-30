@@ -1,3 +1,4 @@
+import { telefonesBloqueados } from "@/lib/bloqueio";
 import { getConfig } from "@/lib/env";
 import { handleError, isString, jsonError, readJson } from "@/lib/http";
 import { mockSearchPage } from "@/lib/mock";
@@ -50,7 +51,9 @@ export async function POST(request: Request) {
   try {
     const result = cfg.mock ? await mockSearchPage(input) : await searchPage(input, cfg.placesApiKey);
     reserva.concluir(true);
-    const [leads, uso] = await Promise.all([marcarPlanilha(result.leads), obterUso()]);
+    const bloqueados = telefonesBloqueados();
+    const visiveis = result.leads.filter((l) => !l.telefoneKey || !bloqueados.has(l.telefoneKey));
+    const [leads, uso] = await Promise.all([marcarPlanilha(visiveis), obterUso()]);
     return Response.json({ ...result, leads, uso });
   } catch (e) {
     reserva.concluir(false);

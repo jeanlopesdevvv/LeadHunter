@@ -118,31 +118,36 @@ A tela **Disparo** manda o n8n rodar o *Fluxo 1 - Disparo de Leads* e mostra o p
 (`status` vira `enviado` ou `sem_whatsapp` e `mensagem_enviada_em` é preenchida). O fluxo continua igual; só ganha
 uma segunda forma de começar, além do botão *Execute workflow*.
 
-1. **Senha do disparo**: invente uma senha longa (ou use a que o Claude gerou no seu PC). Ela vai em dois lugares.
-2. **n8n → Fluxo 1**: copie o conteúdo de [`docs/n8n-no-disparo-pelo-radar.json`](n8n-no-disparo-pelo-radar.json), clique no
-   canvas e aperte **Ctrl+V**. Aparece o nó **Disparo pelo Radar** (Webhook, POST, caminho `radar-disparo`).
-   - Se a linha até **Inicializar Limite Diário** não aparecer, arraste da bolinha do novo nó até ele.
-   - Abra o nó → *Credential for Header Auth* → **Create new credential**:
-     *Name* `X-Radar-Token`, *Value* a senha do passo 1. Salve.
-   - Copie a **Production URL** do nó (termina em `/webhook/radar-disparo`).
-   - Salve o fluxo e clique em **Publish** (sem publicar, o endereço de produção não responde).
-3. **EasyPanel → radar → Ambiente**: acrescente e clique em **Implantar**:
+O passo a passo também aparece dentro do Radar, na tela **Disparo**, enquanto o botão não está ligado:
+
+1. Na tela Disparo do Radar, clique em **Copiar o nó**. Ele copia um nó Webhook chamado **Disparo pelo Radar**
+   (POST), com um código aleatório no endereço: só quem tem o endereço consegue começar o disparo.
+   Modelo em [`docs/n8n-no-disparo-pelo-radar.json`](n8n-no-disparo-pelo-radar.json); troque o código do `path` se usar esse.
+2. No n8n, abra o Fluxo 1, clique num espaço vazio do quadro e aperte **Ctrl+V**. Se a linha até
+   **Inicializar Limite Diário** não aparecer, arraste da bolinha do novo nó até ele.
+3. Clique em **Publish** (sem publicar, o endereço de produção não responde).
+4. Abra o nó e copie a **Production URL** (termina em `/webhook/radar-disparo-…`).
+5. **EasyPanel → radar → Ambiente**: acrescente e clique em **Implantar**:
 
    ```
    N8N_DISPARO_URL=cole-a-Production-URL
-   N8N_DISPARO_TOKEN=a-senha-do-passo-1
-   LIMITE_DIARIO_CAROL=o-mesmo-valor-de-CAROL_LIMITE_DIARIO-no-n8n
+   LIMITE_DIARIO_CAROL=5
    ```
+
+Opcional: para uma senha a mais, ligue *Header Auth* no nó (credencial com *Name* `X-Radar-Token`) e coloque o
+mesmo valor em `N8N_DISPARO_TOKEN`.
 
 Proteções:
 - O Radar nunca começa um segundo disparo enquanto o primeiro está enviando, nem se a Carol mandou mensagem nos
   últimos 90 segundos (alguém rodando o fluxo direto no n8n). Assim ninguém recebe duas vezes.
+- Números bloqueados (`TELEFONES_BLOQUEADOS`, padrão: o do próprio Lavacar) não aparecem nas buscas, não vão para a
+  planilha e travam o disparo se estiverem pendentes na planilha.
 - O progresso vem da planilha: se ficar mais de 4 minutos sem novidade com gente aguardando, a tela mostra
   "O disparo parou" (quase sempre o limite diário da Carol; quem sobrou continua `pendente`).
 
-Atenção ao limite diário: o nó *Checar Limite Diário* usa `CAROL_LIMITE_DIARIO` (ou **5**, se a variável não existir
-no n8n). O contador do dia só é guardado em execuções de produção (webhook). Então, pelo botão do Radar, o limite
-passa a valer para o dia inteiro, e não mais a cada execução manual.
+Limite diário: o nó *Checar Limite Diário* usa `CAROL_LIMITE_DIARIO` (ou **5**, se a variável não existir no n8n).
+Para aumentar, crie/ajuste `CAROL_LIMITE_DIARIO` no n8n e `LIMITE_DIARIO_CAROL` no Radar com o mesmo número.
+O contador do dia só é guardado em execuções de produção (webhook): pelo botão do Radar, o limite vale para o dia inteiro.
 
 ## 6. Conferir
 
@@ -172,7 +177,7 @@ passa a valer para o dia inteiro, e não mais a cada execução manual.
 | "Faltam colunas na linha 1 da aba leads" | A linha 1 precisa ter `telefone, nome, tipo, cidade, status`. |
 | Contador amarelo: "Contando só as buscas feitas pelo Radar…" | Passo 2.5: papel **Visualizador de monitoramento** para a conta de serviço. |
 | Disparo: "O n8n não reconheceu o endereço" | O Fluxo 1 precisa estar publicado (**Publish**) e `N8N_DISPARO_URL` tem que ser a *Production URL*. |
-| Disparo: "O n8n recusou a senha do disparo" | `N8N_DISPARO_TOKEN` diferente do *Value* da credencial Header Auth do nó. |
+| Disparo: "O n8n recusou o pedido" | Se o nó usa Header Auth, `N8N_DISPARO_TOKEN` precisa ser igual ao *Value* da credencial. |
 | "As 1.000 consultas grátis deste mês acabaram" | Espere a renovação (dia 1º, 04:00) ou, se aceitar pagar o excedente, `BLOQUEAR_NO_LIMITE=0`. |
 
 Trocar a senha: altere `APP_PASSWORD` no *Ambiente* do EasyPanel e clique **Implantar** (todas as sessões abertas caem).

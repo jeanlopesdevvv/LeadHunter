@@ -246,9 +246,7 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
               </p>
             ) : (
               <p>
-                Ainda não ligado. No Fluxo 1 do n8n, cole o nó <b className="text-ink">Disparo pelo Radar</b> e publique. Depois, no EasyPanel,
-                preencha <b className="text-ink">N8N_DISPARO_URL</b> (Production URL do nó) e <b className="text-ink">N8N_DISPARO_TOKEN</b> (a
-                mesma senha da credencial Header Auth) e clique em Implantar.
+                Ainda não ligado. O passo a passo (com o botão que copia o nó para o n8n) está na tela <b className="text-ink">Disparo</b>.
               </p>
             )}
           </Linha>

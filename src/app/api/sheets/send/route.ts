@@ -1,5 +1,6 @@
+import { telefonesBloqueados } from "@/lib/bloqueio";
 import { handleError, isString, jsonError, readJson } from "@/lib/http";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, phoneKey } from "@/lib/phone";
 import type { LeadForSheet } from "@/lib/sheet-mapping";
 import { appendLeads } from "@/lib/sheets";
 
@@ -37,8 +38,14 @@ export async function POST(request: Request) {
   if (body.leads.length > 1000) return jsonError("Envie no máximo 1.000 contatos por vez.");
   const leads = body.leads.map(toLead);
   if (leads.some((l) => !l)) return jsonError("Algum contato está com dados inválidos (telefone, nome, tipo ou cidade).");
+  const bloqueados = telefonesBloqueados();
+  const permitidos = (leads as LeadForSheet[]).filter((l) => !bloqueados.has(phoneKey(l.telefone)));
+  const barrados = (leads as LeadForSheet[])
+    .filter((l) => bloqueados.has(phoneKey(l.telefone)))
+    .map((l) => ({ key: phoneKey(l.telefone), telefone: l.telefone, nome: l.nome, motivo: "bloqueado" as const }));
   try {
-    return Response.json(await appendLeads(leads as LeadForSheet[]));
+    const r = await appendLeads(permitidos);
+    return Response.json({ ...r, ignorados: [...r.ignorados, ...barrados] });
   } catch (e) {
     return handleError(e);
   }

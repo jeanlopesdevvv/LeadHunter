@@ -13,6 +13,7 @@ const MOTIVOS: Record<string, string> = {
   optout: "pediram para não receber mensagens",
   repetido_no_lote: "apareciam duas vezes nesta lista",
   telefone_invalido: "tinham telefone inválido",
+  bloqueado: "são números bloqueados (ex.: o próprio Lavacar)",
 };
 
 export function SendDialog({
@@ -169,9 +170,17 @@ export function SendDialog({
               </ul>
             </div>
           )}
-          {resultado.adicionados.length > 0 && disparoConfigurado && (
+          {resultado.adicionados.length > 0 && (
             <div className="mx-auto max-w-sm rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-left text-sm text-brand-800">
-              Quer que a Carol já mande a primeira mensagem? Você acompanha o envio na tela <b>Disparo</b>.
+              {disparoConfigurado ? (
+                <>
+                  Quer que a Carol já mande a primeira mensagem? Você acompanha o envio na tela <b>Disparo</b>.
+                </>
+              ) : (
+                <>
+                  O botão de disparo ainda não está ligado ao n8n. Na tela <b>Disparo</b> tem o passo a passo (leva 3 minutos).
+                </>
+              )}
             </div>
           )}
           <div className="flex flex-col-reverse justify-center gap-2 sm:flex-row">
@@ -186,7 +195,7 @@ export function SendDialog({
             >
               <ExternalLink className="size-4" /> Abrir planilha
             </a>
-            {resultado.adicionados.length > 0 && disparoConfigurado && (
+            {resultado.adicionados.length > 0 && (
               <Button
                 onClick={() => {
                   setResultado(null);
@@ -194,7 +203,7 @@ export function SendDialog({
                 }}
                 icon={<Send className="size-4" />}
               >
-                Disparar agora
+                {disparoConfigurado ? "Disparar agora" : "Ir para o Disparo"}
               </Button>
             )}
           </div>

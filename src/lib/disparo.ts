@@ -10,6 +10,7 @@ import {
   type ProgressoDisparo,
   type StatusDisparo,
 } from "./disparo-regras";
+import { telefonesBloqueados } from "./bloqueio";
 import { getConfig } from "./env";
 import { mockSheet } from "./mock";
 import { esquecerAbaLeads, lerAbaLeads } from "./sheets";
@@ -53,9 +54,10 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
   const linhas = await lerLinhas();
   const fila = linhas.filter(naFila);
   const hoje = resumoDoDia(linhas, agora);
+  const bloqueados = telefonesBloqueados();
   const atual = g.__radarDisparo ? progressoDoDisparo(g.__radarDisparo.chaves, g.__radarDisparo.iniciadoEm, linhas, agora) : null;
   return {
-    configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl && cfg.n8nDisparoToken),
+    configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
     simulacao: cfg.mock,
     destino: cfg.mock ? "simulação" : destinoDe(cfg.n8nDisparoUrl),
     fila: fila.length,
@@ -63,6 +65,7 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
     hoje,
     limiteDiario: cfg.limiteDiarioCarol,
     movimentoRecente: atual?.estado !== "enviando" && movimentoDeFora(hoje.ultimoMovimento, atual, agora),
+    bloqueadosNaFila: fila.filter((l) => bloqueados.has(l.key)).map((l) => ({ nome: l.nome, telefone: l.telefone, linha: l.linha })),
     atual,
     atualizadoEm: agora,
   };
@@ -88,13 +91,24 @@ function exclusivo<T>(fn: () => Promise<T>): Promise<T> {
 export function iniciarDisparo(): Promise<StatusDisparo> {
   return exclusivo(async () => {
     const cfg = getConfig();
-    if (!cfg.mock && !(cfg.n8nDisparoUrl && cfg.n8nDisparoToken)) {
-      throw new DisparoError("O botão de disparo ainda não foi ligado ao n8n (faltam N8N_DISPARO_URL e N8N_DISPARO_TOKEN).", 503);
+    if (!cfg.mock && !cfg.n8nDisparoUrl) {
+      throw new DisparoError("O botão de disparo ainda não foi ligado ao n8n (falta N8N_DISPARO_URL no EasyPanel).", 503);
     }
     const agora = Date.now();
     const linhas = await lerLinhas(0); // leitura fresca na hora de disparar
     const pendentes = linhas.filter(naFila);
     if (!pendentes.length) throw new DisparoError("Não há ninguém pendente na planilha para a Carol chamar.");
+
+    // O n8n dispara para todo pendente da planilha: um número bloqueado ali receberia mensagem.
+    const bloqueados = telefonesBloqueados();
+    const barrado = pendentes.find((l) => bloqueados.has(l.key));
+    if (barrado) {
+      throw new DisparoError(
+        `"${barrado.nome || barrado.telefone}" é um número bloqueado e está pendente na planilha (linha ${barrado.linha}). ` +
+          "Escreva sim na coluna optout dessa linha (ou apague a linha) e tente de novo.",
+        409,
+      );
+    }
 
     // Nunca dois disparos ao mesmo tempo: a mesma pessoa receberia duas mensagens.
     const anterior = g.__radarDisparo ? progressoDoDisparo(g.__radarDisparo.chaves, g.__radarDisparo.iniciadoEm, linhas, agora) : null;
@@ -127,7 +141,7 @@ async function chamarN8n(pendentes: number) {
   try {
     res = await fetch(cfg.n8nDisparoUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", [cfg.n8nDisparoHeader]: cfg.n8nDisparoToken },
+      headers: { "Content-Type": "application/json", ...(cfg.n8nDisparoToken ? { [cfg.n8nDisparoHeader]: cfg.n8nDisparoToken } : {}) },
       body: JSON.stringify({ origem: "radar", pendentes, pedidoEm: new Date().toISOString() }),
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
@@ -144,7 +158,10 @@ async function chamarN8n(pendentes: number) {
     );
   }
   if (res.status === 401 || res.status === 403) {
-    throw new DisparoError("O n8n recusou a senha do disparo. N8N_DISPARO_TOKEN precisa ser igual ao valor da credencial Header Auth do nó.", 502);
+    throw new DisparoError(
+      "O n8n recusou o pedido. Se o nó \"Disparo pelo Radar\" usa Header Auth, N8N_DISPARO_TOKEN precisa ser igual ao valor da credencial.",
+      502,
+    );
   }
   throw new DisparoError(`O n8n respondeu com erro (${res.status})${texto ? `: ${texto}` : ""}.`, 502);
 }
