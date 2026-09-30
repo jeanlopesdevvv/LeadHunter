@@ -13,11 +13,11 @@ type Variant = "primary" | "dark" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "lift bg-brand text-white shadow-brand hover:bg-brand-600 hover:shadow-[0_14px_34px_-10px_rgb(3_171_201_/_0.7)] active:bg-brand-700",
+  primary: "lift bg-brand text-white shadow-brand hover:bg-brand-600 hover:shadow-[0_14px_34px_-10px_rgb(3_171_201_/_0.7)] active:bg-brand-press",
   dark: "lift bg-navy text-white hover:bg-navy-800",
-  outline: "bg-white text-brand-700 border border-brand-200 hover:border-brand hover:bg-brand-50",
-  ghost: "text-muted hover:text-ink hover:bg-navy/5",
-  danger: "bg-white text-red-600 border border-red-200 hover:bg-red-50",
+  outline: "bg-card text-brand-700 border border-brand-200 hover:border-brand hover:bg-brand-50",
+  ghost: "text-muted hover:text-ink hover:bg-strong/5",
+  danger: "bg-card text-red-600 border border-red-200 hover:bg-red-50",
 };
 
 const SIZES: Record<Size, string> = {
@@ -57,7 +57,7 @@ export function Button({
 
 export function Card({ className, children, style }: { className?: string; children: ReactNode; style?: CSSProperties }) {
   return (
-    <div className={cx("rounded-2xl border border-line bg-white shadow-card", className)} style={style}>
+    <div className={cx("rounded-2xl border border-line bg-card shadow-card", className)} style={style}>
       {children}
     </div>
   );
@@ -129,7 +129,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cx(
               "rounded-xl border px-3.5 py-3 text-left transition-all",
-              active ? "border-brand bg-brand-50 ring-2 ring-brand/15" : "border-line bg-white hover:border-brand-200",
+              active ? "border-brand bg-brand-50 ring-2 ring-brand/15" : "border-line bg-card hover:border-brand-200",
             )}
           >
             <span className={cx("block text-sm font-bold", active ? "text-brand-700" : "text-ink")}>{o.label}</span>
@@ -168,17 +168,17 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-navy/60 p-0 backdrop-blur-sm animate-fade-in sm:items-center sm:p-6" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-sidebar/70 p-0 backdrop-blur-sm animate-fade-in sm:items-center sm:p-6" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
         className={cx(
-          "max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-2xl animate-slide-up scrollbar-thin sm:rounded-2xl",
+          "max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-card shadow-2xl animate-slide-up scrollbar-thin sm:rounded-2xl",
           wide ? "sm:max-w-3xl" : "sm:max-w-lg",
         )}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-card/95 px-5 py-4 backdrop-blur sm:px-6">
           <h2 className="text-base font-bold text-ink">{title}</h2>
           <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-ink" aria-label="Fechar">
             <X className="size-5" />
@@ -219,4 +219,4 @@ export function Field({ label, hint, children, htmlFor }: { label: string; hint?
 }
 
 export const inputClass =
-  "w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400 transition focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none";
+  "w-full rounded-xl border border-line bg-card px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400 transition focus:border-brand focus:ring-4 focus:ring-brand/10 focus:outline-none";

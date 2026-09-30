@@ -1,10 +1,11 @@
 "use client";
 
-import { ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, WifiOff } from "lucide-react";
+import { ArrowUpRight, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, WifiOff } from "lucide-react";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
 import { Logo } from "@/components/Logo";
+import { BotaoTema, SeletorTema } from "@/components/tema";
 import { cx } from "@/components/ui";
 import type { Uso } from "@/lib/types";
 
@@ -79,42 +80,44 @@ export function Shell({
   return (
     <div className="min-h-screen lg:pl-64">
       {!online && (
-        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-semibold text-navy shadow-lg animate-slide-up lg:left-64">
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-semibold text-strong shadow-lg animate-slide-up lg:left-64">
           <WifiOff className="size-4" /> Sem conexão com a internet. Nada se perde: o Radar continua sozinho quando a conexão voltar.
         </div>
       )}
       {/* Barra lateral (desktop) */}
-      <aside className="glow-tl fixed inset-y-0 left-0 z-30 hidden w-64 flex-col px-4 py-6 text-white lg:flex">
+      <aside className="glow-tl scrollbar-thin fixed inset-y-0 left-0 z-30 hidden w-64 flex-col overflow-y-auto px-4 py-6 text-white lg:flex">
         <div className="px-2">
           <Logo dark />
         </div>
         {urlAtendimento && (
-          <a
-            href={urlAtendimento}
-            target="lavacar-chatwoot"
-            onClick={(e) => {
-              e.preventDefault();
-              abrirAtendimento(urlAtendimento);
-            }}
-            title="Abrir o atendimento no Chatwoot (atalho: Alt + A)"
-            className="group mt-8 flex items-center gap-3 rounded-2xl bg-brand px-3.5 py-3 text-white shadow-[0_10px_30px_-12px_rgb(3_171_201_/_0.9)] transition hover:bg-brand-600"
-          >
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/15">
-              <Headset className="size-[18px]" />
-            </span>
-            <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-sm font-bold">Atendimento</span>
-              <span className="block text-[11px] text-white/75">Chatwoot · Alt + A</span>
-            </span>
-            {chatwoot?.naVisao != null && (
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-extrabold text-brand-700 tabular-nums" title="Conversas nessa visão do Chatwoot">
-                {chatwoot.naVisao}
+          <div className="mt-8">
+            <a
+              href={urlAtendimento}
+              target="lavacar-chatwoot"
+              onClick={(e) => {
+                e.preventDefault();
+                abrirAtendimento(urlAtendimento);
+              }}
+              title="Abrir o atendimento no Chatwoot (Alt + A)"
+              className="group block rounded-2xl bg-gradient-to-br from-brand to-brand-600 p-4 text-white shadow-[0_12px_32px_-14px_rgb(3_171_201_/_0.9)] ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-14px_rgb(3_171_201_/_1)]"
+            >
+              <span className="flex items-center justify-between">
+                <span className="grid size-10 place-items-center rounded-xl bg-white/15 ring-1 ring-white/20">
+                  <Headset className="size-5" />
+                </span>
+                <ArrowUpRight className="size-[18px] text-white/70 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-white" />
               </span>
-            )}
-            <ExternalLink className="size-3.5 shrink-0 text-white/70 transition group-hover:text-white" />
-          </a>
+              <span className="mt-3.5 block text-[15px] leading-tight font-bold">Atendimento</span>
+              <span className="mt-1 block text-[12.5px] leading-snug text-white/80">Abrir conversas no Chatwoot</span>
+            </a>
+            <p className="mt-2 flex items-center justify-center gap-1 text-[11px] text-white/40">
+              Atalho
+              <kbd className="rounded-md border border-white/15 bg-white/[0.06] px-1.5 py-px font-sans text-[10.5px] font-semibold text-white/70">Alt</kbd>+
+              <kbd className="rounded-md border border-white/15 bg-white/[0.06] px-1.5 py-px font-sans text-[10.5px] font-semibold text-white/70">A</kbd>
+            </p>
+          </div>
         )}
-        <nav className={cx("flex flex-col gap-1", urlAtendimento ? "mt-6" : "mt-10")}>
+        <nav className={cx("flex flex-col gap-1", urlAtendimento ? "mt-5" : "mt-10")}>
           <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.18em] text-white/35 uppercase">Menu</p>
           {ITEMS.map(({ id, label, icon: Icon }) => (
             <button
@@ -135,6 +138,7 @@ export function Shell({
           <UsoMini uso={uso} />
         </div>
         <div className="flex flex-col gap-1 border-t border-white/10 pt-4">
+          <SeletorTema className="mb-2" />
           {simulacao && (
             <div className="mb-2 flex items-center gap-2 rounded-xl bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-300">
               <FlaskConical className="size-4" /> Modo simulação
@@ -172,9 +176,9 @@ export function Shell({
                 aria-label="Abrir o atendimento no Chatwoot"
               >
                 <Headset className="size-4" /> Atendimento
-                {chatwoot?.naVisao != null && <span className="rounded-full bg-white px-1.5 text-[10px] text-brand-700 tabular-nums">{chatwoot.naVisao}</span>}
               </button>
             )}
+            <BotaoTema />
             <button onClick={onSair} className="rounded-lg p-2 text-white/60 hover:text-white" aria-label="Sair">
               <LogOut className="size-5" />
             </button>

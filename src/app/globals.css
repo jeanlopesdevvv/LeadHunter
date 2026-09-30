@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* dark: vale quando o tema escuro está ligado (atributo data-theme no <html>). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* Tokens visuais do Lavacar (lavacar.app): ciano #03abc9, azul-noite #081021, Inter. */
 @theme {
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -24,6 +27,17 @@
   --color-muted: #667b99;
   --color-line: #e5e7eb;
   --color-surface: #f5f7fa;
+
+  /* Tokens que mudam no modo escuro (ver [data-theme="dark"] abaixo). */
+  --color-card: #ffffff;
+  --color-strong: #081021;
+  --color-sidebar: #081021;
+  --color-brand-press: #027a90;
+  --color-check: #c3cbd8;
+  --color-skeleton: #eaeef4;
+  /* Barras neutras do funil (Desempenho). */
+  --color-bar: #081021;
+  --color-bar-2: #22324f;
 
   --radius-xl: 0.75rem;
   --radius-2xl: 1rem;
@@ -87,10 +101,88 @@
   }
 }
 
+/*
+ * Modo escuro: mesmo padrão Lavacar (azul-noite + ciano), com superfícies escuras e textos claros.
+ * As classes do Tailwind usam as variáveis de cor, então basta trocar os valores aqui.
+ * Tons claros (50–200) viram fundos escuros com um toque da cor; tons de texto (600–900) clareiam.
+ */
+:root {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-surface: #0c1424;
+  --color-card: #121c2f;
+  --color-line: #233149;
+  --color-ink: #e4eaf3;
+  --color-muted: #8d9bb2;
+  --color-strong: #f2f6fb;
+  --color-sidebar: #060b17;
+  --color-check: #3a4a66;
+  --color-skeleton: #1c2940;
+  --color-bar: #b4c2d6;
+  --color-bar-2: #71859f;
+
+  /* Azul-noite dos botões escuros, avisos e barra de envio: um degrau acima do fundo. */
+  --color-navy: #1f2d47;
+  --color-navy-800: #293a5a;
+  --color-navy-600: #32466b;
+
+  --color-brand-50: #0c2a37;
+  --color-brand-100: #0f3848;
+  --color-brand-200: #155166;
+  --color-brand-700: #5fd3ea;
+  --color-brand-800: #9be6f4;
+
+  --color-emerald-50: #0c2a22;
+  --color-emerald-100: #11382d;
+  --color-emerald-200: #185040;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-900: #a7f3d0;
+
+  --color-amber-50: #2a2010;
+  --color-amber-100: #3a2c12;
+  --color-amber-200: #56411a;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-amber-900: #fef3c7;
+
+  --color-red-50: #2d1519;
+  --color-red-100: #3e1c21;
+  --color-red-200: #5a232b;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+
+  --color-slate-100: #1b2638;
+  --color-slate-200: #2a3850;
+  --color-slate-300: #3a4a66;
+  --color-slate-600: #c3cfe0;
+  --color-sky-600: #38bdf8;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  --shadow-brand: 0 10px 30px -12px rgb(3 171 201 / 0.45);
+}
+
 html,
 body {
   background: var(--color-surface);
   color: var(--color-ink);
+}
+
+/* Troca de tema suave (só cores; sem mexer em animações). */
+html.trocando-tema,
+html.trocando-tema *,
+html.trocando-tema *::before,
+html.trocando-tema *::after {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    fill 0.25s ease !important;
 }
 
 body {
@@ -100,7 +192,7 @@ body {
 
 ::selection {
   background: var(--color-brand-100);
-  color: var(--color-navy);
+  color: var(--color-strong);
 }
 
 .eyebrow {
@@ -120,7 +212,7 @@ body {
 .glow-tl {
   background:
     radial-gradient(600px 380px at -10% -10%, rgb(3 171 201 / 0.22), transparent 60%),
-    var(--color-navy);
+    var(--color-sidebar);
 }
 
 .glow-br {
@@ -139,8 +231,8 @@ input[type="checkbox"].check {
   width: 1.05rem;
   height: 1.05rem;
   border-radius: 0.3rem;
-  border: 1.5px solid #c3cbd8;
-  background: #fff;
+  border: 1.5px solid var(--color-check);
+  background: var(--color-card);
   display: inline-grid;
   place-content: center;
   cursor: pointer;
@@ -202,7 +294,7 @@ input[type="checkbox"].check:focus-visible {
 
 /* Esqueleto de carregamento. */
 .skeleton {
-  background: linear-gradient(100deg, var(--color-surface) 30%, #eaeef4 50%, var(--color-surface) 70%);
+  background: linear-gradient(100deg, var(--color-surface) 30%, var(--color-skeleton) 50%, var(--color-surface) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
 }

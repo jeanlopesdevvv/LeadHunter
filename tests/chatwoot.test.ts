@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/** Atalho do atendimento: tela padrão, conversa do contato e contagem da visão. */
+/** Atalho do atendimento: tela padrão e conversa do contato. */
 
 beforeEach(() => {
   vi.resetModules();
@@ -17,10 +17,9 @@ describe("atalho do Chatwoot", () => {
   it("lê conta e visão do endereço; sem token, não chama a API", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    const { infoChatwoot, linkDaConversa, conversasNaVisao } = await import("@/lib/chatwoot");
+    const { infoChatwoot, linkDaConversa } = await import("@/lib/chatwoot");
     expect(infoChatwoot()).toMatchObject({ origem: "https://chat.exemplo.app", conta: "1", visao: "6", apiLigada: false });
     expect(await linkDaConversa("5531982999779")).toBeNull();
-    expect(await conversasNaVisao()).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -55,23 +54,6 @@ describe("atalho do Chatwoot", () => {
     );
     const { linkDaConversa } = await import("@/lib/chatwoot");
     expect(await linkDaConversa("5531982999779")).toBeNull();
-  });
-
-  it("conta as conversas da visão configurada", async () => {
-    vi.stubEnv("CHATWOOT_TOKEN", "token-de-teste");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.endsWith("/custom_filters/6")) return Response.json({ query: { payload: [{ attribute_key: "labels", values: ["ia-cuidando"] }] } });
-        if (url.includes("/conversations/filter")) {
-          expect(JSON.parse(String(init?.body))).toMatchObject({ payload: [{ attribute_key: "labels" }] });
-          return Response.json({ meta: { all_count: 4 }, payload: [] });
-        }
-        return new Response("{}", { status: 404 });
-      }),
-    );
-    const { conversasNaVisao } = await import("@/lib/chatwoot");
-    expect(await conversasNaVisao()).toBe(4);
   });
 
   it("a rota de abrir redireciona para a tela padrão quando não acha a conversa", async () => {

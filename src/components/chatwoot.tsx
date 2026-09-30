@@ -1,7 +1,7 @@
 "use client";
 
 import { Headset } from "lucide-react";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
 import { useToast } from "@/components/toast";
 import { cx } from "@/components/ui";
@@ -14,7 +14,6 @@ export const ABA_CHATWOOT = "lavacar-chatwoot";
 export interface EstadoChatwoot {
   url: string;
   apiLigada: boolean;
-  naVisao: number | null;
 }
 
 let estado: EstadoChatwoot | null = null;
@@ -45,20 +44,13 @@ function assinar(f: () => void) {
   return () => ouvintes.delete(f);
 }
 
-/** Endereço do atendimento e quantas conversas estão na visão (com token). Atualiza a cada minuto. */
+/** Endereço do atendimento (lido uma vez do servidor). */
 export function useChatwoot(): EstadoChatwoot | null {
-  const e = useSyncExternalStore(
+  return useSyncExternalStore(
     assinar,
     () => estado,
     () => null,
   );
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") atualizarChatwoot();
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-  return e;
 }
 
 /** Abre a tela de atendimento na aba do Chatwoot (reaproveitando a mesma aba). */

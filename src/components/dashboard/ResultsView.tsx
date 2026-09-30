@@ -217,7 +217,7 @@ export function ResultsView({
         <div className="grid size-16 animate-float place-items-center rounded-2xl bg-brand-50 text-brand">
           {rodando ? <Loader2 className="size-7 animate-spin" /> : <Search className="size-7" />}
         </div>
-        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Buscando…" : "Nenhuma lista ainda"}</h1>
+        <h1 className="display mt-6 text-3xl text-strong">{rodando ? "Buscando…" : "Nenhuma lista ainda"}</h1>
         <p className="mt-2 max-w-sm text-sm text-muted">
           {rodando
             ? "As oportunidades aparecem aqui conforme a busca avança."
@@ -239,7 +239,7 @@ export function ResultsView({
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="eyebrow">Resultado da busca</p>
-          <h1 className="display mt-3 text-4xl text-navy">
+          <h1 className="display mt-3 text-4xl text-strong">
             <AnimatedNumber value={leads.length} /> <span className="text-brand">{leads.length === 1 ? "estabelecimento encontrado" : "estabelecimentos encontrados"}</span>
           </h1>
           {meta && (
@@ -375,7 +375,7 @@ export function ResultsView({
           <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Permitir telefone fixo" hint="Alguns fixos têm WhatsApp Business." />
         </div>
         {situacao === "disponiveis" && naPlanilha > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-white px-4 py-2 text-xs text-muted">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-4 py-2 text-xs text-muted">
             <span>
               <b className="text-ink tabular-nums">{naPlanilha}</b> {naPlanilha === 1 ? "contato que já estava" : "contatos que já estavam"} na planilha{" "}
               {naPlanilha === 1 ? "está escondido" : "estão escondidos"} para não atrapalhar.
@@ -439,7 +439,7 @@ export function ResultsView({
                         value={l.tipo}
                         onChange={(e) => trocarTipo(l.id, e.target.value as LeadTipo)}
                         title={l.tipoMotivos.join(" · ")}
-                        className="rounded-lg border border-line bg-white px-2 py-1 text-xs font-semibold text-ink focus:border-brand focus:outline-none"
+                        className="rounded-lg border border-line bg-card px-2 py-1 text-xs font-semibold text-ink focus:border-brand focus:outline-none"
                       >
                         <option>Empresa</option>
                         <option>Autônomo</option>
@@ -514,7 +514,7 @@ export function ResultsView({
                     <select
                       value={l.tipo}
                       onChange={(e) => trocarTipo(l.id, e.target.value as LeadTipo)}
-                      className="rounded-lg border border-line bg-white px-2 py-0.5 text-xs font-semibold"
+                      className="rounded-lg border border-line bg-card px-2 py-0.5 text-xs font-semibold"
                       aria-label="Tipo"
                     >
                       <option>Empresa</option>

@@ -35,7 +35,7 @@ export function InstalarTrava({ className, aberto = false }: { className?: strin
   }
 
   return (
-    <details open={aberto} className={cx("group rounded-xl border border-line bg-white px-4 py-3 text-sm", className)}>
+    <details open={aberto} className={cx("group rounded-xl border border-line bg-card px-4 py-3 text-sm", className)}>
       <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold text-ink">
         <ShieldAlert className="size-4 text-amber-500" />
         Como instalar a trava no n8n (uma vez só, 3 minutos)

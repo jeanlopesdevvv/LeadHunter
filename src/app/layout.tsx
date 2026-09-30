@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
+import { SCRIPT_TEMA } from "@/lib/tema-script";
 import { ToastProvider } from "@/components/toast";
 
 import "./globals.css";
@@ -27,7 +28,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} h-full`}>
+    <html lang="pt-BR" className={`${inter.variable} h-full`} suppressHydrationWarning>
+      <head>
+        {/* Aplica o tema (claro/escuro) antes de pintar a página, sem piscar. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
+      </head>
       <body className="min-h-full">
         <ToastProvider>{children}</ToastProvider>
       </body>

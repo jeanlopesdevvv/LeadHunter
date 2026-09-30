@@ -13,7 +13,7 @@ function tom(uso: Uso) {
   const fracao = uso.limite ? uso.restantes / uso.limite : 0;
   if (uso.restantes <= 0) return { barra: "bg-red-500", texto: "text-red-600" };
   if (fracao < 0.15) return { barra: "bg-amber-500", texto: "text-amber-600" };
-  return { barra: "bg-brand", texto: "text-navy" };
+  return { barra: "bg-brand", texto: "text-strong" };
 }
 
 function Barra({ uso, escura }: { uso: Uso; escura?: boolean }) {

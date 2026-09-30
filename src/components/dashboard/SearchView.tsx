@@ -77,7 +77,7 @@ function Chip({ onClick, disabled, children }: { onClick: () => void; disabled?:
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-xs font-medium text-muted transition hover:border-brand-200 hover:text-brand-700 disabled:opacity-50"
+      className="inline-flex items-center gap-1 rounded-full border border-line bg-card px-2.5 py-1 text-xs font-medium text-muted transition hover:border-brand-200 hover:text-brand-700 disabled:opacity-50"
     >
       <Plus className="size-3" /> {children}
     </button>
@@ -128,7 +128,7 @@ export function SearchView({
     <div className="space-y-6">
       <header>
         <p className="eyebrow">Nova prospecção</p>
-        <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
+        <h1 className="display mt-3 text-4xl text-strong sm:text-5xl">
           Novos parceiros <span className="text-brand">para o Lavacar.</span>
         </h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -163,7 +163,7 @@ export function SearchView({
                     onClick={() => set({ termos: PUBLICOS[k].termos.join("\n") })}
                     className={cx(
                       "h-10 rounded-xl border px-4 text-sm font-bold transition-all",
-                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-white text-ink hover:border-brand-200",
+                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-card text-ink hover:border-brand-200",
                     )}
                   >
                     {PUBLICOS[k].rotulo}
@@ -241,7 +241,7 @@ export function SearchView({
                     }}
                     className={cx(
                       "h-11 min-w-16 rounded-xl border px-4 text-sm font-bold tabular-nums transition-all",
-                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-white text-ink hover:border-brand-200",
+                      ativo ? "border-brand bg-brand-50 text-brand-700 ring-2 ring-brand/15" : "border-line bg-card text-ink hover:border-brand-200",
                     )}
                   >
                     {q}
@@ -251,7 +251,7 @@ export function SearchView({
               <div
                 className={cx(
                   "flex h-11 items-center gap-2 rounded-xl border pr-2 pl-3 transition-all",
-                  outro ? "border-brand bg-brand-50 ring-2 ring-brand/15" : "border-line bg-white",
+                  outro ? "border-brand bg-brand-50 ring-2 ring-brand/15" : "border-line bg-card",
                 )}
               >
                 <button
@@ -272,7 +272,7 @@ export function SearchView({
                     disabled={rodando}
                     value={form.alvo || ""}
                     onChange={(e) => set({ alvo: Math.max(0, Math.min(2000, Math.floor(Number(e.target.value) || 0))) })}
-                    className="h-8 w-20 rounded-lg border border-brand-200 bg-white px-2 text-sm font-bold text-ink tabular-nums focus:border-brand focus:outline-none"
+                    className="h-8 w-20 rounded-lg border border-brand-200 bg-card px-2 text-sm font-bold text-ink tabular-nums focus:border-brand focus:outline-none"
                     aria-label="Quantidade de contatos"
                   />
                 )}
@@ -332,7 +332,7 @@ export function SearchView({
                       disabled={rodando}
                       value={form.limite ?? sugerido}
                       onChange={(e) => set({ limite: Math.max(1, Math.min(maxPorBusca, Math.floor(Number(e.target.value) || 1))) })}
-                      className="h-8 w-20 rounded-lg border border-line bg-white px-2 text-sm font-bold tabular-nums focus:border-brand focus:outline-none"
+                      className="h-8 w-20 rounded-lg border border-line bg-card px-2 text-sm font-bold tabular-nums focus:border-brand focus:outline-none"
                     />
                     <span className="text-muted">consultas (até {n(maxPorBusca)})</span>
                     <button
@@ -484,7 +484,7 @@ function CartaoProgresso({
           </div>
         </div>
         <div className="text-left sm:text-right">
-          <div className={cx("text-4xl font-extrabold tabular-nums", p.fim === "alvo" ? "text-emerald-600" : "text-navy")}>
+          <div className={cx("text-4xl font-extrabold tabular-nums", p.fim === "alvo" ? "text-emerald-600" : "text-strong")}>
             <AnimatedNumber value={Math.min(p.novos, p.alvo)} /> <span className="text-lg font-bold text-muted">de {n(p.alvo)}</span>
           </div>
           <div className="text-xs font-semibold text-muted">

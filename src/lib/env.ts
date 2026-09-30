@@ -96,8 +96,7 @@ export function getConfig() {
     painelAbaSessoes: str("PAINEL_ABA_SESSOES", "sessoes_carol"),
     // Atendimento no Chatwoot: tela que o atalho do Radar abre (uma visão/pasta ou a caixa de entrada).
     chatwootUrl: str("CHATWOOT_URL", "https://chat.lavacar.app/app/accounts/1/custom_view/6"),
-    // Opcional: token de acesso de um agente do Chatwoot. Com ele, "Atender" abre a conversa exata
-    // do contato e o atalho mostra quantas conversas estão na visão.
+    // Opcional: token de acesso de um agente do Chatwoot. Com ele, "Atender" abre a conversa exata do contato.
     chatwootToken: str("CHATWOOT_TOKEN"),
     // Opcional: endereço da API do Chatwoot visto do servidor (padrão: o mesmo de CHATWOOT_URL).
     chatwootApiUrl: str("CHATWOOT_API_URL"),

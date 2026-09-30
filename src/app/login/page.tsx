@@ -64,7 +64,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
             <Logo />
           </div>
           <p className="eyebrow">Acesso restrito</p>
-          <h2 className="display mt-3 text-4xl text-navy">Acesse o Radar</h2>
+          <h2 className="display mt-3 text-4xl text-strong">Acesse o Radar</h2>
           <p className="mt-3 text-[15px] text-muted">Digite a senha da equipe para entrar.</p>
           <LoginForm next={next} semSenha={semSenha} />
         </div>

@@ -34,8 +34,14 @@ telefone        nome              tipo       cidade           status    mensagem
 ### Atendimento no Chatwoot
 
 Botão **Atendimento** fixo no menu (e atalho **Alt + A** em qualquer tela) abre `CHATWOOT_URL` sempre na mesma aba.
-Em Desempenho e no Disparo, **Atender** abre a conversa do contato: com `CHATWOOT_TOKEN`, direto na conversa (e o botão
-mostra quantas conversas estão na visão); sem token, abre o Chatwoot e copia o telefone para colar na busca.
+Em Desempenho e no Disparo, **Atender** abre a conversa do contato: com `CHATWOOT_TOKEN`, direto na conversa; sem token,
+abre o Chatwoot e copia o telefone para colar na busca.
+
+### Modo escuro
+
+Seletor **Claro / Escuro / Sistema** no fim do menu (no celular, o ícone no topo). A escolha fica salva no navegador e
+"Sistema" segue o tema do computador. As cores são variáveis CSS em `globals.css` (`[data-theme="dark"]`), com o mesmo
+azul-noite e ciano do Lavacar.
 
 ### Não perde nada e aguenta falhas
 

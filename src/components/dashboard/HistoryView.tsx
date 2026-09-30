@@ -27,7 +27,7 @@ export function HistoryView({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
         <p className="eyebrow">Histórico</p>
-        <h1 className="display mt-3 text-4xl text-navy">
+        <h1 className="display mt-3 text-4xl text-strong">
           Buscas <span className="text-brand">recentes</span>
         </h1>
         <p className="mt-2 text-sm text-muted">

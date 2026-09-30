@@ -193,8 +193,8 @@ Como funciona:
 - `CHATWOOT_URL`: tela que o botão **Atendimento** abre (padrão: a visão "Carol - IA cuidando",
   `https://chat.lavacar.app/app/accounts/1/custom_view/6`). Atalho de teclado: **Alt + A**.
 - `CHATWOOT_TOKEN` (opcional, recomendado): token de acesso de um agente (Chatwoot → Perfil → Token de acesso). Com ele,
-  **Atender** abre a conversa exata do contato (busca pelo telefone, com e sem o 9) e o botão mostra quantas conversas
-  estão na visão. Sem ele, **Atender** abre o Chatwoot e copia o telefone para colar na busca.
+  **Atender** abre a conversa exata do contato (busca pelo telefone, com e sem o 9). Sem ele, **Atender** abre o
+  Chatwoot e copia o telefone para colar na busca.
 - `CHATWOOT_API_URL` (opcional): endereço interno, se o Radar não alcançar o endereço público.
 
 ### Desempenho dos disparos

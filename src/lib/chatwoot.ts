@@ -8,7 +8,7 @@ import { phoneKey } from "./phone";
  *
  * Sem token: o Radar só abre a tela configurada em CHATWOOT_URL.
  * Com CHATWOOT_TOKEN (token de acesso de um agente): acha a conversa do contato pelo telefone
- * (para o botão "Atender") e conta as conversas da visão configurada (número no atalho).
+ * (para o botão "Atender").
  */
 
 export interface InfoChatwoot {
@@ -91,29 +91,4 @@ export async function linkDaConversa(telefone: string): Promise<string | null> {
   }
   cacheConversa.set(key, { em: Date.now(), url });
   return url;
-}
-
-let cacheContagem: { em: number; valor: number | null } | null = null;
-
-/** Quantas conversas estão na visão configurada (ex.: "Carol - IA cuidando"). */
-export async function conversasNaVisao(): Promise<number | null> {
-  const info = infoChatwoot();
-  if (!info.apiLigada || !info.visao) return null;
-  if (cacheContagem && Date.now() - cacheContagem.em < 45_000) return cacheContagem.valor;
-  let valor: number | null = null;
-  try {
-    const filtro = await api<{ query?: { payload?: unknown[] } }>(`/custom_filters/${info.visao}`);
-    const payload = filtro.query?.payload;
-    if (Array.isArray(payload)) {
-      const r = await api<{ meta?: { all_count?: number } }>(`/conversations/filter?page=1`, {
-        method: "POST",
-        body: JSON.stringify({ payload }),
-      });
-      valor = typeof r.meta?.all_count === "number" ? r.meta.all_count : null;
-    }
-  } catch {
-    valor = null;
-  }
-  cacheContagem = { em: Date.now(), valor };
-  return valor;
 }

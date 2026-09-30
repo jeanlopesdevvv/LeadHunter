@@ -75,7 +75,7 @@ function Copiavel({ texto }: { texto: string }) {
       <code className="min-w-0 flex-1 truncate text-[13px] text-ink">{texto}</code>
       <button
         onClick={() => navigator.clipboard.writeText(texto).then(() => toast("Copiado.", "success"))}
-        className="rounded-lg p-1.5 text-muted hover:bg-white hover:text-ink"
+        className="rounded-lg p-1.5 text-muted hover:bg-card hover:text-ink"
         aria-label="Copiar"
       >
         <Copy className="size-4" />
@@ -107,7 +107,7 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Configuração</p>
-          <h1 className="display mt-3 text-4xl text-navy">
+          <h1 className="display mt-3 text-4xl text-strong">
             Status das <span className="text-brand">integrações</span>
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">Confira se o Radar está conectado a todos os serviços que usa.</p>
@@ -229,7 +229,7 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
           </Card>
 
           {/* Só para quem configura o Radar: fechado por padrão. */}
-          <details className="rounded-2xl border border-line bg-white px-5 py-4 text-sm text-muted">
+          <details className="rounded-2xl border border-line bg-card px-5 py-4 text-sm text-muted">
             <summary className="cursor-pointer font-semibold text-ink">Área do administrador</summary>
             <div className="mt-4 space-y-5">
               {p?.contaServico && (

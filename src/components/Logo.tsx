@@ -16,7 +16,7 @@ export function Logo({ dark = false, className }: { dark?: boolean; className?: 
     <span className={cx("inline-flex items-center gap-2.5", className)}>
       <LogoMark className="size-9" />
       <span className="flex flex-col leading-none">
-        <span className={cx("text-[21px] font-extrabold tracking-[-0.04em]", dark ? "text-white" : "text-navy")}>
+        <span className={cx("text-[21px] font-extrabold tracking-[-0.04em]", dark ? "text-white" : "text-strong")}>
           ra<span className="text-brand">dar</span>
         </span>
         <span className={cx("mt-1 text-[10px] font-semibold tracking-[0.14em] uppercase", dark ? "text-white/45" : "text-muted")}>

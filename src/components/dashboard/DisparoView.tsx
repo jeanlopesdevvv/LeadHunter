@@ -359,7 +359,7 @@ export function DisparoView({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Disparo</p>
-          <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
+          <h1 className="display mt-3 text-4xl text-strong sm:text-5xl">
             A Carol faz o primeiro contato <span className="text-brand">no WhatsApp.</span>
           </h1>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -405,7 +405,7 @@ export function DisparoView({
       )}
 
       {s && s.bloqueadosNaFila.length > 0 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-line bg-white px-4 py-3 text-sm text-muted">
+        <div className="flex items-start gap-3 rounded-2xl border border-line bg-card px-4 py-3 text-sm text-muted">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
           <span>
             {s.bloqueadosNaFila.map((b) => (
@@ -439,7 +439,7 @@ export function DisparoView({
           ) : (
             <>
               <div className="mt-3 flex items-baseline gap-2">
-                <AnimatedNumber value={s.fila} className="text-5xl font-extrabold tracking-tight text-navy" />
+                <AnimatedNumber value={s.fila} className="text-5xl font-extrabold tracking-tight text-strong" />
                 <span className="text-sm text-muted">{s.fila === 1 ? "contato esperando" : "contatos esperando"}</span>
               </div>
               <div className="mt-4 space-y-1 rounded-xl bg-surface px-3.5 py-3 text-sm">
@@ -528,7 +528,7 @@ export function DisparoView({
                     key={id}
                     type="button"
                     onClick={() => setAba(id)}
-                    className={cx("rounded-lg px-3 py-1.5 transition", aba === id ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink")}
+                    className={cx("rounded-lg px-3 py-1.5 transition", aba === id ? "bg-card text-ink shadow-sm" : "text-muted hover:text-ink")}
                   >
                     {rotulo}
                   </button>
@@ -744,7 +744,7 @@ function CartaoDisparo({
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
           <div className="text-left sm:text-right">
-            <div className={cx("text-4xl font-extrabold", atual.estado === "concluido" ? "text-emerald-600" : "text-navy")}>
+            <div className={cx("text-4xl font-extrabold", atual.estado === "concluido" ? "text-emerald-600" : "text-strong")}>
               <AnimatedNumber value={feitos} /> <span className="text-lg font-bold text-muted">de {n(atual.total)}</span>
             </div>
             <div className="text-xs font-semibold text-muted">contatos processados</div>

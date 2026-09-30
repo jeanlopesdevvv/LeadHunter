@@ -36,7 +36,7 @@ export default function Erro({ error, reset }: { error: Error & { digest?: strin
         <div className="flex justify-center">
           <Logo />
         </div>
-        <h1 className="display mt-8 text-3xl text-navy">{versaoNova ? "Saiu uma versão nova do Radar!" : "Opa, algo travou aqui."}</h1>
+        <h1 className="display mt-8 text-3xl text-strong">{versaoNova ? "Saiu uma versão nova do Radar!" : "Opa, algo travou aqui."}</h1>
         <p className="mt-3 text-sm text-muted">
           {versaoNova
             ? "Recarregando para você pegar a novidade. Nada foi perdido: sua lista e sua seleção ficam guardadas neste navegador."

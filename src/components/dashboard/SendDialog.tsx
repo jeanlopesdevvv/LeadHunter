@@ -26,7 +26,7 @@ function telefone(t: string) {
 
 function Metrica({ rotulo, valor, icone, tom = "ink" }: { rotulo: string; valor: number; icone: ReactNode; tom?: "ink" | "green" | "amber" | "muted" }) {
   return (
-    <div className="rounded-xl border border-line bg-white px-3.5 py-3">
+    <div className="rounded-xl border border-line bg-card px-3.5 py-3">
       <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
         {icone}
         {rotulo}
@@ -35,7 +35,7 @@ function Metrica({ rotulo, valor, icone, tom = "ink" }: { rotulo: string; valor:
         value={valor}
         className={cx(
           "mt-1 block text-2xl font-extrabold tracking-tight",
-          tom === "green" ? "text-emerald-600" : tom === "amber" ? "text-amber-600" : tom === "muted" ? "text-muted" : "text-navy",
+          tom === "green" ? "text-emerald-600" : tom === "amber" ? "text-amber-600" : tom === "muted" ? "text-muted" : "text-strong",
         )}
       />
     </div>
@@ -144,7 +144,7 @@ export function SendDialog({
       {!resultado ? (
         <div className="space-y-5">
           <div className="flex items-start gap-3 rounded-xl border border-line bg-surface/70 px-4 py-3.5">
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-brand ring-1 ring-line">
+            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-card text-brand ring-1 ring-line">
               <Table2 className="size-4.5" />
             </div>
             <div className="min-w-0 text-sm">
@@ -161,7 +161,7 @@ export function SendDialog({
             <Metrica rotulo="Contatos" valor={leads.length} icone={<User className="size-3.5" />} />
             <Metrica rotulo="Celulares" valor={contagem.celulares} icone={<Smartphone className="size-3.5" />} tom="green" />
             <Metrica rotulo="Fixos" valor={contagem.fixos} icone={<Phone className="size-3.5" />} tom={contagem.fixos ? "amber" : "muted"} />
-            <div className="rounded-xl border border-line bg-white px-3.5 py-3">
+            <div className="rounded-xl border border-line bg-card px-3.5 py-3">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
                 <Building2 className="size-3.5" />
                 Perfil
@@ -310,7 +310,7 @@ export function SendDialog({
               href={resultado.planilhaUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-surface"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-card px-4 text-sm font-semibold text-ink transition hover:bg-surface"
             >
               <ExternalLink className="size-4" /> Abrir planilha
             </a>

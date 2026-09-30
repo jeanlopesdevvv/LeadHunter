@@ -159,8 +159,8 @@ export function PainelView() {
 
   const etapas: { rotulo: string; valor: number | null; icone: typeof Send; cor: string }[] = f
     ? [
-        { rotulo: "Disparadas", valor: f.disparadas, icone: Send, cor: "bg-navy" },
-        { rotulo: "Entregues", valor: f.entregues, icone: CheckCheck, cor: "bg-navy-600" },
+        { rotulo: "Disparadas", valor: f.disparadas, icone: Send, cor: "bg-bar" },
+        { rotulo: "Entregues", valor: f.entregues, icone: CheckCheck, cor: "bg-bar-2" },
         { rotulo: "Lidas", valor: f.lidas, icone: Eye, cor: "bg-brand-700" },
         { rotulo: "Responderam", valor: f.responderam, icone: MessagesSquare, cor: "bg-brand" },
         { rotulo: "Sim, atendo", valor: f.sim, icone: Flame, cor: "bg-emerald-500" },
@@ -172,7 +172,7 @@ export function PainelView() {
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="eyebrow">Desempenho dos disparos</p>
-          <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
+          <h1 className="display mt-3 text-4xl text-strong sm:text-5xl">
             Do disparo à <span className="text-brand">conversa.</span>
           </h1>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -181,7 +181,7 @@ export function PainelView() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-xl border border-line bg-white p-1" role="radiogroup" aria-label="Período">
+          <div className="flex rounded-xl border border-line bg-card p-1" role="radiogroup" aria-label="Período">
             {PERIODOS.map((p) => (
               <button
                 key={p.id}
@@ -215,7 +215,7 @@ export function PainelView() {
       {/* Números principais */}
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { rotulo: "Disparadas", valor: f?.disparadas, extra: f ? `${n(f.semWhatsapp)} sem WhatsApp` : "", cor: "text-navy", i: Send },
+          { rotulo: "Disparadas", valor: f?.disparadas, extra: f ? `${n(f.semWhatsapp)} sem WhatsApp` : "", cor: "text-strong", i: Send },
           {
             rotulo: "Leram",
             valor: f?.lidas ?? null,
@@ -337,7 +337,7 @@ export function PainelView() {
                   onClick={() => setFiltro(x.id)}
                   className={cx(
                     "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                    filtro === x.id ? "border-navy bg-navy text-white" : "border-line bg-white text-muted hover:text-ink",
+                    filtro === x.id ? "border-navy bg-navy text-white" : "border-line bg-card text-muted hover:text-ink",
                   )}
                 >
                   {x.rotulo} <span className="tabular-nums opacity-70">{qtd}</span>
