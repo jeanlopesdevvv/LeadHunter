@@ -24,6 +24,20 @@ telefone        nome              tipo       cidade           status    mensagem
    (Fluxo 1) enviar a primeira mensagem da Carol; a tela acompanha o envio lendo a planilha (enviado / sem WhatsApp).
    Os não marcados ficam como `aguardando` na planilha, para um próximo disparo.
    Nunca começa um segundo disparo por cima do primeiro. Configuração em [docs/SETUP.md](docs/SETUP.md#5-botão-de-disparo-n8n).
+5. **Placar da Carol**: funil do disparo até o "Sim, atendo" (disparadas → entregues → lidas → responderam →
+   sim), lista de quentes com atalho para o WhatsApp e tabela filtrável por resposta. Lê as abas `historico_carol`,
+   `status_meta_carol` e `sessoes_carol` da planilha (período: hoje, 7 dias, 30 dias ou tudo; atualiza a cada minuto).
+
+### Não perde nada e aguenta falhas
+
+- **Recarregar a página**: a busca, a lista, a seleção e a tela aberta ficam salvas no navegador (3 dias). Se recarregar no
+  meio de uma busca, ela continua de onde parou; no meio de um disparo, a tela volta a acompanhar (mesmo se o servidor
+  reiniciar numa atualização).
+- **Internet caiu**: a busca espera a conexão voltar e segue sozinha; aparece um aviso no topo enquanto estiver offline.
+- **Google ou planilha instáveis**: leituras tentam de novo com intervalos crescentes (429/5xx); o envio para a planilha
+  manda um id de lote, então repetir depois de uma queda nunca grava duas vezes.
+- **n8n demorou a responder**: o Radar trata como disparo em andamento (não deixa disparar por cima) e acompanha pela planilha.
+- **Versão nova publicada com a aba aberta**: a tela recarrega sozinha uma vez, sem perder a lista.
 
 ### Consultas grátis do mês
 
@@ -43,7 +57,8 @@ buscar quando as grátis acabam (`BLOQUEAR_NO_LIMITE=1`).
 - Dois envios ao mesmo tempo: os envios são feitos um de cada vez e, depois de gravar, o app confere a
   planilha de novo; se outro envio gravou o mesmo telefone um instante antes, a linha repetida recebe
   `status = duplicado` (a Carol só dispara `pendente`).
-- Por padrão só celulares são enviados (fixo quase nunca tem WhatsApp); dá para incluir fixos.
+- Por padrão celulares e fixos entram (alguns fixos têm WhatsApp Business); dá para desligar os fixos.
+- Estabelecimentos marcados como fechados no Google não são pulados por padrão (dá para ligar "Pular fechados").
 
 ## Tecnologia
 
@@ -83,8 +98,10 @@ src/
     api/search/page     uma página de resultados da Places API (confere a cota antes)
     api/uso             consultas grátis usadas/restantes no mês e data da renovação
     api/disparo         fila da Carol, chama o webhook do n8n e acompanha o progresso
+    api/disparo/acompanhar  volta a acompanhar um disparo que o navegador lembra (servidor reiniciou)
+    api/painel          placar da Carol (funil, quentes e respostas) lido das abas do n8n
     api/sheets/check    quem já está na planilha
-    api/sheets/send     grava os novos (com nova checagem de duplicados)
+    api/sheets/send     grava os novos (com nova checagem de duplicados; idempotente por lote)
     api/status          diagnóstico das conexões
   components/           interface (visual do Lavacar)
   lib/                  regras: telefone, classificação, planilha, Places, sessão

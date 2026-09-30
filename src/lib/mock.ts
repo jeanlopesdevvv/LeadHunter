@@ -101,8 +101,24 @@ interface MockSheet {
 
 const g = globalThis as unknown as { __lhMockSheet?: MockSheet };
 
+/** Data no formato que o n8n grava ("29/09/2026, 21:13:05"), no horário de Brasília. */
+export function dataN8n(ms: number): string {
+  return new Date(ms).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
 export function mockSheet(): MockSheet {
   if (!g.__lhMockSheet) {
+    const agora = Date.now();
+    const h = (horas: number) => agora - horas * 3_600_000;
+    const iso = (ms: number) => new Date(ms).toISOString();
+    // Alguns disparos antigos para o painel da Carol ter o que mostrar.
+    const antigos = [
+      { tel: "5531977001001", nome: "Lava Jato Estrela Guia", tipo: "Empresa", quando: h(20), resposta: "Sim, atendo", status: "read" },
+      { tel: "5531977001002", nome: "Marcos Lavagem a Domicílio", tipo: "Autônomo", quando: h(19), resposta: "Não tenho interesse", status: "read" },
+      { tel: "5531977001003", nome: "Auto Spa Savassi", tipo: "Empresa", quando: h(5), resposta: "Oi Carol, quanto custa pra entrar?", status: "read" },
+      { tel: "5531977001004", nome: "Ducha Prime", tipo: "Empresa", quando: h(4), resposta: "", status: "delivered" },
+      { tel: "5531977001005", nome: "Lavador Rafael", tipo: "Autônomo", quando: h(3), resposta: "", status: "sent" },
+    ];
     g.__lhMockSheet = {
       title: "Leads Lava-jatos (simulação)",
       tabs: {
@@ -110,10 +126,24 @@ export function mockSheet(): MockSheet {
           ["telefone", "nome", "tipo", "cidade", "status", "mensagem_enviada_em", "optout"],
           ["5531982999779", "Jean Lopes", "Autônomo", "Belo Horizonte", "pendente", "", ""],
           ["5531991112233", "Lava Jato Teste Opt-out", "Empresa", "Belo Horizonte", "enviado", "10/09/2026 10:00", "sim"],
+          ...antigos.map((a) => [a.tel, a.nome, a.tipo, "Belo Horizonte", "enviado", dataN8n(a.quando), ""]),
         ],
         historico_carol: [
-          ["data", "remote_jid", "mensagem"],
-          ["20/09/2026 14:00", "5531988776655@s.whatsapp.net", "Oi! Aqui é a Carol, do Lavacar."],
+          ["telefone", "timestamp", "remetente", "mensagem", "remoteJid"],
+          ["5531988776655", iso(h(200)), "carol", "Oi! Aqui é a Carol, do Lavacar.", "5531988776655@s.whatsapp.net"],
+          ...antigos.flatMap((a) => {
+            const linhas: string[][] = [[a.tel, iso(a.quando + 5_000), "carol", "Oi! Aqui é a Carol, consultora comercial do Lavacar…", `${a.tel}@s.whatsapp.net`]];
+            if (a.resposta) linhas.push([a.tel, iso(a.quando + 40 * 60_000), "lead", a.resposta, `${a.tel}@s.whatsapp.net`]);
+            return linhas;
+          }),
+        ],
+        status_meta_carol: [
+          ["telefone", "wamid", "status", "timestamp", "erro"],
+          ...antigos.map((a, i) => [a.tel, `wamid.mock${i}`, a.status, iso(a.quando + 60_000), ""]),
+        ],
+        sessoes_carol: [
+          ["remoteJid", "telefone", "nome", "estado", "ultimo_contato", "tentativas_reativacao"],
+          ...antigos.map((a) => [`${a.tel}@s.whatsapp.net`, a.tel, a.nome, a.resposta ? "FALANDO_COM_CAROL" : "AGUARDANDO_RESPOSTA", iso(a.quando), "0"]),
         ],
         historico_sofia: [["data", "telefone", "mensagem"]],
       },

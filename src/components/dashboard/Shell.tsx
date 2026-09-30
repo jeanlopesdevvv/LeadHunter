@@ -1,7 +1,7 @@
 "use client";
 
-import { ExternalLink, FlaskConical, History, ListChecks, LogOut, Search, Send, Settings2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { ExternalLink, FlaskConical, History, ListChecks, LogOut, Search, Send, Settings2, Trophy, WifiOff } from "lucide-react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
 import { Logo } from "@/components/Logo";
 import { cx } from "@/components/ui";
@@ -9,15 +9,25 @@ import type { Uso } from "@/lib/types";
 
 import { UsoMini } from "./UsoCota";
 
-export type View = "buscar" | "resultados" | "disparo" | "historico" | "config";
+export type View = "buscar" | "resultados" | "disparo" | "painel" | "historico" | "config";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
-  { id: "buscar", label: "Nova busca", icon: Search },
-  { id: "resultados", label: "Resultados", icon: ListChecks },
+  { id: "buscar", label: "Nova caçada", icon: Search },
+  { id: "resultados", label: "Oportunidades", icon: ListChecks },
   { id: "disparo", label: "Disparo", icon: Send },
+  { id: "painel", label: "Placar da Carol", icon: Trophy },
   { id: "historico", label: "Histórico", icon: History },
   { id: "config", label: "Configuração", icon: Settings2 },
 ];
+
+function assinarConexao(avisar: () => void) {
+  window.addEventListener("online", avisar);
+  window.addEventListener("offline", avisar);
+  return () => {
+    window.removeEventListener("online", avisar);
+    window.removeEventListener("offline", avisar);
+  };
+}
 
 export function Shell({
   view,
@@ -47,8 +57,15 @@ export function Shell({
       </span>
     ) : null;
 
+  const online = useSyncExternalStore(assinarConexao, () => navigator.onLine, () => true);
+
   return (
     <div className="min-h-screen lg:pl-64">
+      {!online && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-semibold text-navy shadow-lg animate-slide-up lg:left-64">
+          <WifiOff className="size-4" /> Sem internet. Relaxa: nada se perde e o Radar continua sozinho quando a conexão voltar.
+        </div>
+      )}
       {/* Barra lateral (desktop) */}
       <aside className="glow-tl fixed inset-y-0 left-0 z-30 hidden w-64 flex-col px-4 py-6 text-white lg:flex">
         <div className="px-2">
@@ -128,7 +145,11 @@ export function Shell({
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-32 sm:px-6 lg:px-10 lg:pt-10">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-32 sm:px-6 lg:px-10 lg:pt-10">
+        <div key={view} className="view-in">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

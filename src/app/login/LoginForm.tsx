@@ -62,7 +62,7 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
       </div>
       {erro && <p className="text-sm font-medium text-red-600">{erro}</p>}
       <Button type="submit" size="lg" className="w-full" loading={carregando} disabled={!senha || semSenha}>
-        Entrar <ArrowRight className="size-4" />
+        Ligar o radar <ArrowRight className="size-4" />
       </Button>
     </form>
   );

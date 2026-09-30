@@ -1,8 +1,9 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, Info, Send } from "lucide-react";
+import { ExternalLink, Info, PartyPopper, Send, Zap } from "lucide-react";
 import { useState } from "react";
 
+import { AnimatedNumber, confete } from "@/components/motion";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Modal } from "@/components/ui";
 import { api } from "@/lib/client/api";
@@ -50,8 +51,11 @@ export function SendDialog({
 
   async function enviar() {
     setEnviando(true);
+    // Mesmo id em todas as tentativas: se a conexão cair, repetir é seguro (o servidor devolve o mesmo resultado).
+    const lote = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `l${Date.now()}${Math.random().toString(36).slice(2)}`;
     try {
       const r = await api<SendResult>("/api/sheets/send", {
+        lote,
         leads: leads.map((l) => ({
           telefone: l.telefone,
           nome: l.nome,
@@ -68,10 +72,16 @@ export function SendDialog({
           placeId: l.id,
           termo: l.termo,
         })),
-      });
+      }, { tentativas: 3 });
       setResultado(r);
       onEnviado(r);
-      toast(`${r.adicionados.length} contatos foram para a planilha.`, "success");
+      if (r.adicionados.length) {
+        void confete(r.adicionados.length >= 10 ? "forte" : "leve");
+        toast(
+          r.adicionados.length === 1 ? "1 oportunidade nova na planilha. Bora pra cima!" : `${r.adicionados.length} oportunidades novas na planilha. Bora pra cima!`,
+          "success",
+        );
+      } else toast("Ninguém novo desta vez: todos já estavam na planilha.", "info");
     } catch (e) {
       toast((e as Error).message, "error");
     } finally {
@@ -89,14 +99,25 @@ export function SendDialog({
     : [];
 
   return (
-    <Modal open={aberto} onClose={fechar} title={resultado ? "Pronto!" : `Enviar ${leads.length} contato${leads.length === 1 ? "" : "s"} para a planilha`} wide>
+    <Modal
+      open={aberto}
+      onClose={fechar}
+      title={
+        resultado
+          ? resultado.adicionados.length
+            ? "Na planilha! Agora é com a Carol"
+            : "Nada novo desta vez"
+          : `Mandar ${leads.length} oportunidade${leads.length === 1 ? "" : "s"} para a planilha`
+      }
+      wide
+    >
       {!resultado ? (
         <div className="space-y-5">
           <div className="flex gap-3 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800">
             <Info className="mt-0.5 size-4 shrink-0" />
             <p>
-              Eles entram no fim da aba <b>{aba}</b> com status <b>{status}</b>: é assim que a Carol sabe quem chamar no WhatsApp. Na hora de
-              gravar, o Radar confere a planilha mais uma vez e pula quem já estiver lá.
+              Entram no fim da aba <b>{aba}</b> com status <b>{status}</b>, prontos para a Carol chamar no WhatsApp. Antes de gravar, o Radar
+              confere a planilha mais uma vez e pula quem já estiver lá. Zero mensagem repetida.
             </p>
           </div>
 
@@ -143,25 +164,27 @@ export function SendDialog({
               Cancelar
             </Button>
             <Button onClick={enviar} loading={enviando} icon={<Send className="size-4" />} disabled={!leads.length}>
-              Enviar agora
+              {enviando ? "Gravando na planilha…" : "Mandar agora"}
             </Button>
           </div>
         </div>
       ) : (
         <div className="space-y-5 text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-2xl bg-emerald-50 text-emerald-600">
-            <CheckCircle2 className="size-8" />
+          <div className="mx-auto grid size-16 animate-pop-in place-items-center rounded-2xl bg-emerald-50 text-emerald-600">
+            <PartyPopper className="size-8" />
           </div>
           <div>
-            <p className="display text-5xl text-navy tabular-nums">{resultado.adicionados.length}</p>
+            <p className="display text-6xl text-navy">
+              <AnimatedNumber value={resultado.adicionados.length} />
+            </p>
             <p className="mt-1 text-sm text-muted">
-              contato{resultado.adicionados.length === 1 ? "" : "s"} na aba <b>{resultado.aba}</b> com status <b>{status}</b>. A Carol já pode
-              chamar.
+              {resultado.adicionados.length === 1 ? "oportunidade nova" : "oportunidades novas"} na aba <b>{resultado.aba}</b> com status{" "}
+              <b>{status}</b>. A Carol já pode chamar.
             </p>
           </div>
           {agrupados.length > 0 && (
             <div className="mx-auto max-w-sm rounded-xl bg-surface px-4 py-3 text-left text-sm">
-              <p className="mb-1 font-semibold text-ink">Pulados para ninguém receber mensagem repetida:</p>
+              <p className="mb-1 font-semibold text-ink">Ficaram de fora (para ninguém receber mensagem repetida):</p>
               <ul className="space-y-0.5 text-muted">
                 {agrupados.map(([motivo, n]) => (
                   <li key={motivo}>
@@ -175,7 +198,8 @@ export function SendDialog({
             <div className="mx-auto max-w-sm rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-left text-sm text-brand-800">
               {disparoConfigurado ? (
                 <>
-                  Quer que a Carol já mande a primeira mensagem? Você acompanha o envio na tela <b>Disparo</b>.
+                  <Zap className="mr-1 inline size-4 text-brand" />
+                  Enquanto está quente: quer que a Carol já mande a primeira mensagem? Você acompanha tudo ao vivo na tela <b>Disparo</b>.
                 </>
               ) : (
                 <>
@@ -205,7 +229,7 @@ export function SendDialog({
                 }}
                 icon={<Send className="size-4" />}
               >
-                {disparoConfigurado ? "Disparar agora" : "Ir para o Disparo"}
+                {disparoConfigurado ? "Chamar a Carol agora" : "Ir para o Disparo"}
               </Button>
             )}
           </div>

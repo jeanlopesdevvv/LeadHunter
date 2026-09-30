@@ -47,16 +47,38 @@ function quoteTab(tab: string): string {
   return `'${tab.replace(/'/g, "''")}'`;
 }
 
+const LEITURA_PASSAGEIRA = new Set([429, 500, 502, 503, 504]);
+const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Chamada à API do Sheets. Leituras (GET) tentam de novo sozinhas quando o Google pede calma (429)
+ * ou falha por um instante (5xx, rede). Escritas não repetem: quem chama decide (evita linha duplicada).
+ */
 async function sheetsFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const cfg = getConfig();
-  const token = await accessToken();
-  const res = await fetch(`${API}/${cfg.sheetId}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    cache: "no-store",
-    signal: AbortSignal.timeout(25_000),
-  });
-  const text = await res.text();
+  const leitura = !init?.method || init.method === "GET";
+  const tentativas = leitura ? 4 : 1;
+  let res: Response | null = null;
+  let text = "";
+  for (let i = 0; i < tentativas; i++) {
+    const token = await accessToken();
+    try {
+      res = await fetch(`${API}/${cfg.sheetId}${path}`, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
+        cache: "no-store",
+        signal: AbortSignal.timeout(25_000),
+      });
+      text = await res.text();
+    } catch (e) {
+      if (i + 1 >= tentativas) throw new SheetsError(`Não deu para falar com o Google Sheets (${(e as Error).message}).`, 502);
+      await pausa(600 * 2 ** i);
+      continue;
+    }
+    if (res.ok || !leitura || !LEITURA_PASSAGEIRA.has(res.status) || i + 1 >= tentativas) break;
+    await pausa((res.status === 429 ? 1500 : 600) * 2 ** i);
+  }
+  if (!res) throw new SheetsError("Não deu para falar com o Google Sheets.", 502);
   if (!res.ok) {
     let msg = text.slice(0, 300);
     try {
@@ -72,6 +94,7 @@ async function sheetsFetch<T>(path: string, init?: RequestInit): Promise<T> {
     }
     if (res.status === 404) throw new SheetsError("Planilha não encontrada. Confira o SHEET_ID no EasyPanel.", 404);
     if (/unable to parse range/i.test(msg)) throw new SheetsError(`A aba "${cfg.sheetTab}" não existe na planilha.`, 400);
+    if (res.status === 429) throw new SheetsError("O Google Sheets pediu uma pausa (muitas leituras seguidas). Tente de novo em 1 minuto.", 429);
     throw new SheetsError(`A planilha do Google respondeu com erro (${res.status}): ${msg}`);
   }
   return JSON.parse(text || "{}") as T;
@@ -264,6 +287,48 @@ export function atualizarStatusLinhas(mudancas: { linha: number; key: string; st
     esquecerAbaLeads();
     esquecerExistentes();
   });
+}
+
+/**
+ * Lê várias abas de uma vez (as que existirem). Usado pelo painel da Carol.
+ * Guardado por alguns segundos para várias telas abertas não multiplicarem as leituras.
+ */
+let cacheAbas: { em: number; chave: string; valor: Promise<{ abas: string[]; dados: Record<string, unknown[][]> }> } | null = null;
+export function lerAbas(nomes: string[], maxAgeMs = 20_000): Promise<{ abas: string[]; dados: Record<string, unknown[][]> }> {
+  const chave = nomes.join("|");
+  const agora = Date.now();
+  if (!cacheAbas || cacheAbas.chave !== chave || agora - cacheAbas.em > maxAgeMs) {
+    const cfg = getConfig();
+    const valor = (async () => {
+      if (cfg.mock) {
+        const sheet = mockSheet();
+        const dados: Record<string, unknown[][]> = {};
+        for (const n of nomes) if (sheet.tabs[n]) dados[n] = sheet.tabs[n];
+        return { abas: Object.keys(sheet.tabs), dados };
+      }
+      const meta = await sheetsFetch<{ sheets?: { properties?: { title?: string } }[] }>(`?fields=sheets.properties.title`);
+      const abas = (meta.sheets ?? []).map((x) => x.properties?.title ?? "").filter(Boolean);
+      const porMinusculo = new Map(abas.map((t) => [t.trim().toLowerCase(), t]));
+      const existentes = nomes.map((n) => porMinusculo.get(n.trim().toLowerCase())).filter((t): t is string => Boolean(t));
+      const dados: Record<string, unknown[][]> = {};
+      if (existentes.length) {
+        const qs = existentes.map((t) => `ranges=${encodeURIComponent(quoteTab(t))}`).join("&");
+        const r = await sheetsFetch<{ valueRanges?: { values?: unknown[][] }[] }>(
+          `/values:batchGet?${qs}&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`,
+        );
+        existentes.forEach((t, i) => {
+          const pedido = nomes.find((n) => n.trim().toLowerCase() === t.trim().toLowerCase()) ?? t;
+          dados[pedido] = r.valueRanges?.[i]?.values ?? [];
+        });
+      }
+      return { abas, dados };
+    })();
+    cacheAbas = { em: agora, chave, valor };
+    valor.catch(() => {
+      if (cacheAbas?.valor === valor) cacheAbas = null;
+    });
+  }
+  return cacheAbas.valor;
 }
 
 export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {

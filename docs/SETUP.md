@@ -157,6 +157,21 @@ Limite diário: o nó *Checar Limite Diário* usa `CAROL_LIMITE_DIARIO` (ou **5*
 Para aumentar, crie/ajuste `CAROL_LIMITE_DIARIO` no n8n e `LIMITE_DIARIO_CAROL` no Radar com o mesmo número.
 O contador do dia só é guardado em execuções de produção (webhook): pelo botão do Radar, o limite vale para o dia inteiro.
 
+### Placar da Carol
+
+A tela **Placar da Carol** lê três abas que o n8n já grava na planilha (nomes em `PAINEL_ABA_HISTORICO`,
+`PAINEL_ABA_STATUS` e `PAINEL_ABA_SESSOES`; padrão `historico_carol`, `status_meta_carol`, `sessoes_carol`):
+
+- **historico_carol**: cada mensagem da conversa. O Radar procura as colunas pelo nome (telefone ou remoteJid,
+  remetente, mensagem, timestamp/data). Resposta do contato com "Sim, atendo" conta como **sim**; "Não tenho interesse"
+  como **sem interesse**; qualquer outro texto como **respondeu**.
+- **status_meta_carol** (opcional): status de entrega da Meta (`sent`, `delivered`, `read`, `failed`) por telefone.
+  Sem essa aba, as etapas *Entregues* e *Lidas* aparecem como "—".
+- **sessoes_carol** (opcional): etapa da conversa de cada contato (mostrada embaixo da resposta).
+
+Se algum número parecer errado, abra **Como o placar lê a planilha**, no fim da tela: mostra quais abas e colunas foram
+reconhecidas. Nada é gravado nessas abas: o placar só lê.
+
 ## 6. Conferir
 
 1. Abra <https://radar.lavacar.app> (o certificado HTTPS pode levar 1–2 minutos na primeira vez) e entre com a senha.
@@ -165,6 +180,7 @@ O contador do dia só é guardado em execuções de produção (webhook): pelo b
 3. Faça uma busca de **20** contatos com 1 termo e 1 cidade, deixe marcado só **um** e envie.
 4. Confira a nova linha no fim da aba `leads` com `status = pendente` e veja se a Carol dispara a mensagem.
 5. Envie o mesmo lead de novo: ele deve aparecer como *Já na planilha* e ser ignorado.
+6. Depois de um disparo, abra **Placar da Carol** e confira se a resposta do contato aparece (período *Hoje*).
 
 ## Atualizações
 

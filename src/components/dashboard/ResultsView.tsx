@@ -17,8 +17,9 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
+import { AnimatedNumber } from "@/components/motion";
 import { Badge, Button, Card, Stat, Toggle, cx, inputClass } from "@/components/ui";
 import { downloadCsv } from "@/lib/client/csv";
 import type { Progresso } from "@/lib/client/search-runner";
@@ -201,16 +202,18 @@ export function ResultsView({
   if (!leads.length) {
     return (
       <div className="grid place-items-center py-24 text-center">
-        <div className="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand">
+        <div className="grid size-16 animate-float place-items-center rounded-2xl bg-brand-50 text-brand">
           {rodando ? <Loader2 className="size-7 animate-spin" /> : <Search className="size-7" />}
         </div>
-        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Buscando…" : "Nenhuma lista ainda"}</h1>
+        <h1 className="display mt-6 text-3xl text-navy">{rodando ? "Radar ligado…" : "O mapa está esperando você"}</h1>
         <p className="mt-2 max-w-sm text-sm text-muted">
-          {rodando ? "Os estabelecimentos aparecem aqui conforme a busca avança." : "Faça uma busca e os lava-jatos encontrados aparecem aqui."}
+          {rodando
+            ? "As oportunidades pingam aqui assim que o radar encontra."
+            : "Faça uma caçada e os lava-jatos e lavadores autônomos que o radar achar aparecem aqui, prontos para a Carol."}
         </p>
         {!rodando && (
           <Button className="mt-6" onClick={onNovaBusca} icon={<Search className="size-4" />}>
-            Nova busca
+            Começar uma caçada
           </Button>
         )}
       </div>
@@ -223,9 +226,9 @@ export function ResultsView({
     <div className="space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="eyebrow">Resultado da busca</p>
+          <p className="eyebrow">Oportunidades na mesa</p>
           <h1 className="display mt-3 text-4xl text-navy">
-            {leads.length} <span className="text-brand">estabelecimentos</span>
+            <AnimatedNumber value={leads.length} /> <span className="text-brand">{leads.length === 1 ? "lava-jato no radar" : "lava-jatos no radar"}</span>
           </h1>
           {meta && (
             <p className="mt-2 truncate text-sm text-muted">
@@ -242,7 +245,7 @@ export function ResultsView({
             Baixar lista
           </Button>
           <Button variant="dark" onClick={onNovaBusca} icon={<Search className="size-4" />}>
-            Nova busca
+            Nova caçada
           </Button>
         </div>
       </header>
@@ -253,7 +256,7 @@ export function ResultsView({
 
       {check.estado === "checando" && (
         <div className="flex items-center gap-2.5 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-800">
-          <Loader2 className="size-4 animate-spin" /> Conferindo na planilha quem já está lá…
+          <Loader2 className="size-4 animate-spin" /> Batendo com a planilha para ninguém receber mensagem repetida…
         </div>
       )}
       {check.estado === "erro" && (
@@ -261,8 +264,8 @@ export function ResultsView({
           <span className="flex items-start gap-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
-              <b>Não deu para conferir a planilha.</b> {check.erro} Para ninguém receber mensagem repetida, o envio fica travado até isso
-              ser resolvido.
+              <b>A planilha não respondeu.</b> {check.erro} Por segurança, o envio fica travado até ela voltar: assim ninguém recebe
+              mensagem repetida.
             </span>
           </span>
           <Button size="sm" variant="danger" onClick={onConfig}>
@@ -271,16 +274,19 @@ export function ResultsView({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Encontrados" value={leads.length} hint={`sem repetidos (${stats.brutos} vistos no Google)`} />
-        <Stat label="Com celular" value={celulares} hint="provável WhatsApp" tone="green" />
-        <Stat label="Prontos para enviar" value={novos} hint={incluirFixos ? "celular ou fixo, fora da planilha" : "celular e fora da planilha"} tone="brand" />
-        <Stat
-          label="Já na planilha"
-          value={naPlanilha}
-          hint={enviados ? `+ ${enviados} enviados agora` : "não recebem de novo"}
-          tone="amber"
-        />
+      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div style={{ "--i": 0 } as CSSProperties}>
+          <Stat label="No radar" value={leads.length} hint={`sem repetidos (${stats.brutos} vistos no Google)`} />
+        </div>
+        <div style={{ "--i": 1 } as CSSProperties}>
+          <Stat label="Com celular" value={celulares} hint="grande chance de ter WhatsApp" tone="green" />
+        </div>
+        <div style={{ "--i": 2 } as CSSProperties}>
+          <Stat label="Prontos para a Carol" value={novos} hint={incluirFixos ? "celular ou fixo, fora da planilha" : "celular e fora da planilha"} tone="brand" />
+        </div>
+        <div style={{ "--i": 3 } as CSSProperties}>
+          <Stat label="Já na planilha" value={naPlanilha} hint={enviados ? `+ ${enviados} enviados agora` : "ficam de fora, sem repetir"} tone="amber" />
+        </div>
       </div>
 
       <Card className="overflow-hidden">
@@ -293,7 +299,7 @@ export function ResultsView({
                 setQ(e.target.value);
                 setPagina(1);
               }}
-              placeholder="Procurar na lista por nome, telefone, bairro…"
+              placeholder="Achar alguém na lista: nome, telefone, bairro…"
               className={cx(inputClass, "pl-10")}
             />
             {q && (
@@ -350,7 +356,7 @@ export function ResultsView({
               onChange={marcarTodos}
               disabled={!elegiveisFiltrados.length}
             />
-            Marcar todos os {elegiveisFiltrados.length} que podem ser enviados{filtrados.length !== leads.length && " (com este filtro)"}
+            Marcar todos os {elegiveisFiltrados.length} prontos para a Carol{filtrados.length !== leads.length && " (com este filtro)"}
           </label>
           <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Permitir telefone fixo" hint="Fixo quase nunca tem WhatsApp." />
         </div>
@@ -506,7 +512,7 @@ export function ResultsView({
           })}
         </ul>
 
-        {!filtrados.length && <p className="px-4 py-12 text-center text-sm text-muted">Ninguém na lista com esses filtros.</p>}
+        {!filtrados.length && <p className="px-4 py-12 text-center text-sm text-muted">Ninguém aparece com esses filtros. Afrouxa um pouco que eles voltam.</p>}
 
         {totalPaginas > 1 && (
           <div className="flex items-center justify-between border-t border-line px-4 py-3 text-sm">
@@ -527,11 +533,12 @@ export function ResultsView({
 
       {/* Barra de envio */}
       <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 sm:px-6 sm:pb-5 lg:left-64 lg:px-10">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 rounded-2xl bg-navy py-2.5 pr-2.5 pl-4 text-white shadow-2xl sm:py-3 sm:pr-3 sm:pl-5">
+        <div className="mx-auto flex max-w-7xl animate-slide-up items-center justify-between gap-3 rounded-2xl bg-navy py-2.5 pr-2.5 pl-4 text-white shadow-2xl sm:py-3 sm:pr-3 sm:pl-5">
           <div className="min-w-0 text-sm leading-tight">
-            <span className="font-bold tabular-nums">{paraEnviar}</span>{" "}
+            <AnimatedNumber value={paraEnviar} className="text-base font-extrabold" />{" "}
             <span className="text-white/60">
-              marcados<span className="hidden sm:inline"> para ir à planilha</span>
+              {paraEnviar === 1 ? "oportunidade marcada" : "oportunidades marcadas"}
+              <span className="hidden sm:inline"> para a planilha</span>
             </span>
             {!podeEnviarParaPlanilha && check.estado === "erro" && <span className="block text-xs text-red-300">Planilha indisponível</span>}
           </div>
@@ -541,9 +548,14 @@ export function ResultsView({
                 Desmarcar
               </Button>
             )}
-            <Button onClick={onEnviar} disabled={!paraEnviar || !podeEnviarParaPlanilha || rodando} icon={<Send className="size-4" />}>
-              <span className="sm:hidden">Enviar</span>
-              <span className="hidden sm:inline">Enviar para a planilha</span>
+            <Button
+              onClick={onEnviar}
+              disabled={!paraEnviar || !podeEnviarParaPlanilha || rodando}
+              icon={<Send className="size-4" />}
+              className={cx(paraEnviar > 0 && podeEnviarParaPlanilha && !rodando && "animate-glow")}
+            >
+              <span className="sm:hidden">Mandar</span>
+              <span className="hidden sm:inline">Mandar para a planilha</span>
             </Button>
           </div>
         </div>
@@ -560,7 +572,7 @@ function ResumoBusca({ p, podeContinuar, onContinuar }: { p: Progresso; podeCont
   return (
     <div
       className={cx(
-        "flex flex-col gap-3 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+        "flex animate-enter flex-col gap-3 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
         completo ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900",
       )}
     >
@@ -569,29 +581,29 @@ function ResumoBusca({ p, podeContinuar, onContinuar }: { p: Progresso; podeCont
         <span>
           {completo ? (
             <>
-              Você pediu <b>{n(p.alvo)}</b> {p.alvo === 1 ? "contato novo e ele já está marcado" : "contatos novos e eles já estão marcados"}.
-              Confira e clique em <b>Enviar para a planilha</b>.
+              <b>Meta batida!</b> {p.alvo === 1 ? "A oportunidade nova já está marcada" : `As ${n(p.alvo)} oportunidades novas já estão marcadas`}.
+              Dá uma conferida e manda ver em <b>Mandar para a planilha</b>.
             </>
           ) : p.fim === "esgotado" ? (
             <>
-              Achamos <b>{n(p.novos)}</b> dos {n(p.alvo)} pedidos: o Google não tem mais resultados para esses termos e lugares. Tente
-              outras cidades, bairros ou termos.
+              Varremos tudo: <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades. O Google não tem mais nada para esses termos e lugares.
+              Bora abrir o mapa com outras cidades, bairros ou termos.
             </>
           ) : p.fim === "cota" ? (
             <>
-              Achamos <b>{n(p.novos)}</b> dos {n(p.alvo)} pedidos. {p.erro}
+              Pegamos <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades. {p.erro}
             </>
           ) : (
             <>
-              Achamos <b>{n(p.novos)}</b> dos {n(p.alvo)} pedidos
-              {p.fim === "limite" ? ` (a busca parou no máximo de ${n(p.limite)} consultas)` : ""}. Faltam {n(faltam)}.
+              Pegamos <b>{n(p.novos)}</b> de {n(p.alvo)} oportunidades
+              {p.fim === "limite" ? ` (bateu o teto de ${n(p.limite)} consultas)` : ""}. Faltam {n(faltam)}: quer ir atrás?
             </>
           )}
         </span>
       </p>
       {continuar && (
         <Button size="sm" variant="outline" onClick={onContinuar} icon={<Play className="size-3.5" />}>
-          Continuar buscando
+          Continuar a caçada
         </Button>
       )}
     </div>

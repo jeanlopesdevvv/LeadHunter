@@ -105,11 +105,11 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
         <div>
           <p className="eyebrow">Configuração</p>
           <h1 className="display mt-3 text-4xl text-navy">
-            Está tudo <span className="text-brand">conectado?</span>
+            Motor do Radar: <span className="text-brand">tudo ligado?</span>
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">
-            Aqui você vê se o Radar está falando com o Google e com a planilha. As chaves ficam guardadas no servidor (EasyPanel → serviço
-            radar → Ambiente). Depois de mudar alguma, clique em Implantar.
+            Checagem rápida: Google, planilha e Carol conversando entre si. Verde é tudo certo. As chaves ficam guardadas no servidor
+            (EasyPanel → serviço radar → Ambiente); depois de mudar alguma, clique em Implantar.
           </p>
         </div>
         <Button variant="outline" onClick={recarregar} loading={carregando} icon={<RefreshCw className="size-4" />}>
@@ -128,9 +128,19 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
       )}
 
       {!status ? (
-        <Card className="p-10 text-center text-sm text-muted">Carregando…</Card>
+        <Card className="space-y-5 p-5 sm:p-7">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex gap-4">
+              <div className="skeleton size-10 shrink-0 rounded-xl" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-4 w-40 rounded" />
+                <div className="skeleton h-3 w-3/4 rounded" />
+              </div>
+            </div>
+          ))}
+        </Card>
       ) : (
-        <Card className="divide-y divide-line p-5 sm:p-7">
+        <Card className="stagger divide-y divide-line p-5 sm:p-7">
           <Linha ok icon={<KeyRound className="size-5" />} titulo="Senha de acesso">
             <p>Ativa. Para trocar, mude APP_PASSWORD no EasyPanel e clique em Implantar. Quem estiver dentro vai precisar entrar de novo.</p>
           </Linha>

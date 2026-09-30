@@ -21,6 +21,7 @@ export interface LinhaFila {
   telefone: string;
   nome: string;
   cidade: string;
+  tipo: string;
   status: string;
   situacao: SituacaoDisparo;
   optout: boolean;
@@ -74,6 +75,7 @@ export function linhasDaFila(rows: unknown[][], map: HeaderMap): LinhaFila[] {
       telefone: telefoneBruto,
       nome: String(col(row, map.nome) ?? "").trim(),
       cidade: String(col(row, map.cidade) ?? "").trim(),
+      tipo: String(col(row, map.tipo) ?? "").trim(),
       status,
       situacao: situacaoDoStatus(status),
       optout: map.optout !== undefined && isOptout(optoutCel),

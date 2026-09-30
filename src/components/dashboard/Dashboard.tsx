@@ -8,11 +8,14 @@ import { splitLines, sugerirLimite } from "@/lib/geo";
 import { api } from "@/lib/client/api";
 import { clearHistory, loadHistory, removeHistory, upsertHistory, type HistoryEntry } from "@/lib/client/history";
 import { planejarBusca, SessaoDeBusca, type Progresso } from "@/lib/client/search-runner";
+import { carregarSessao, salvarSessao } from "@/lib/client/sessao-salva";
+import { confete } from "@/components/motion";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
 
 import { DisparoView } from "./DisparoView";
 import { HistoryView } from "./HistoryView";
+import { PainelView } from "./PainelView";
 import { ResultsView } from "./ResultsView";
 import { calcularLimite, SearchView, type SearchForm } from "./SearchView";
 import { SendDialog } from "./SendDialog";
@@ -61,21 +64,30 @@ function primeirosElegiveis(lista: Lead[], max: number, incluirFixos: boolean): 
   return ids;
 }
 
+const VIEWS: View[] = ["buscar", "resultados", "disparo", "painel", "historico", "config"];
+
 export function Dashboard() {
   const toast = useToast();
   const router = useRouter();
-  const [view, setView] = useState<View>("buscar");
-  const [form, setForm] = useState<SearchForm>(FORM_INICIAL);
+  // O que estava na tela antes de recarregar (lista, seleção, busca em andamento). Lido uma vez.
+  const [salvo] = useState(() => carregarSessao());
+  const [view, setView] = useState<View>(() => (salvo && VIEWS.includes(salvo.view as View) ? (salvo.view as View) : "buscar"));
+  const [form, setForm] = useState<SearchForm>(() => ({ ...FORM_INICIAL, ...(salvo?.form as Partial<SearchForm> | undefined) }));
   const [rodando, setRodando] = useState(false);
-  const [progresso, setProgresso] = useState<Progresso | null>(null);
-  const [temMais, setTemMais] = useState(false);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [stats, setStats] = useState<SearchStats>({ brutos: 0, repetidos: 0, fechados: 0 });
-  const [meta, setMeta] = useState<SearchMeta | null>(null);
+  const [progresso, setProgresso] = useState<Progresso | null>(() =>
+    salvo?.progresso ? { ...salvo.progresso, rodando: false, etapa: "", fim: salvo.rodando ? "parado" : salvo.progresso.fim } : null,
+  );
+  const [leads, setLeads] = useState<Lead[]>(() => salvo?.leads ?? []);
+  const [stats, setStats] = useState<SearchStats>(() => ({
+    brutos: salvo?.progresso?.vistos ?? salvo?.leads.length ?? 0,
+    repetidos: salvo?.progresso?.repetidos ?? 0,
+    fechados: salvo?.progresso?.fechados ?? 0,
+  }));
+  const [meta, setMeta] = useState<SearchMeta | null>(() => salvo?.meta ?? null);
   const [check, setCheck] = useState<CheckState>({ estado: "idle" });
-  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
-  const [incluirFixos, setIncluirFixosState] = useState(FORM_INICIAL.incluirFixos);
-  const incluirFixosRef = useRef(FORM_INICIAL.incluirFixos);
+  const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set(salvo?.selecionados ?? []));
+  const [incluirFixos, setIncluirFixosState] = useState(() => salvo?.incluirFixos ?? FORM_INICIAL.incluirFixos);
+  const incluirFixosRef = useRef(salvo?.incluirFixos ?? FORM_INICIAL.incluirFixos);
   const setIncluirFixos = useCallback((v: boolean) => {
     incluirFixosRef.current = v;
     setIncluirFixosState(v);
@@ -89,9 +101,11 @@ export function Dashboard() {
   const [preSelecaoDisparo, setPreSelecaoDisparo] = useState<string[] | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const sessaoRef = useRef<SessaoDeBusca | null>(null);
+  const [sessaoInicial] = useState(() => (salvo?.busca ? SessaoDeBusca.restaurar(salvo.busca, salvo.leads) : null));
+  const sessaoRef = useRef<SessaoDeBusca | null>(sessaoInicial);
+  const [temMais, setTemMais] = useState(() => Boolean(sessaoInicial?.temMais));
   /** Sempre a lista mais recente (inclui o "tipo" editado pelo usuário). */
-  const leadsRef = useRef<Lead[]>([]);
+  const leadsRef = useRef<Lead[]>(salvo?.leads ?? []);
   /** Cada conferência/busca nova invalida respostas antigas que cheguem atrasadas. */
   const geracao = useRef(0);
 
@@ -238,10 +252,11 @@ export function Dashboard() {
       const novos = conferidos.filter((l) => podeEnviar(l, incluirFixosRef.current)).length;
       toast(
         novos
-          ? `${novos} contato${novos === 1 ? "" : "s"} novo${novos === 1 ? "" : "s"} pronto${novos === 1 ? "" : "s"} para enviar.`
-          : "Nenhum contato novo desta vez: quem apareceu já está na planilha ou não tem telefone.",
+          ? `Na mira! ${novos} oportunidade${novos === 1 ? "" : "s"} nova${novos === 1 ? "" : "s"} prontinha${novos === 1 ? "" : "s"} para a Carol.`
+          : "Dessa vez não veio ninguém novo: quem apareceu já está na planilha ou não tem telefone. Bora tentar outra cidade?",
         novos ? "success" : "info",
       );
+      if (sessao?.progresso.fim === "alvo") void confete("forte");
       setView("resultados");
     },
     [toast, conferirPlanilha, carregarUso],
@@ -250,9 +265,9 @@ export function Dashboard() {
   const buscar = useCallback(async () => {
     const termos = splitLines(form.termos);
     const cidades = splitLines(form.cidades);
-    if (!termos.length) return toast("Escreva pelo menos uma coisa para procurar.", "error");
-    if (!cidades.length) return toast("Escreva pelo menos uma cidade.", "error");
-    if (!(form.alvo > 0)) return toast("Diga quantos contatos você quer.", "error");
+    if (!termos.length) return toast("Diga o que caçar: pelo menos um termo de busca.", "error");
+    if (!cidades.length) return toast("Falta a cidade: onde vamos procurar?", "error");
+    if (!(form.alvo > 0)) return toast("Quantos contatos você quer? Escolha um número.", "error");
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -279,7 +294,7 @@ export function Dashboard() {
       fechados: 0,
       jaNaPlanilha: 0,
       semCelular: 0,
-      etapa: "Preparando a busca…",
+      etapa: "Ligando o radar…",
       avisos: [],
       rodando: true,
       fim: null,
@@ -313,14 +328,21 @@ export function Dashboard() {
     await finalizar(minha, novaMeta, sessao, falhou);
   }, [form, uso, maxPorBusca, toast, atualizarLeads, executar, finalizar, setIncluirFixos]);
 
-  const continuar = useCallback(async () => {
+  /**
+   * Continua a busca da sessão atual. Sem `limiteFixo`, ganha um novo lote de consultas
+   * (botão "Continuar a caçada"); com ele, retoma até o limite original (depois de recarregar a página).
+   */
+  const continuar = useCallback(async (limiteFixo?: number) => {
     const sessao = sessaoRef.current;
     if (!sessao || rodando || !meta) return;
     const p = sessao.progresso;
     const faltam = Math.max(1, p.alvo - p.novos);
     const disponivel = uso?.bloquear ? Math.max(0, uso.restantes) : maxPorBusca;
-    const extra = Math.min(sugerirLimite(faltam, 1, maxPorBusca), disponivel);
-    if (extra <= 0 && uso) return toast(`As consultas grátis deste mês acabaram. Voltam em ${formatarRenovacaoCurta(uso.renovaEm)}.`, "error");
+    const extra = limiteFixo !== undefined ? Math.min(limiteFixo - p.consultas, disponivel) : Math.min(sugerirLimite(faltam, 1, maxPorBusca), disponivel);
+    if (extra <= 0) {
+      if (uso && disponivel <= 0) toast(`As consultas grátis deste mês acabaram. Voltam em ${formatarRenovacaoCurta(uso.renovaEm)}.`, "error");
+      return;
+    }
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -337,6 +359,70 @@ export function Dashboard() {
   }, [rodando, meta, uso, maxPorBusca, toast, executar, finalizar]);
 
   const parar = useCallback(() => abortRef.current?.abort(), []);
+
+  // Recarregou a página no meio de uma busca: retoma de onde parou (até o limite original).
+  // (O timer não pode ser cancelado quando `continuar` muda, ex.: o contador de consultas carregou.)
+  const retomada = useRef(false);
+  const continuarRef = useRef(continuar);
+  const buscarRef = useRef(buscar);
+  useEffect(() => {
+    continuarRef.current = continuar;
+    buscarRef.current = buscar;
+  }, [continuar, buscar]);
+  useEffect(() => {
+    const s = sessaoRef.current;
+    const p = s?.progresso;
+    // Recarregou ainda no planejamento (antes da primeira consulta): começa a mesma caçada de novo.
+    if (salvo?.rodando && !s && !salvo.leads.length) {
+      const t = window.setTimeout(() => {
+        if (retomada.current) return;
+        retomada.current = true;
+        toast("A página recarregou no começo da caçada. Ligando o radar de novo…", "info");
+        void buscarRef.current();
+      }, 600);
+      return () => window.clearTimeout(t);
+    }
+    if (!s || !p || !salvo?.rodando || !s.temMais || p.novos >= p.alvo || p.consultas >= p.limite) return;
+    const t = window.setTimeout(() => {
+      if (retomada.current) return;
+      retomada.current = true;
+      toast("A página recarregou no meio da caçada. Retomando de onde parou…", "info");
+      void continuarRef.current(p.limite);
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [salvo, toast]);
+
+  // Voltou com uma lista salva: confere de novo na planilha (alguém pode ter enviado nesse meio tempo).
+  const conferidaAoVoltar = useRef(false);
+  useEffect(() => {
+    if (conferidaAoVoltar.current || !salvo?.leads.length || salvo.rodando) return;
+    conferidaAoVoltar.current = true;
+    const t = window.setTimeout(() => void conferirPlanilha(false), 400);
+    return () => window.clearTimeout(t);
+  }, [salvo, conferirPlanilha]);
+
+  // Guarda o que está na tela (com uma pequena espera para não gravar a cada tecla).
+  const salvarAgora = useCallback(() => {
+    salvarSessao({
+      view,
+      form: form as unknown as Record<string, unknown>,
+      meta,
+      leads: leadsRef.current,
+      selecionados: [...selecionados],
+      incluirFixos,
+      progresso,
+      rodando,
+      busca: sessaoRef.current && (sessaoRef.current.temMais || rodando) ? sessaoRef.current.snapshot() : null,
+    });
+  }, [view, form, meta, selecionados, incluirFixos, progresso, rodando]);
+  useEffect(() => {
+    const t = window.setTimeout(salvarAgora, rodando ? 1200 : 400);
+    return () => window.clearTimeout(t);
+  }, [salvarAgora, leads, rodando]);
+  useEffect(() => {
+    window.addEventListener("pagehide", salvarAgora);
+    return () => window.removeEventListener("pagehide", salvarAgora);
+  }, [salvarAgora]);
 
   const leadsParaEnviar = useMemo(
     () => leads.filter((l) => selecionados.has(l.id) && podeEnviar(l, incluirFixos)),
@@ -433,7 +519,7 @@ export function Dashboard() {
           onAtualizarUso={() => void carregarUso(true)}
           onBuscar={buscar}
           onParar={parar}
-          onContinuar={continuar}
+          onContinuar={() => void continuar()}
           onVerResultados={() => setView("resultados")}
         />
       )}
@@ -446,7 +532,7 @@ export function Dashboard() {
           rodando={rodando}
           progresso={progresso}
           podeContinuar={temMais && !rodando}
-          onContinuar={continuar}
+          onContinuar={() => void continuar()}
           check={check}
           selecionados={selecionados}
           onSelecionados={setSelecionados}
@@ -461,6 +547,7 @@ export function Dashboard() {
         />
       )}
       {view === "disparo" && <DisparoView preSelecao={preSelecaoDisparo} onPreSelecaoVista={preSelecaoVista} />}
+      {view === "painel" && <PainelView />}
       {view === "historico" && (
         <HistoryView
           historico={historico}

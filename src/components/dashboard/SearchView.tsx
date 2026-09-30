@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleStop, MapPin, Play, Plus, Radar, Search, SlidersHorizontal, Tag, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleStop, MapPin, Play, Plus, Search, SlidersHorizontal, Tag, Users } from "lucide-react";
 import { useState } from "react";
 
 import { Badge, Button, Card, Field, inputClass, Toggle, cx } from "@/components/ui";
@@ -8,6 +8,7 @@ import { QUANTIDADES, splitLines, sugerirLimite } from "@/lib/geo";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { Progresso } from "@/lib/client/search-runner";
 import type { Uso } from "@/lib/types";
+import { AnimatedNumber, RadarSweep } from "@/components/motion";
 
 import { UsoCard } from "./UsoCota";
 
@@ -126,13 +127,13 @@ export function SearchView({
   return (
     <div className="space-y-6">
       <header>
-        <p className="eyebrow">Nova busca</p>
+        <p className="eyebrow">Nova caçada</p>
         <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
-          Encontre lava-jatos e lavadores autônomos. <span className="text-brand">A Carol faz o primeiro contato.</span>
+          Bora encher a agenda <span className="text-brand">do Lavacar!</span>
         </h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-          Diga quem procurar, onde e quantos contatos você quer. O Radar procura no Google Maps, tira os repetidos e quem já está na
-          planilha, e separa quem tem WhatsApp provável.
+          Diga quem, onde e quantos. O Radar varre o Google Maps atrás de lava-jatos e lavadores autônomos, joga fora os repetidos e quem
+          já está na planilha, e te entrega só oportunidade nova, pronta para a Carol chamar.
         </p>
       </header>
 
@@ -148,7 +149,7 @@ export function SearchView({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="p-5 sm:p-7">
           <div className="mb-6">
-            <p className="text-sm font-semibold text-ink">Quem você quer encontrar?</p>
+            <p className="text-sm font-semibold text-ink">Quem vamos caçar hoje?</p>
             <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Quem procurar">
               {(Object.keys(PUBLICOS) as Publico[]).map((k) => {
                 const ativo = publicoAtual(termos) === k;
@@ -170,10 +171,10 @@ export function SearchView({
                 );
               })}
             </div>
-            <p className="mt-1.5 text-xs text-muted">Escolhe os termos de busca para você. Dá para ajustar no campo logo abaixo.</p>
+            <p className="mt-1.5 text-xs text-muted">Um clique e os termos certos já entram. Quer afinar? É só mexer no campo aqui embaixo.</p>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
-            <Field label="1. O que procurar?" hint="um por linha" htmlFor="termos">
+            <Field label="1. O que procurar no Google" hint="um por linha" htmlFor="termos">
               <div className="relative">
                 <Tag className="pointer-events-none absolute top-3 left-3.5 size-4 text-muted" />
                 <textarea
@@ -195,7 +196,7 @@ export function SearchView({
               </div>
             </Field>
 
-            <Field label="2. Onde?" hint="cidade ou bairro, um por linha" htmlFor="cidades">
+            <Field label="2. Onde" hint="cidade ou bairro, um por linha" htmlFor="cidades">
               <div className="relative">
                 <MapPin className="pointer-events-none absolute top-3 left-3.5 size-4 text-muted" />
                 <textarea
@@ -219,9 +220,10 @@ export function SearchView({
           </div>
 
           <div className="mt-7">
-            <p className="text-sm font-semibold text-ink">3. Quantos contatos novos você quer?</p>
+            <p className="text-sm font-semibold text-ink">3. Quantas oportunidades novas você quer?</p>
             <p className="mt-0.5 text-xs text-muted">
-              Contam os que têm {form.incluirFixos ? "celular ou telefone fixo" : "celular"} e ainda não estão na planilha.
+              Só conta quem tem {form.incluirFixos ? "celular ou telefone fixo" : "celular"} e ainda não está na planilha. O Radar para assim
+              que bater a meta.
             </p>
             <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Quantidade de contatos">
               {QUANTIDADES.map((q) => {
@@ -295,9 +297,9 @@ export function SearchView({
             ) : (
               <>
                 <p>
-                  Vai usar <b>no máximo {n(limite)} consulta{limite === 1 ? "" : "s"}</b>
-                  {form.alvo > 0 && <> para achar {form.alvo === 1 ? "1 contato" : `${n(form.alvo)} contatos`}</>}. A busca para assim que
-                  chegar lá, então costuma usar menos.
+                  Gasta <b>no máximo {n(limite)} consulta{limite === 1 ? "" : "s"}</b>
+                  {form.alvo > 0 && <> para achar {form.alvo === 1 ? "1 oportunidade" : `${n(form.alvo)} oportunidades`}</>}. Bateu a meta,
+                  o radar desliga: quase sempre sobra combustível.
                   {uso && uso.bloquear && (
                     <span className="text-muted">
                       {" "}
@@ -367,11 +369,11 @@ export function SearchView({
             <div className="flex flex-wrap gap-3 sm:justify-end">
               {!rodando ? (
                 <Button size="lg" onClick={onBuscar} disabled={!podeBuscar} icon={<Search className="size-4" />}>
-                  Buscar {form.alvo === 1 ? "1 contato" : `${form.alvo > 0 ? n(form.alvo) : ""} contatos`}
+                  Caçar {form.alvo === 1 ? "1 oportunidade" : `${form.alvo > 0 ? n(form.alvo) : ""} oportunidades`}
                 </Button>
               ) : (
                 <Button size="lg" variant="danger" onClick={onParar} icon={<CircleStop className="size-4" />}>
-                  Parar busca
+                  Parar a caçada
                 </Button>
               )}
             </div>
@@ -397,9 +399,9 @@ export function SearchView({
       {!progresso && (
         <div className="grid gap-3 sm:grid-cols-3">
           {[
-            ["1", "Busque", "Diga quem procurar, onde e quantos contatos quer."],
-            ["2", "Confira e envie", "Veja a lista (empresa ou autônomo, celular ou fixo) e mande os escolhidos para a planilha."],
-            ["3", "Dispare", "Na tela Disparo, marque quem recebe: a Carol chama no WhatsApp."],
+            ["1", "Caça", "Diga quem, onde e quantos. O radar faz o resto."],
+            ["2", "Confere e manda", "Olhe a lista, ajuste empresa ou autônomo e mande os escolhidos para a planilha."],
+            ["3", "Dispara", "Marque quem recebe e a Carol chama no WhatsApp. Acompanhe no Placar."],
           ].map(([num, t, d]) => (
             <div key={num} className="flex gap-3 rounded-2xl border border-dashed border-line p-4">
               <Badge tone="brand" className="size-6 justify-center p-0 text-xs">
@@ -442,20 +444,20 @@ function CartaoProgresso({
       case "alvo":
         return {
           tom: "ok",
-          texto: `Pronto! Achamos ${p.alvo === 1 ? "o contato novo" : `os ${n(p.alvo)} contatos novos`} usando ${n(p.consultas)} consulta${p.consultas === 1 ? "" : "s"}.`,
+          texto: `Meta batida! ${p.alvo === 1 ? "A oportunidade nova está" : `As ${n(p.alvo)} oportunidades novas estão`} na mão, usando ${n(p.consultas)} consulta${p.consultas === 1 ? "" : "s"}. Agora é mandar para a Carol.`,
         };
       case "limite":
         return {
           tom: "aviso",
-          texto: `Parou no máximo de ${n(p.limite)} consultas com ${n(p.novos)} de ${n(p.alvo)} contatos. Dá para continuar e buscar os ${n(faltam)} que faltam.`,
+          texto: `Bateu o teto de ${n(p.limite)} consultas com ${n(p.novos)} de ${n(p.alvo)} oportunidades. Quer ir atrás das ${n(faltam)} que faltam? É só continuar.`,
         };
       case "esgotado":
         return {
           tom: "aviso",
-          texto: `O Google não tem mais resultados para esses termos e lugares. Achamos ${n(p.novos)} de ${n(p.alvo)}. Para achar mais, tente outras cidades, bairros ou termos.`,
+          texto: `Varremos tudo o que o Google tinha aqui: ${n(p.novos)} de ${n(p.alvo)} oportunidades. Para achar mais, bora abrir o mapa: outras cidades, bairros ou termos.`,
         };
       case "parado":
-        return { tom: "aviso", texto: `Busca interrompida com ${n(p.novos)} de ${n(p.alvo)} contatos.` };
+        return { tom: "aviso", texto: `Caçada pausada com ${n(p.novos)} de ${n(p.alvo)} oportunidades. Dá para continuar de onde parou.` };
       default:
         return { tom: "erro", texto: p.erro || "A busca parou por um erro." };
     }
@@ -464,31 +466,38 @@ function CartaoProgresso({
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div className="flex min-w-0 items-center gap-4">
-          <div
-            className={cx(
-              "grid size-12 shrink-0 place-items-center rounded-2xl",
-              p.rodando ? "bg-brand-50 text-brand" : p.fim === "alvo" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600",
-            )}
-          >
-            {p.rodando ? <Radar className="size-6 animate-pulse" /> : p.fim === "alvo" ? <CheckCircle2 className="size-6" /> : <Users className="size-6" />}
-          </div>
+        <div className="flex min-w-0 items-center gap-5">
+          {p.rodando || p.unicos > 0 ? (
+            <RadarSweep ativo={p.rodando} pontos={p.novos} tamanho={76} className={cx(p.fim === "alvo" && "ring-4 ring-emerald-200")} />
+          ) : (
+            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-amber-50 text-amber-600">
+              {p.fim === "alvo" ? <CheckCircle2 className="size-6" /> : <Users className="size-6" />}
+            </div>
+          )}
           <div className="min-w-0">
-            <p className="text-sm font-bold text-ink">{p.rodando ? "Buscando…" : "Busca terminada"}</p>
+            <p className="text-base font-extrabold text-ink">
+              {p.rodando ? "Radar varrendo o mapa…" : p.fim === "alvo" ? "Meta batida!" : "Caçada encerrada"}
+            </p>
             <p className="mt-0.5 truncate text-xs text-muted">
-              {p.rodando ? p.etapa || "Preparando…" : `${n(p.consultas)} consultas usadas · ${n(p.unicos)} estabelecimentos na lista`}
+              {p.rodando ? p.etapa || "Ligando o radar…" : `${n(p.consultas)} consultas usadas · ${n(p.unicos)} estabelecimentos na lista`}
             </p>
           </div>
         </div>
         <div className="text-left sm:text-right">
-          <div className="text-3xl font-extrabold text-navy tabular-nums">
-            {n(p.novos)} <span className="text-lg font-bold text-muted">de {n(p.alvo)}</span>
+          <div className={cx("text-4xl font-extrabold tabular-nums", p.fim === "alvo" ? "text-emerald-600" : "text-navy")}>
+            <AnimatedNumber value={Math.min(p.novos, p.alvo)} /> <span className="text-lg font-bold text-muted">de {n(p.alvo)}</span>
           </div>
-          <div className="text-xs font-semibold text-muted">contatos novos</div>
+          <div className="text-xs font-semibold text-muted">
+            oportunidades novas
+            {p.novos > p.alvo && <span className="text-emerald-600"> · +{n(p.novos - p.alvo)} de bônus na lista</span>}
+          </div>
         </div>
       </div>
-      <div className="h-2 bg-surface">
-        <div className={cx("h-full transition-all duration-500", p.fim === "alvo" ? "bg-emerald-500" : "bg-brand")} style={{ width: `${pct}%` }} />
+      <div className="h-2.5 bg-surface">
+        <div
+          className={cx("h-full rounded-r-full transition-all duration-700 ease-out", p.fim === "alvo" ? "bg-emerald-500" : "bg-brand", p.rodando && "shine")}
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-2 px-5 py-4 text-xs text-muted sm:grid-cols-3 sm:px-7 lg:grid-cols-6">
         <Numero rotulo="consultas usadas" valor={`${n(p.consultas)} / ${n(p.limite)}`} />
@@ -512,7 +521,7 @@ function CartaoProgresso({
           <div className="flex shrink-0 flex-wrap gap-2">
             {podeContinuar && p.fim !== "alvo" && p.fim !== "esgotado" && p.fim !== "cota" && (
               <Button size="sm" variant="outline" onClick={onContinuar} icon={<Play className="size-3.5" />}>
-                Continuar buscando
+                Continuar a caçada
               </Button>
             )}
             {p.unicos > 0 && (

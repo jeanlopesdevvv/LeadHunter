@@ -31,7 +31,7 @@ export interface Progresso {
   erro?: string;
 }
 
-interface Item extends SearchTask {
+export interface Item extends SearchTask {
   paginas: number;
   pageToken: string | null;
   recebidos: number;
@@ -41,7 +41,35 @@ const PARALELO = 3;
 /** Uma consulta que chegou perto de 60 lugares ainda tem mais para achar: divide o mapa. */
 const CHEIA = PAGINAS_POR_CONSULTA * LUGARES_POR_PAGINA - 5;
 
-const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const dormir = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => (clearTimeout(t), resolve()), { once: true });
+  });
+
+/** Espera a internet voltar (ou a busca ser parada). */
+function esperarConexao(signal: AbortSignal): Promise<void> {
+  if (typeof navigator === "undefined" || navigator.onLine) return Promise.resolve();
+  return new Promise((resolve) => {
+    const pronto = () => {
+      window.removeEventListener("online", pronto);
+      resolve();
+    };
+    window.addEventListener("online", pronto);
+    signal.addEventListener("abort", pronto, { once: true });
+  });
+}
+
+/** Tudo o que é preciso para retomar uma busca depois de recarregar a página. */
+export interface SnapshotBusca {
+  fila: Item[];
+  areas: Record<string, Rect | null>;
+  semArea: string[];
+  progresso: Progresso;
+  ultimoUso: Uso | null;
+  ignorarFechados: boolean;
+  incluirFixos: boolean;
+}
 
 /** Conta como "novo" para o alvo: celular (ou fixo, se permitido) e fora da planilha. */
 export function contaComoNovo(lead: Lead, incluirFixos = false): boolean {
@@ -100,6 +128,37 @@ export class SessaoDeBusca {
     return this.fila.length > 0;
   }
 
+  /** Consultas que saíram da fila e ainda não voltaram (entram no que é salvo, para não se perderem ao recarregar). */
+  private emVoo = new Set<Item>();
+
+  snapshot(): SnapshotBusca {
+    return {
+      fila: [...this.emVoo, ...this.fila].map((i) => ({ ...i })),
+      areas: this.areas,
+      semArea: [...this.semArea],
+      progresso: { ...this.progresso, avisos: [...this.progresso.avisos] },
+      ultimoUso: this.ultimoUso,
+      ignorarFechados: this.ignorarFechados,
+      incluirFixos: this.incluirFixos,
+    };
+  }
+
+  /** Recria a busca a partir do que foi salvo no navegador (depois de recarregar a página). */
+  static restaurar(s: SnapshotBusca, leads: Lead[]): SessaoDeBusca {
+    const sessao = new SessaoDeBusca(
+      { tarefas: [], areas: s.areas, cidades: [], uso: s.ultimoUso as Uso },
+      { ignorarFechados: s.ignorarFechados, incluirFixos: s.incluirFixos },
+    );
+    sessao.fila = s.fila.map((i) => ({ ...i }));
+    s.semArea.forEach((c) => sessao.semArea.add(c));
+    Object.assign(sessao.progresso, s.progresso, { rodando: false, avisos: [...s.progresso.avisos] });
+    for (const l of leads) {
+      sessao.porId.set(l.id, l);
+      if (l.telefoneKey) sessao.porTelefone.add(l.telefoneKey);
+    }
+    return sessao;
+  }
+
   async executar(opts: { alvo: number; limite: number; signal: AbortSignal; onUpdate: (leads: Lead[], p: Progresso) => void }) {
     const p = this.progresso;
     p.alvo = opts.alvo;
@@ -120,13 +179,18 @@ export class SessaoDeBusca {
           continue;
         }
         const item = this.fila.shift()!;
+        this.emVoo.add(item);
         emAndamento++;
         p.etapa = descrever(item);
         emitir();
         try {
-          const f = await this.buscarPagina(item, opts.signal);
+          const f = await this.buscarPagina(item, opts.signal, (etapa) => {
+            p.etapa = etapa;
+            emitir();
+          });
           if (f && !fatal) fatal = f;
         } finally {
+          this.emVoo.delete(item);
           emAndamento--;
         }
         emitir();
@@ -150,10 +214,18 @@ export class SessaoDeBusca {
     emitir();
   }
 
-  /** Busca uma página. Devolve um erro fatal (para a busca inteira) ou null. */
-  private async buscarPagina(item: Item, signal: AbortSignal): Promise<{ motivo: MotivoFim; mensagem: string } | null> {
+  /**
+   * Busca uma página. Devolve um erro fatal (para a busca inteira) ou null.
+   * Queda de internet: espera voltar e tenta de novo. Erro passageiro do servidor/Google: tenta
+   * de novo com intervalos crescentes. Erro de configuração ou cota: para a busca.
+   */
+  private async buscarPagina(
+    item: Item,
+    signal: AbortSignal,
+    avisar: (etapa: string) => void,
+  ): Promise<{ motivo: MotivoFim; mensagem: string } | null> {
     let result: PageResult | null = null;
-    for (let tentativa = 0; tentativa < 2 && !result; tentativa++) {
+    for (let tentativa = 0; !result; tentativa++) {
       try {
         result = await api<PageResult>(
           "/api/search/page",
@@ -161,7 +233,7 @@ export class SessaoDeBusca {
           { signal },
         );
       } catch (e) {
-        if ((e as Error).name === "AbortError") {
+        if ((e as Error).name === "AbortError" || signal.aborted) {
           this.fila.unshift(item); // dá para continuar depois
           return null;
         }
@@ -172,16 +244,39 @@ export class SessaoDeBusca {
           this.fila.unshift(item);
           return { motivo: "cota", mensagem };
         }
-        // Chave errada, API desligada, sem faturamento, limite do Google: não adianta insistir.
-        if (status === 503 || status === 429 || status === 401) {
+        // Chave errada, API desligada, sem faturamento, sessão: não adianta insistir.
+        if (status === 503 || status === 401) {
           this.fila.unshift(item);
           return { motivo: "erro", mensagem };
         }
-        if (status === 400 || tentativa === 1) {
+        // Página seguinte expirou ou pedido inválido: segue com as outras consultas.
+        if (status === 400) {
           this.progresso.avisos.push(`"${item.termo}" em ${item.cidade}: ${mensagem}`);
           return null;
         }
-        await dormir(1500);
+        // Sem internet: espera voltar (sem gastar tentativa enquanto está offline).
+        if (status === 0) {
+          if (tentativa >= 8) {
+            this.fila.unshift(item);
+            return { motivo: "erro", mensagem: "A conexão caiu e não voltou. Quando voltar, clique em Continuar a caçada." };
+          }
+          avisar("Sem conexão… o Radar continua sozinho assim que a internet voltar");
+          await esperarConexao(signal);
+          await dormir(Math.min(15_000, 1500 * 2 ** Math.min(tentativa, 3)), signal);
+          continue;
+        }
+        // Google pedindo calma (429) ou erro passageiro (5xx): tenta de novo, cada vez esperando mais.
+        const maxTentativas = status === 429 ? 4 : 3;
+        if (tentativa + 1 >= maxTentativas) {
+          if (status === 429) {
+            this.fila.unshift(item);
+            return { motivo: "erro", mensagem };
+          }
+          this.progresso.avisos.push(`"${item.termo}" em ${item.cidade}: ${mensagem}`);
+          return null;
+        }
+        avisar(`O Google demorou para responder, tentando de novo (${tentativa + 2}/${maxTentativas})…`);
+        await dormir((status === 429 ? 4000 : 1500) * 2 ** tentativa, signal);
       }
     }
     if (!result) return null;

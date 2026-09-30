@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CalendarClock, FlaskConical, Gauge, RefreshCw } from "lucide-react";
 
+import { AnimatedNumber } from "@/components/motion";
 import { Card, cx } from "@/components/ui";
 import { formatarRenovacao, formatarRenovacaoCurta, horaBrasilia, tempoAte } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
@@ -19,7 +20,7 @@ function Barra({ uso, escura }: { uso: Uso; escura?: boolean }) {
   const pct = uso.limite ? Math.min(100, (uso.usadas / uso.limite) * 100) : 100;
   return (
     <div className={cx("h-2 overflow-hidden rounded-full", escura ? "bg-white/10" : "bg-surface")}>
-      <div className={cx("h-full rounded-full transition-all duration-500", tom(uso).barra)} style={{ width: `${pct}%` }} />
+      <div className={cx("h-full rounded-full transition-all duration-700 ease-out", tom(uso).barra)} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -51,9 +52,9 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
   if (!uso) {
     return (
       <Card className="p-5 sm:p-6">
-        <div className="h-4 w-44 animate-pulse rounded bg-surface" />
-        <div className="mt-4 h-8 w-28 animate-pulse rounded bg-surface" />
-        <div className="mt-4 h-2 animate-pulse rounded-full bg-surface" />
+        <div className="skeleton h-4 w-44 rounded" />
+        <div className="skeleton mt-4 h-8 w-28 rounded" />
+        <div className="skeleton mt-4 h-2 rounded-full" />
       </Card>
     );
   }
@@ -62,7 +63,7 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
     <Card className="p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <p className="flex items-center gap-2 text-sm font-bold text-ink">
-          <Gauge className="size-4 text-brand" /> Consultas grátis deste mês
+          <Gauge className="size-4 text-brand" /> Combustível do radar (grátis)
         </p>
         {onAtualizar && uso.fonte !== "simulacao" && (
           <button
@@ -78,9 +79,9 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-2">
-        <span className={cx("text-4xl font-extrabold tracking-tight tabular-nums", t.texto)}>{n(uso.restantes)}</span>
+        <AnimatedNumber value={uso.restantes} className={cx("text-4xl font-extrabold tracking-tight", t.texto)} />
         <span className="text-sm text-muted">
-          restantes de <b className="text-ink tabular-nums">{n(uso.limite)}</b> · {n(uso.usadas)} usadas
+          consultas de <b className="text-ink tabular-nums">{n(uso.limite)}</b> ainda no tanque · {n(uso.usadas)} usadas
         </span>
       </div>
       <div className="mt-3">
@@ -98,7 +99,7 @@ export function UsoCard({ uso, onAtualizar, atualizando }: { uso: Uso | null; on
       <div className="mt-3 space-y-1.5 border-t border-line pt-3">
         <FonteDoUso uso={uso} />
         <p className="text-xs text-muted">
-          Cada consulta traz até 20 estabelecimentos do Google Maps.{" "}
+          Cada consulta traz até 20 lava-jatos do Google Maps.{" "}
           {uso.bloquear
             ? "Quando as grátis acabam, o Radar para de buscar até a renovação (nada é cobrado)."
             : "Passando do limite, o Google cobra cerca de US$ 35 a cada 1.000 consultas."}
@@ -116,7 +117,7 @@ export function UsoMini({ uso }: { uso: Uso | null }) {
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[11px] font-semibold text-white/50">Consultas grátis</span>
         <span className={cx("text-sm font-bold tabular-nums", uso.restantes <= 0 ? "text-red-300" : "text-white")}>
-          {n(uso.restantes)}
+          <AnimatedNumber value={uso.restantes} />
           <span className="font-medium text-white/40">/{n(uso.limite)}</span>
         </span>
       </div>

@@ -9,6 +9,8 @@ export function jsonError(message: string, status = 400) {
 }
 
 export function handleError(e: unknown) {
+  // Disparo "incerto": o n8n não respondeu a tempo e pode ter começado. O navegador passa a acompanhar pela planilha.
+  if (e instanceof DisparoError && e.incerto) return Response.json({ erro: e.message, incerto: true }, { status: e.status });
   if (e instanceof PlacesError || e instanceof SheetsError || e instanceof DisparoError) return jsonError(e.message, e.status);
   console.error("[leadhunter]", e);
   return jsonError("Algo deu errado no servidor. Tente de novo.", 500);

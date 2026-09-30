@@ -1,11 +1,13 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Clock, Copy, Loader2, MessageCircle, PauseCircle, RefreshCw, Send, Users, XCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Clock, Copy, Loader2, MessageCircle, PartyPopper, PauseCircle, RefreshCw, Send, Users, XCircle, Zap } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
+import { AnimatedNumber, confete } from "@/components/motion";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, cx, inputClass } from "@/components/ui";
-import { api } from "@/lib/client/api";
+import { ApiError, api } from "@/lib/client/api";
+import { disparoLembrado, lembrarDisparo } from "@/lib/client/sessao-salva";
 import type { ItemDisparo, StatusDisparo } from "@/lib/disparo-regras";
 import { SEGUNDOS_POR_LEAD } from "@/lib/disparo-regras";
 import { horaBrasilia, quandoCurto } from "@/lib/periodo";
@@ -135,16 +137,33 @@ export function DisparoView({
   const pedido = useRef(0);
   const preSelecaoRef = useRef(preSelecao);
 
-  /** Aplica uma leitura nova: tira da seleção quem saiu da fila. */
+  /** Aplica uma leitura nova: tira da seleção quem saiu da fila, lembra o disparo e comemora quando termina. */
   const aplicar = useCallback((s: StatusDisparo) => {
     setStatus(s);
     setErro("");
+    const a = s.atual;
+    if (a) {
+      const lem = disparoLembrado();
+      if (!lem || lem.iniciadoEm !== a.iniciadoEm) {
+        // Disparo que este navegador ainda não conhecia: só comemora se vir ele terminar.
+        lembrarDisparo({ iniciadoEm: a.iniciadoEm, chaves: a.itens.map((i) => i.key), comemorado: a.estado !== "enviando" });
+      } else if (a.estado === "concluido" && !lem.comemorado) {
+        lembrarDisparo({ ...lem, comemorado: true });
+        void confete("forte");
+        toast(
+          a.enviados > 0
+            ? `Disparo concluído! ${a.enviados === 1 ? "1 mensagem saiu" : `${n(a.enviados)} mensagens saíram`}. Agora é a Carol conversando.`
+            : "Disparo concluído. Confira abaixo como ficou cada contato.",
+          "success",
+        );
+      }
+    }
     const naFila = new Set(s.itensFila.map((i) => i.key));
     setMarcados((m) => {
       const novo = new Set([...m].filter((k) => naFila.has(k)));
       return novo.size === m.size ? m : novo;
     });
-  }, []);
+  }, [toast]);
 
   const carregar = useCallback(async () => {
     const meu = ++pedido.current;
@@ -164,6 +183,14 @@ export function DisparoView({
     let ativo = true;
     const meu = ++pedido.current;
     api<StatusDisparo>("/api/disparo")
+      .then(async (s) => {
+        // O servidor reiniciou (ex.: atualização) no meio de um disparo: volta a acompanhar pelo que o navegador lembra.
+        const lem = !s.atual ? disparoLembrado() : null;
+        if (lem) {
+          s = await api<StatusDisparo>("/api/disparo/acompanhar", { iniciadoEm: lem.iniciadoEm, chaves: lem.chaves }, { tentativas: 2 }).catch(() => s);
+        }
+        return s;
+      })
       .then((s) => {
         if (!ativo || meu !== pedido.current) return;
         aplicar(s);
@@ -203,16 +230,28 @@ export function DisparoView({
 
   async function disparar() {
     setDisparando(true);
+    const inicio = Date.now();
+    const escolhidos = [...marcados];
     try {
-      const s = await api<StatusDisparo>("/api/disparo", { telefones: [...marcados] });
+      const s = await api<StatusDisparo>("/api/disparo", { telefones: escolhidos });
+      if (s.atual) lembrarDisparo({ iniciadoEm: s.atual.iniciadoEm, chaves: s.atual.itens.map((i) => i.key), comemorado: false });
       aplicar(s);
       setMarcados(new Set());
       setConfirmar(false);
-      toast(`Disparo começou: ${n(s.atual?.total ?? 0)} contato(s) na vez da Carol.`, "success");
+      const total = s.atual?.total ?? escolhidos.length;
+      toast(`Foi! A Carol já está chamando ${total === 1 ? "1 contato" : `${n(total)} contatos`} no WhatsApp.`, "success");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
-      toast((e as Error).message, "error");
       setConfirmar(false);
+      if (e instanceof ApiError && e.dados.incerto) {
+        // O n8n demorou a responder e pode ter começado: acompanha pela planilha em vez de arriscar disparar de novo.
+        lembrarDisparo({ iniciadoEm: inicio - 5_000, chaves: escolhidos, comemorado: false });
+        setMarcados(new Set());
+        toast("O n8n demorou a responder, mas pode ter começado. O Radar está acompanhando pela planilha: não precisa disparar de novo.", "info");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        toast((e as Error).message, "error");
+      }
       void carregar();
     } finally {
       setDisparando(false);
@@ -253,13 +292,13 @@ export function DisparoView({
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">Disparo</p>
+          <p className="eyebrow">Hora do disparo</p>
           <h1 className="display mt-3 text-4xl text-navy sm:text-5xl">
-            A Carol chama <span className="text-brand">no WhatsApp.</span>
+            Marcou, disparou: <span className="text-brand">a Carol chama no WhatsApp.</span>
           </h1>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-            Marque quem deve receber a primeira mensagem da Carol e clique em Disparar. Ela manda uma por vez, a cada 10 a 15 segundos, para
-            o WhatsApp não bloquear. O andamento aparece aqui.
+            Escolha quem recebe a primeira mensagem e aperte o botão. A Carol manda uma por vez, a cada 10 a 15 segundos, para o WhatsApp não
+            bloquear, e você acompanha cada envio ao vivo aqui.
           </p>
         </div>
         <Button variant="outline" onClick={atualizar} loading={atualizando} icon={<RefreshCw className="size-4" />}>
@@ -271,7 +310,7 @@ export function DisparoView({
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>
-            <b>Não deu para ler a planilha.</b> {erro}
+            <b>A planilha não respondeu agora.</b> {erro} O Radar tenta de novo sozinho em instantes.
           </span>
         </div>
       )}
@@ -282,8 +321,8 @@ export function DisparoView({
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
           <span>
-            A Carol mandou mensagem há pouco: parece que o fluxo está rodando direto no n8n. Espere terminar antes de disparar de novo, para
-            ninguém receber duas vezes.
+            A Carol mandou mensagem há pouco: parece que o fluxo está rodando direto no n8n. Segura um pouquinho e dispare quando ele
+            terminar, para ninguém receber duas vezes.
           </span>
         </div>
       )}
@@ -308,19 +347,19 @@ export function DisparoView({
         {/* Resumo e botão */}
         <Card className="h-fit p-5 sm:p-6 lg:sticky lg:top-6">
           <p className="flex items-center gap-2 text-sm font-bold text-ink">
-            <Users className="size-4 text-brand" /> Fila da Carol
+            <Users className="size-4 text-brand" /> Na fila da Carol
           </p>
           {!s ? (
             <div className="mt-4 h-10 w-24 animate-pulse rounded bg-surface" />
           ) : (
             <>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-4xl font-extrabold tracking-tight text-navy tabular-nums">{n(s.fila)}</span>
-                <span className="text-sm text-muted">na fila</span>
+                <AnimatedNumber value={s.fila} className="text-5xl font-extrabold tracking-tight text-navy" />
+                <span className="text-sm text-muted">{s.fila === 1 ? "oportunidade esperando" : "oportunidades esperando"}</span>
               </div>
               <div className="mt-4 space-y-1 rounded-xl bg-surface px-3.5 py-3 text-sm">
                 <p>
-                  Hoje: <b className="tabular-nums">{n(s.hoje.enviadosHoje)}</b> {s.hoje.enviadosHoje === 1 ? "mensagem enviada" : "mensagens enviadas"}
+                  Hoje: <AnimatedNumber value={s.hoje.enviadosHoje} className="font-bold" /> {s.hoje.enviadosHoje === 1 ? "mensagem enviada" : "mensagens enviadas"}
                   {s.limiteDiario > 0 && <span className="text-muted"> de {n(s.limiteDiario)} por dia</span>}
                 </p>
                 {s.hoje.semWhatsappHoje > 0 && (
@@ -331,7 +370,7 @@ export function DisparoView({
                 {s.hoje.ultimoMovimento && <p className="text-xs text-muted">Última mensagem {quandoCurto(s.hoje.ultimoMovimento)}.</p>}
               </div>
               <p className="mt-4 text-sm text-ink">
-                <b className="tabular-nums">{n(qtd)}</b> {qtd === 1 ? "marcado" : "marcados"}
+                <AnimatedNumber value={qtd} className="font-bold" /> {qtd === 1 ? "marcado" : "marcados"}
                 {qtd > 0 && <span className="text-muted"> · cerca de {minutos(qtd * SEGUNDOS_POR_LEAD)}</span>}
               </p>
               {restamHoje !== null && qtd > restamHoje && (
@@ -339,8 +378,14 @@ export function DisparoView({
                   Hoje só cabem mais {n(restamHoje)} (limite de {n(s.limiteDiario)} por dia). Os outros continuam na fila para o próximo disparo.
                 </p>
               )}
-              <Button size="lg" className="mt-4 w-full" disabled={travado || qtd === 0} onClick={() => setConfirmar(true)} icon={<Send className="size-4" />}>
-                {enviando ? "Disparo em andamento" : qtd > 0 ? `Disparar para ${n(qtd)}` : "Marque quem vai receber"}
+              <Button
+                size="lg"
+                className={cx("mt-4 w-full", !travado && qtd > 0 && "animate-glow")}
+                disabled={travado || qtd === 0}
+                onClick={() => setConfirmar(true)}
+                icon={enviando ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
+              >
+                {enviando ? "A Carol está disparando…" : qtd > 0 ? `Disparar para ${n(qtd)}` : "Marque quem vai receber"}
               </Button>
               {s.configurado && <p className="mt-2 text-center text-[11px] text-muted">n8n: {s.destino}</p>}
             </>
@@ -371,15 +416,22 @@ export function DisparoView({
             />
           </div>
           {!s ? (
-            <div className="p-6 text-sm text-muted">Carregando…</div>
+            <div className="space-y-3 p-6">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="skeleton h-10 rounded-xl" />
+              ))}
+            </div>
           ) : !itens.length ? (
-            <div className="p-10 text-center text-sm text-muted">Ninguém na fila. Envie contatos para a planilha na tela de Resultados.</div>
+            <div className="p-10 text-center text-sm text-muted">
+              <p className="font-semibold text-ink">Fila zerada!</p>
+              <p className="mt-1">Bora caçar mais: mande contatos para a planilha na tela Oportunidades e eles aparecem aqui.</p>
+            </div>
           ) : (
-            <ul className="max-h-[560px] divide-y divide-line overflow-y-auto">
-              {visiveis.map((p) => {
+            <ul className="stagger max-h-[560px] divide-y divide-line overflow-y-auto">
+              {visiveis.map((p, i) => {
                 const marcado = marcados.has(p.key);
                 return (
-                  <li key={`${p.key}-${p.linha}`}>
+                  <li key={`${p.key}-${p.linha}`} style={{ "--i": i } as CSSProperties}>
                     <label className={cx("flex cursor-pointer items-center gap-3 px-5 py-3 sm:px-6", marcado ? "bg-brand-50/50" : "hover:bg-surface/70")}>
                       <input type="checkbox" className="check" checked={marcado} onChange={() => alternar(p.key)} disabled={enviando} />
                       <div className="min-w-0 flex-1">
@@ -402,12 +454,12 @@ export function DisparoView({
         </Card>
       </div>
 
-      <Modal open={confirmar} onClose={() => !disparando && setConfirmar(false)} title="Disparar agora?">
+      <Modal open={confirmar} onClose={() => !disparando && setConfirmar(false)} title="Soltar a Carol agora?">
         {s && (
           <div className="space-y-4 text-sm">
             <p>
-              A Carol vai mandar a primeira mensagem no WhatsApp para <b>{n(qtd)}</b> {qtd === 1 ? "contato" : "contatos"}, um de cada vez (cerca de{" "}
-              {minutos(qtd * SEGUNDOS_POR_LEAD)}).
+              A Carol vai mandar a primeira mensagem no WhatsApp para <b>{n(qtd)}</b> {qtd === 1 ? "oportunidade" : "oportunidades"}, uma de cada
+              vez (cerca de {minutos(qtd * SEGUNDOS_POR_LEAD)}).
             </p>
             {nomesMarcados.length > 0 && nomesMarcados.length <= 8 && (
               <ul className="space-y-1 rounded-xl bg-surface px-3.5 py-2.5">
@@ -438,7 +490,7 @@ export function DisparoView({
                 Cancelar
               </Button>
               <Button onClick={disparar} loading={disparando} disabled={qtd === 0} icon={<Send className="size-4" />}>
-                Sim, disparar
+                {disparando ? "Chamando o n8n…" : "Sim, disparar!"}
               </Button>
             </div>
           </div>
@@ -450,7 +502,7 @@ export function DisparoView({
 
 function CartaoProgresso({ atual, s }: { atual: NonNullable<StatusDisparo["atual"]>; s: StatusDisparo | null }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className={cx("animate-enter overflow-hidden", atual.estado === "concluido" && "ring-2 ring-emerald-200")}>
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex items-center gap-4">
           <div
@@ -462,42 +514,42 @@ function CartaoProgresso({ atual, s }: { atual: NonNullable<StatusDisparo["atual
             )}
           >
             {atual.estado === "enviando" ? (
-              <MessageCircle className="size-6 animate-pulse" />
+              <MessageCircle className="size-6 animate-wiggle [animation-duration:1.2s] [animation-iteration-count:infinite]" />
             ) : atual.estado === "concluido" ? (
-              <CheckCircle2 className="size-6" />
+              <PartyPopper className="size-6 animate-pop-in" />
             ) : (
-              <PauseCircle className="size-6" />
+              <PauseCircle className="size-6 animate-pop-in" />
             )}
           </div>
           <div>
-            <p className="text-sm font-bold text-ink">
-              {atual.estado === "enviando" ? "Enviando…" : atual.estado === "concluido" ? "Disparo concluído" : "O disparo parou"}
+            <p className="text-base font-extrabold text-ink">
+              {atual.estado === "enviando" ? "A Carol está disparando…" : atual.estado === "concluido" ? "Disparo concluído!" : "O disparo parou"}
             </p>
             <p className="text-xs text-muted">Começou às {horaBrasilia(atual.iniciadoEm)}</p>
           </div>
         </div>
         <div className="text-left sm:text-right">
-          <div className="text-3xl font-extrabold text-navy tabular-nums">
-            {n(atual.total - atual.aguardando)} <span className="text-lg font-bold text-muted">de {n(atual.total)}</span>
+          <div className={cx("text-4xl font-extrabold", atual.estado === "concluido" ? "text-emerald-600" : "text-navy")}>
+            <AnimatedNumber value={atual.total - atual.aguardando} /> <span className="text-lg font-bold text-muted">de {n(atual.total)}</span>
           </div>
           <div className="text-xs font-semibold text-muted">contatos processados</div>
         </div>
       </div>
-      <div className="flex h-2 bg-surface">
-        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(atual.enviados / Math.max(1, atual.total)) * 100}%` }} />
-        <div className="h-full bg-amber-400 transition-all duration-500" style={{ width: `${((atual.semWhatsapp + atual.outros) / Math.max(1, atual.total)) * 100}%` }} />
+      <div className={cx("flex h-2.5 bg-surface", atual.estado === "enviando" && "shine")}>
+        <div className="h-full bg-emerald-500 transition-all duration-700 ease-out" style={{ width: `${(atual.enviados / Math.max(1, atual.total)) * 100}%` }} />
+        <div className="h-full bg-amber-400 transition-all duration-700 ease-out" style={{ width: `${((atual.semWhatsapp + atual.outros) / Math.max(1, atual.total)) * 100}%` }} />
       </div>
       <div className="grid grid-cols-3 gap-4 px-5 py-4 text-xs text-muted sm:px-6">
         <div>
-          <div className="text-lg font-bold text-emerald-600 tabular-nums">{n(atual.enviados)}</div>
+          <AnimatedNumber value={atual.enviados} className="block text-xl font-extrabold text-emerald-600" />
           mensagens enviadas
         </div>
         <div>
-          <div className="text-lg font-bold text-amber-600 tabular-nums">{n(atual.semWhatsapp + atual.outros)}</div>
+          <AnimatedNumber value={atual.semWhatsapp + atual.outros} className="block text-xl font-extrabold text-amber-600" />
           sem WhatsApp ou erro
         </div>
         <div>
-          <div className="text-lg font-bold text-ink tabular-nums">{n(atual.aguardando)}</div>
+          <AnimatedNumber value={atual.aguardando} className="block text-xl font-extrabold text-ink" />
           na vez
         </div>
       </div>
@@ -510,8 +562,9 @@ function CartaoProgresso({ atual, s }: { atual: NonNullable<StatusDisparo["atual
         )}
       >
         {atual.estado === "enviando" &&
-          `A Carol está mandando uma por vez. Faltam cerca de ${minutos(atual.segundosRestantes)}. Pode fechar esta tela: o envio continua no n8n.`}
-        {atual.estado === "concluido" && `Pronto! ${atual.total === 1 ? "O contato foi processado" : `Os ${n(atual.total)} contatos foram processados`}. As respostas chegam para a Carol no WhatsApp.`}
+          `Uma por vez, sem pressa, para o WhatsApp não bloquear. Faltam cerca de ${minutos(atual.segundosRestantes)}. Pode fechar esta tela: o envio continua no n8n e o Radar lembra deste disparo quando você voltar.`}
+        {atual.estado === "concluido" &&
+          `Missão cumprida! ${atual.total === 1 ? "O contato foi processado" : `Os ${n(atual.total)} contatos foram processados`}. As respostas chegam para a Carol no WhatsApp: veja quem topou no Placar da Carol.`}
         {atual.estado === "parado" && (
           <>
             O n8n parou com {n(atual.aguardando)} {atual.aguardando === 1 ? "contato na vez" : "contatos na vez"}. O mais comum é o <b>limite diário da Carol</b>
@@ -531,7 +584,9 @@ function CartaoProgresso({ atual, s }: { atual: NonNullable<StatusDisparo["atual
                 {item.quando && item.situacao !== "pendente" && ` · ${horaBrasilia(item.quando)}`}
               </p>
             </div>
-            <ChipSituacao item={item} />
+            <span key={item.situacao} className="shrink-0 animate-pop-in">
+              <ChipSituacao item={item} />
+            </span>
           </li>
         ))}
       </ul>

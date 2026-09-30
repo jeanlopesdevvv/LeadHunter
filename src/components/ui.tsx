@@ -1,7 +1,9 @@
 "use client";
 
 import { Loader2, X } from "lucide-react";
-import { useEffect, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
+
+import { AnimatedNumber } from "@/components/motion";
 
 import { cx } from "@/lib/cx";
 
@@ -11,8 +13,8 @@ type Variant = "primary" | "dark" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand text-white shadow-brand hover:bg-brand-600 active:bg-brand-700",
-  dark: "bg-navy text-white hover:bg-navy-800",
+  primary: "lift bg-brand text-white shadow-brand hover:bg-brand-600 hover:shadow-[0_14px_34px_-10px_rgb(3_171_201_/_0.7)] active:bg-brand-700",
+  dark: "lift bg-navy text-white hover:bg-navy-800",
   outline: "bg-white text-brand-700 border border-brand-200 hover:border-brand hover:bg-brand-50",
   ghost: "text-muted hover:text-ink hover:bg-navy/5",
   danger: "bg-white text-red-600 border border-red-200 hover:bg-red-50",
@@ -39,7 +41,7 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center font-semibold whitespace-nowrap transition-all duration-150",
+        "inline-flex shrink-0 items-center justify-center font-semibold whitespace-nowrap transition-colors duration-150",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
         VARIANTS[variant],
@@ -53,8 +55,12 @@ export function Button({
   );
 }
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx("rounded-2xl border border-line bg-white shadow-card", className)}>{children}</div>;
+export function Card({ className, children, style }: { className?: string; children: ReactNode; style?: CSSProperties }) {
+  return (
+    <div className={cx("rounded-2xl border border-line bg-white shadow-card", className)} style={style}>
+      {children}
+    </div>
+  );
 }
 
 type Tone = "brand" | "green" | "amber" | "red" | "gray" | "navy";
@@ -187,12 +193,14 @@ export function Modal({
 export function Stat({ label, value, hint, tone = "ink", icon }: { label: string; value: ReactNode; hint?: string; tone?: "ink" | "brand" | "green" | "amber"; icon?: ReactNode }) {
   const color = { ink: "text-ink", brand: "text-brand-700", green: "text-emerald-600", amber: "text-amber-600" }[tone];
   return (
-    <Card className="p-4 sm:p-5">
+    <Card className="lift p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-muted">{label}</span>
         {icon && <span className="text-muted/70">{icon}</span>}
       </div>
-      <div className={cx("mt-1.5 text-2xl font-extrabold tracking-tight tabular-nums sm:text-[28px]", color)}>{value}</div>
+      <div className={cx("mt-1.5 text-2xl font-extrabold tracking-tight tabular-nums sm:text-[28px]", color)}>
+        {typeof value === "number" ? <AnimatedNumber value={value} /> : value}
+      </div>
       {hint && <div className="mt-0.5 text-xs text-muted">{hint}</div>}
     </Card>
   );

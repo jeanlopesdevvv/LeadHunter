@@ -164,6 +164,19 @@ describe("busca por quantidade de contatos novos", () => {
     expect(s.progresso.fim).toBe("esgotado"); // cada parte veio com menos de 60: acabou
   });
 
+  it("o que é salvo no navegador inclui as consultas que estavam no meio do caminho", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {}))); // nunca responde (página recarregada no meio)
+    const s = new SessaoDeBusca(plano(2), { ignorarFechados: true });
+    const ctrl = new AbortController();
+    void s.executar({ alvo: 50, limite: 10, signal: ctrl.signal, onUpdate: () => {} });
+    await new Promise((r) => setTimeout(r, 20));
+    const salvo = s.snapshot();
+    expect(salvo.fila.map((i) => i.textQuery).sort()).toEqual(["termo 0 em Belo Horizonte - MG", "termo 1 em Belo Horizonte - MG"]);
+    const restaurada = SessaoDeBusca.restaurar(salvo, []);
+    expect(restaurada.temMais).toBe(true);
+    ctrl.abort();
+  });
+
   it("para tudo quando as consultas grátis acabam", async () => {
     mockPaginas((_, n) =>
       n >= 2

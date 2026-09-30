@@ -14,7 +14,7 @@ import {
 } from "./disparo-regras";
 import { telefonesBloqueados } from "./bloqueio";
 import { getConfig } from "./env";
-import { mockSheet } from "./mock";
+import { dataN8n, mockSheet } from "./mock";
 import { phoneKey } from "./phone";
 import { atualizarStatusLinhas, esquecerAbaLeads, lerAbaLeads } from "./sheets";
 
@@ -27,6 +27,8 @@ export class DisparoError extends Error {
   constructor(
     message: string,
     public status = 400,
+    /** A chamada ao n8n pode ter chegado (sem resposta): tratar como disparo em andamento. */
+    public incerto = false,
   ) {
     super(message);
   }
@@ -160,12 +162,36 @@ export function iniciarDisparo(pedido: string[] | "todos" = "todos"): Promise<St
     if (cfg.mock) {
       simularN8n();
     } else {
-      await chamarN8n(chaves.length);
+      try {
+        await chamarN8n(chaves.length);
+      } catch (e) {
+        // Sem resposta do n8n: ele pode ter começado. Por segurança, o Radar trata como disparo em
+        // andamento (bloqueia outro por cima) e acompanha pela planilha.
+        if (e instanceof DisparoError && e.incerto) {
+          g.__radarDisparo = { iniciadoEm: agora, chaves };
+          esquecerAbaLeads();
+        }
+        throw e;
+      }
     }
     g.__radarDisparo = { iniciadoEm: agora, chaves };
     esquecerAbaLeads();
     return statusDisparo();
   });
+}
+
+/**
+ * Volta a acompanhar um disparo que o navegador lembra (ex.: o servidor reiniciou no meio).
+ * Só adota se o servidor não conhece um disparo mais novo.
+ */
+export async function acompanharDisparo(iniciadoEm: number, chaves: string[]): Promise<StatusDisparo> {
+  const agora = Date.now();
+  const valido = Number.isFinite(iniciadoEm) && iniciadoEm > agora - 12 * 60 * 60_000 && iniciadoEm <= agora + 60_000;
+  const limpas = [...new Set(chaves.map((c) => phoneKey(c)).filter(Boolean))].slice(0, 2000);
+  if (valido && limpas.length && (!g.__radarDisparo || g.__radarDisparo.iniciadoEm < iniciadoEm)) {
+    g.__radarDisparo = { iniciadoEm, chaves: limpas };
+  }
+  return statusDisparo(agora);
 }
 
 async function chamarN8n(pendentes: number) {
@@ -180,7 +206,12 @@ async function chamarN8n(pendentes: number) {
       signal: AbortSignal.timeout(20_000),
     });
   } catch (e) {
-    throw new DisparoError(`Não deu para falar com o n8n (${(e as Error).message}). Confira N8N_DISPARO_URL.`, 502);
+    throw new DisparoError(
+      `O n8n não respondeu a tempo (${(e as Error).message}). Ele pode ter começado mesmo assim: acompanhe aqui. ` +
+        "Se em 4 minutos ninguém mudar de status, pode disparar de novo.",
+      504,
+      true,
+    );
   }
   if (res.ok) return;
   const texto = (await res.text().catch(() => "")).slice(0, 200);
@@ -218,11 +249,25 @@ function simularN8n() {
       return;
     }
     n++;
-    const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const agora = Date.now();
+    const quando = dataN8n(agora);
     const semZap = n % 7 === 3;
     while (row.length <= Math.max(iStatus, iEm)) row.push("");
     row[iStatus] = semZap ? "sem_whatsapp" : "enviado";
     row[iEm] = semZap ? `erro: número não existe no WhatsApp - ${quando}` : quando;
+    // Como o n8n faria: histórico da Carol, status do Meta e, às vezes, uma resposta do contato.
+    const tel = String(row[iTel]);
+    const tabs = mockSheet().tabs;
+    if (!semZap) {
+      tabs.historico_carol?.push([tel, new Date(agora).toISOString(), "carol", "Oi! Aqui é a Carol, consultora comercial do Lavacar…", `${tel}@s.whatsapp.net`]);
+      tabs.status_meta_carol?.push([tel, `wamid.sim${n}`, n % 3 === 0 ? "delivered" : "read", new Date(agora + 3000).toISOString(), ""]);
+      const respostas = ["Sim, atendo", "Não tenho interesse", "Oi! Como funciona?"];
+      if (n % 2 === 1) {
+        setTimeout(() => {
+          tabs.historico_carol?.push([tel, new Date().toISOString(), "lead", respostas[n % 3], `${tel}@s.whatsapp.net`]);
+        }, 4000);
+      }
+    }
     esquecerAbaLeads();
   }, 2500);
 }
