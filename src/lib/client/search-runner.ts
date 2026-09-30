@@ -130,7 +130,9 @@ export class SessaoDeBusca {
       }
     };
 
-    await Promise.all(Array.from({ length: PARALELO }, trabalhador));
+    // Poucos contatos pedidos: uma consulta por vez, para não gastar à toa.
+    const paralelo = Math.max(1, Math.min(PARALELO, Math.ceil((opts.alvo - p.novos) / 15)));
+    await Promise.all(Array.from({ length: paralelo }, trabalhador));
 
     p.rodando = false;
     if (fatal) {

@@ -101,6 +101,14 @@ describe("busca por quantidade de contatos novos", () => {
     expect(pedidos[1].pageToken).toBe("PAG2");
   });
 
+  it("pedindo 1 contato, faz uma consulta por vez e para na primeira que achar", async () => {
+    const pedidos = mockPaginas(() => ({ leads: [lead({ planilha: "existente" }), lead()], nextPageToken: "MAIS" }));
+    const s = new SessaoDeBusca(plano(3), { ignorarFechados: true });
+    await s.executar({ alvo: 1, limite: 3, signal: new AbortController().signal, onUpdate: () => {} });
+    expect(s.progresso.fim).toBe("alvo");
+    expect(pedidos.length).toBe(1);
+  });
+
   it("não conta quem já está na planilha, sem celular, fechado ou repetido", async () => {
     const repetido = lead();
     mockPaginas(() => ({

@@ -43,7 +43,9 @@ describe("geo", () => {
     expect(sugerirLimite(20, 2, 200)).toBe(8);
     expect(sugerirLimite(50, 2, 200)).toBe(20);
     expect(sugerirLimite(500, 2, 200)).toBe(200); // respeita o máximo
-    expect(sugerirLimite(5, 1, 200)).toBe(5); // mínimo de 5
+    expect(sugerirLimite(5, 1, 200)).toBe(3); // teste com poucos contatos: no máximo 3
+    expect(sugerirLimite(1, 2, 200)).toBe(3);
+    expect(sugerirLimite(10, 1, 200)).toBe(5); // mínimo de 5 a partir daí
     expect(sugerirLimite(20, 12, 200)).toBe(12); // ao menos 1 por termo × cidade
     expect(sugerirLimite(50, 2, 3)).toBe(3); // poucas consultas restantes
   });
