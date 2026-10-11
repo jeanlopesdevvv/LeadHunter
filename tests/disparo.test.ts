@@ -276,7 +276,7 @@ describe("iniciar disparo (servidor)", () => {
     const planilha: unknown[][] = [[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]];
     const corpos: Record<string, unknown>[] = [];
     const modelo = {
-      name: "carol_12meses",
+      name: "carol_prospeccao_12meses",
       status: "APPROVED",
       category: "MARKETING",
       language: "pt_BR",
@@ -304,12 +304,12 @@ describe("iniciar disparo (servidor)", () => {
     (globalThis as { __radarModelos?: unknown }).__radarModelos = undefined;
     const { iniciarDisparo } = await import("@/lib/disparo");
     await expect(iniciarDisparo(["5531911110001"], "nao_existe")).rejects.toThrow(/não está disponível/);
-    const s = await iniciarDisparo(["5531911110001"], "carol_12meses");
+    const s = await iniciarDisparo(["5531911110001"], "carol_prospeccao_12meses");
     expect(corpos).toHaveLength(1);
-    expect(corpos[0]).toMatchObject({ template_nome: "carol_12meses", template: { name: "carol_12meses" } });
-    expect(s.modeloAtual).toBe("carol_12meses");
+    expect(corpos[0]).toMatchObject({ template_nome: "carol_prospeccao_12meses", template: { name: "carol_prospeccao_12meses" } });
+    expect(s.modeloAtual).toBe("carol_prospeccao_12meses");
     expect(planilha[0][7]).toBe("template");
-    expect(planilha[1][7]).toBe("carol_12meses");
+    expect(planilha[1][7]).toBe("carol_prospeccao_12meses");
   });
 
   it("sem escolha, o n8n segue no automático (sem modelo no pedido)", async () => {

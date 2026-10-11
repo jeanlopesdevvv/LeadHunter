@@ -173,7 +173,8 @@ export function EscolherModelo({
 
         <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-center gap-1.5 text-xs text-muted">
-            <MessageSquareText className="size-3.5" /> Modelos novos são criados no WhatsApp Manager e aparecem aqui depois de aprovados.
+            <MessageSquareText className="size-3.5 shrink-0" /> Modelo novo: crie no WhatsApp Manager com o nome começando por{" "}
+            <code className="font-semibold">carol_prospeccao_</code> e espere a aprovação.
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onAtualizar} loading={atualizando} icon={<RefreshCw className="size-4" />}>

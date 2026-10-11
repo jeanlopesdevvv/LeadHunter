@@ -567,7 +567,7 @@ function simularN8n(modelo: TemplateMeta | null) {
       .then((r) => {
         if (r.radar_parar) return parar();
         // Simula um modelo que o WhatsApp recusa (como o Fluxo 1 v6.5: avisa o Radar e para).
-        if (modelo?.name === "carol_teste_erro") {
+        if (modelo?.name === "carol_prospeccao_teste_erro") {
           registrarErroDoN8n({ codigo: 132000, detalhe: "Number of parameters does not match the expected number of params" });
           return parar();
         }

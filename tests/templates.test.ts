@@ -69,6 +69,9 @@ describe("modelos do WhatsApp", () => {
       /link com variável/,
     );
     expect(motivo({ components: [{ type: "BODY", text: "oi" }, { type: "BUTTONS", buttons: [{ type: "COPY_CODE", text: "Copiar" }] }] })).toMatch(/botão/);
+    // Modelo de outro uso (ex.: handoff da Sofia, onde {{2}} é um motivo e não a cidade) não vai para lead frio.
+    expect(motivo({ name: "carol_abertura_handoff", components: [{ type: "BODY", text: "Oi, {{1}}! A Sofia me passou que {{2}}" }] })).toMatch(/prospecção/);
+    expect(motivo({ name: "carol_prospeccao_12_meses", components: [{ type: "BODY", text: "Oi, {{1}}! {{2}}" }] })).toBe("");
   });
 
   it("monta o envio: parâmetros na ordem e botões com os payloads que o Fluxo 2 entende", () => {

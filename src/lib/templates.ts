@@ -65,11 +65,19 @@ export const MODELOS_SIMULACAO: TemplateMeta[] = [
   },
   {
     // Só na simulação: o envio falha com o erro 132000 (para testar o aviso de erro no disparo).
-    name: "carol_teste_erro",
+    name: "carol_prospeccao_teste_erro",
     status: "APPROVED",
     category: "MARKETING",
     language: "pt_BR",
     components: [{ type: "BODY", text: "Oi, {{1}}! Teste de modelo que o WhatsApp recusa." }],
+  },
+  {
+    // Não é de prospecção (aparece em "não pode ser usado").
+    name: "carol_retomada_contato",
+    status: "APPROVED",
+    category: "MARKETING",
+    language: "pt_BR",
+    components: [{ type: "BODY", text: "Oi, {{1}}! Aqui é a Carol, do Lavacar. Podemos retomar de onde paramos?" }],
   },
   {
     name: "carol_promo_imagem",

@@ -10,6 +10,12 @@
 
 export const AUTOMATICO = "automatico";
 
+/**
+ * Só modelos de prospecção entram no disparo: o nome precisa começar com isto. Assim modelos de outro uso
+ * (retomada, boas-vindas, handoff da Sofia, que usam {{2}} com outro sentido) nunca vão para lead frio.
+ */
+export const PREFIXO_PROSPECCAO = "carol_prospeccao";
+
 /** Modelos que o Fluxo 1 usa quando ninguém escolhe (mesma regra do nó "Montar Mensagem"). */
 export const MODELO_LAVAJATO = "carol_prospeccao_lavajato";
 export const MODELO_AUTONOMO = "carol_prospeccao_autonomo";
@@ -137,6 +143,8 @@ export function analisarTemplate(t: TemplateMeta): ModeloWhatsApp {
     motivo = "tem um tipo de botão que o Radar não sabe enviar";
   else if (botoes.some((b) => String(b.type).toUpperCase() === "URL" && /\{\{/.test(String(b.url ?? ""))))
     motivo = "tem botão de link com variável";
+  else if (!String(t.name ?? "").toLowerCase().startsWith(PREFIXO_PROSPECCAO))
+    motivo = `não é de prospecção (para usar no disparo, o nome do modelo precisa começar com ${PREFIXO_PROSPECCAO}_)`;
 
   const previa = [preencher(cabecalho, EXEMPLO), preencher(corpo, EXEMPLO), rodape].filter(Boolean).join("\n\n");
   return {
@@ -176,7 +184,9 @@ export function montarComponentes(t: TemplateMeta, d: DadosDoContato): Record<st
   return out;
 }
 
-/** Nome mais amigável para a tela: "carol_prospeccao_lavajato" -> "carol prospeccao lavajato". */
+/** Nome mais amigável para a tela: "carol_prospeccao_12_meses" -> "12 meses". */
 export function nomeAmigavel(nome: string): string {
-  return String(nome ?? "").replace(/_/g, " ").trim();
+  const semPrefixo = String(nome ?? "").replace(new RegExp(`^${PREFIXO_PROSPECCAO}_?`, "i"), "");
+  const texto = (semPrefixo || String(nome ?? "")).replace(/_/g, " ").trim();
+  return texto ? texto[0].toUpperCase() + texto.slice(1) : texto;
 }
