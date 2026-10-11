@@ -28,6 +28,8 @@ export interface LinhaFila {
   /** Quando a Carol mexeu nesta linha (ms), se der para ler. */
   quando: number | null;
   detalhe: string;
+  /** Modelo do WhatsApp gravado pelo Radar no disparo (vazio em disparos antigos). */
+  template: string;
 }
 
 const BRASILIA_MS = 3 * 60 * 60 * 1000; // Brasília = UTC−3 (sem horário de verão desde 2019)
@@ -81,6 +83,7 @@ export function linhasDaFila(rows: unknown[][], map: HeaderMap): LinhaFila[] {
       optout: map.optout !== undefined && isOptout(optoutCel),
       quando: lerDataHora(enviadaEm),
       detalhe: typeof enviadaEm === "string" && /erro/i.test(enviadaEm) ? enviadaEm.replace(/\s*-\s*\d{1,2}\/\d{1,2}\/\d{4}.*$/, "") : "",
+      template: String(col(row, map.template) ?? "").trim(),
     });
   });
   return out;
@@ -100,14 +103,23 @@ export function naFila(l: LinhaFila): boolean {
  * Mudanças de status para disparar só para os escolhidos: eles viram "pendente" e todo outro
  * pendente (que o n8n pegaria) vira "aguardando". Quem já está certo não é tocado.
  */
-export function mudancasParaDisparo(linhas: LinhaFila[], escolhidos: Set<string>, statusAguardando: string) {
-  const mudancas: { linha: number; key: string; status: string; de: string }[] = [];
+export function mudancasParaDisparo(
+  linhas: LinhaFila[],
+  escolhidos: Set<string>,
+  statusAguardando: string,
+  /** Modelo do WhatsApp de cada escolhido (gravado na coluna "template"). */
+  templatePara?: (l: LinhaFila) => string,
+) {
+  const mudancas: { linha: number; key: string; status: string; de: string; template?: string }[] = [];
   const jaVai = new Set<string>(); // o mesmo telefone em duas linhas recebe uma vez só
   for (const l of linhas) {
     if (!l.key) continue;
     if (escolhidos.has(l.key) && naFila(l) && !jaVai.has(l.key)) {
       jaVai.add(l.key);
-      if (l.situacao !== "pendente") mudancas.push({ linha: l.linha, key: l.key, status: "pendente", de: l.status });
+      const template = templatePara?.(l);
+      if (l.situacao !== "pendente" || (template !== undefined && template !== l.template)) {
+        mudancas.push({ linha: l.linha, key: l.key, status: "pendente", de: l.status, ...(template !== undefined ? { template } : {}) });
+      }
     } else if (paraON8n(l)) {
       mudancas.push({ linha: l.linha, key: l.key, status: statusAguardando, de: l.status });
     }
@@ -190,6 +202,37 @@ export interface ProgressoDisparo {
   enviandoAgora: string | null;
   /** A partir de quando dá para continuar (0 = já dá). Só faz sentido pausado ou parado. */
   podeContinuarEm: number;
+  /** O WhatsApp recusou o envio e o n8n parou (ex.: modelo com variáveis erradas). */
+  erro: { codigo: number | null; mensagem: string } | null;
+}
+
+/** Erro de envio que o n8n avisou ao Radar (o contato continua na fila). */
+export interface ErroDeEnvio {
+  em: number;
+  codigo: number | null;
+  detalhe: string;
+}
+
+/** Explicação simples do erro do WhatsApp (Meta Cloud API). */
+export function mensagemDoErro(codigo: number | null, detalhe = ""): string {
+  const porCodigo: Record<number, string> = {
+    132000: "O número de variáveis do modelo não bate com o que foi enviado.",
+    132001: "O modelo não existe ou não está aprovado em português.",
+    132005: "O texto do modelo ficou grande demais depois de preenchido.",
+    132007: "O WhatsApp recusou o conteúdo do modelo (política).",
+    132012: "As variáveis do modelo estão no formato errado.",
+    132015: "O WhatsApp pausou este modelo por baixa qualidade.",
+    132016: "O WhatsApp desativou este modelo.",
+    131056: "Muitas mensagens para o mesmo número em pouco tempo. Tente de novo em alguns minutos.",
+    130429: "Muitas mensagens em pouco tempo. Tente de novo em alguns minutos.",
+    131048: "O WhatsApp está limitando os envios deste número por denúncias de spam.",
+    131031: "A conta do WhatsApp da Carol está bloqueada ou restrita.",
+    133010: "O número da Carol não está registrado no WhatsApp.",
+    190: "O acesso ao WhatsApp expirou. Fale com o administrador do Radar.",
+  };
+  if (codigo !== null && porCodigo[codigo]) return porCodigo[codigo];
+  const d = String(detalhe ?? "").trim().slice(0, 160);
+  return `O WhatsApp recusou o envio${codigo !== null ? ` (erro ${codigo})` : ""}${d ? `: ${d}` : "."}`;
 }
 
 export interface ExtrasDoProgresso {
@@ -202,6 +245,8 @@ export interface ExtrasDoProgresso {
   /** Último movimento da Carol na planilha (qualquer contato). */
   ultimoMovimentoGeral?: number | null;
   enviandoAgora?: { key: string; em: number } | null;
+  /** Último erro de envio que o n8n avisou (o n8n parou nele). */
+  erro?: ErroDeEnvio | null;
 }
 
 /** Progresso de um disparo: os contatos que estavam na fila quando ele começou. */
@@ -240,14 +285,25 @@ export function progressoDoDisparo(
   const referencia = Math.max(inicioValido, ultimoMovimento ?? 0, travaConfirmada ? (extras.ultimaTrava ?? 0) : 0);
   const silencioMax = travaConfirmada ? PARADO_COM_TRAVA_MS : PARADO_APOS_MS;
   const interrompido = extras.interrompido ?? null;
+  // Erro avisado pelo n8n depois do início (ou da retomada): o fluxo parou nele.
+  const erroDeste = extras.erro && extras.erro.em >= inicioValido - 5_000 ? extras.erro : null;
   const estado: EstadoDisparo =
-    aguardando === 0 ? "concluido" : interrompido ? interrompido.como : agora - referencia > silencioMax ? "parado" : "enviando";
+    aguardando === 0
+      ? "concluido"
+      : interrompido
+        ? interrompido.como
+        : erroDeste || agora - referencia > silencioMax
+          ? "parado"
+          : "enviando";
 
   // Continuar só quando a execução antiga do n8n com certeza parou: a trava confirmou,
   // ou o n8n ficou em silêncio (sem consultar a trava e sem mexer na planilha) por 1 minuto.
   let podeContinuarEm = 0;
   if (estado === "pausado" || estado === "parado") {
-    const confirmou = interrompido && extras.paradaConfirmadaEm != null && extras.paradaConfirmadaEm >= interrompido.em;
+    // O n8n avisou o erro e encerrou a execução ali: já dá para continuar (ou cancelar).
+    const confirmou =
+      (interrompido && extras.paradaConfirmadaEm != null && extras.paradaConfirmadaEm >= interrompido.em) ||
+      (!interrompido && erroDeste !== null && erroDeste.em >= (extras.ultimaTrava ?? 0));
     if (!confirmou) {
       const ultimoSinal = Math.max(extras.ultimaTrava ?? 0, extras.ultimoMovimentoGeral ?? 0, ultimoMovimento ?? 0, interrompido?.em ?? 0);
       const liberaEm = ultimoSinal + SILENCIO_PARA_RETOMAR_MS;
@@ -283,6 +339,7 @@ export function progressoDoDisparo(
     travaConfirmada,
     enviandoAgora,
     podeContinuarEm,
+    erro: erroDeste && estado === "parado" ? { codigo: erroDeste.codigo, mensagem: mensagemDoErro(erroDeste.codigo, erroDeste.detalhe) } : null,
   };
 }
 
@@ -303,5 +360,7 @@ export interface StatusDisparo {
   atual: ProgressoDisparo | null;
   /** Trava de segurança no n8n (o Fluxo 1 pergunta ao Radar antes de cada mensagem). */
   trava: { ultimaEm: number | null; chaveErradaEm: number | null };
+  /** Modelo do WhatsApp do disparo atual (null = automático: lava-jato ou autônomo). */
+  modeloAtual: string | null;
   atualizadoEm: number;
 }

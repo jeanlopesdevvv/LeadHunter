@@ -134,6 +134,21 @@ O passo a passo também aparece dentro do Radar, na tela **Disparo**, enquanto o
    LIMITE_DIARIO_CAROL=10
    ```
 
+Escolha da mensagem (modelos do WhatsApp): para o Radar listar os modelos aprovados, acrescente também
+
+   ```
+   META_TOKEN=o-mesmo-valor-de-META_WHATSAPP_TOKEN-do-n8n
+   META_WABA_ID=940955865200631
+   ```
+
+(`META_WABA_ID` já vem com esse valor; só precisa se a conta mudar). Sem `META_TOKEN`, o Disparo usa só a mensagem
+automática. O modelo escolhido vai no pedido ao n8n; o **Fluxo 1 v6.5** (nó *Montar Mensagem*) usa esse modelo e
+preenche `{{1}}`/`{{nome}}` com o nome e `{{2}}`/`{{cidade}}` com "em <cidade>". Modelos com imagem no cabeçalho,
+outras variáveis ou botão de link com variável aparecem como "não pode ser usado". Se o WhatsApp recusar o envio por
+algo que não é o número (modelo, token, limite), o nó **Avisar Radar (erro de envio)** chama
+`POST /api/n8n/erro?chave=…` (mesma chave da trava), o Radar mostra o motivo e o fluxo para; o contato continua
+`pendente`.
+
 Opcional: para uma senha a mais, ligue *Header Auth* no nó (credencial com *Name* `X-Radar-Token`) e coloque o
 mesmo valor em `N8N_DISPARO_TOKEN`.
 
@@ -206,7 +221,10 @@ A tela **Desempenho** lê três abas que o n8n já grava na planilha (nomes em `
   remetente `lead`). "Sim, atendo" conta como **sim**; "Não tenho interesse" como **sem interesse**; qualquer outro
   texto como **em conversa**.
 - **sessoes_carol** (opcional): estado da conversa. `AGUARDANDO_SUPORTE` vira **pediu atendente**, `LEAD_PERDIDO`
-  vira **sem interesse**, `CLIENTE_ATIVO` vira **cliente Lavacar** e `SEM_WHATSAPP` vira **não recebeu**.
+  vira **sem interesse**, `CLIENTE_ATIVO` vira **com a Sofia** (já é cliente ou foi passado para o suporte) e
+  `SEM_WHATSAPP` vira **não recebeu**.
+- A coluna `template` da aba `leads` (gravada pelo Radar no disparo) separa os resultados por mensagem; nos disparos
+  antigos, sem essa coluna, vale a automática pelo tipo (lava-jato ou autônomo).
 - **status_meta_carol** (opcional): o Fluxo 6 grava aqui **só as falhas** do Meta. Quem aparece com falha depois do
   disparo (e não respondeu) conta como **não recebeu**. Entregue e lida não são gravados em lugar nenhum, por isso
   o Desempenho não mostra essas etapas.

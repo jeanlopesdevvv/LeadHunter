@@ -14,6 +14,7 @@
 import { diaBrasilia, linhasDaFila, type LinhaFila } from "./disparo-regras";
 import { phoneKeysFromCell } from "./phone";
 import { buildHeaderMap, normalizeHeader } from "./sheet-mapping";
+import { templateAutomatico } from "./templates-regras";
 
 export type Periodo = "hoje" | "7d" | "30d" | "tudo";
 export type Resposta = "sim" | "nao" | "respondeu" | "optout";
@@ -39,7 +40,21 @@ export interface ContatoPainel {
   respondeuEm: number | null;
   ultima: MensagemPainel | null;
   mensagensDoContato: number;
+  /** Modelo do WhatsApp do disparo (gravado pelo Radar; nos antigos, o automático pelo tipo). */
+  template: string;
 }
+
+/** Resultado de cada mensagem (modelo) no período, para comparar. */
+export interface ComparacaoModelo {
+  nome: string;
+  disparadas: number;
+  receberam: number;
+  responderam: number;
+  sim: number;
+  semInteresse: number;
+}
+
+export const TODOS_OS_MODELOS = "todos";
 
 export interface Resumo {
   disparadas: number;
@@ -54,6 +69,10 @@ export interface Resumo {
 
 export interface Painel {
   periodo: Periodo;
+  /** Modelo filtrado ("todos" = sem filtro). */
+  modelo: string;
+  /** Comparação entre os modelos usados no período (sempre sem o filtro de modelo). */
+  modelos: ComparacaoModelo[];
   resumo: Resumo;
   contatos: ContatoPainel[];
   fontes: {
@@ -127,7 +146,7 @@ export function lerResposta(texto: string): "sim" | "nao" | null {
     .trim();
   if (!t) return null;
   if (/nao tenho interesse|sem interesse|nao atendo|nao trabalho|parei|nao quero/.test(t) || /^nao\b/.test(t)) return "nao";
-  if (/sim,?\s*atendo|^sim\b|ainda atendo|atendo sim|tenho interesse/.test(t)) return "sim";
+  if (/sim,?\s*atendo|^sim\b|ainda atendo|atendo sim|tenho interesse|^quero (saber|conhecer|entender|participar)|^me (explica|conta)/.test(t)) return "sim";
   return null;
 }
 
@@ -150,10 +169,26 @@ function dentroDoPeriodo(t: number | null, periodo: Periodo, agora: number): boo
   return t >= agora - dias * 86_400_000;
 }
 
+/** Números do painel para um grupo de contatos. */
+export function resumir(contatos: ContatoPainel[]): Resumo {
+  const porSituacao: Record<Situacao, number> = { atendente: 0, sim: 0, conversando: 0, sem_resposta: 0, sem_interesse: 0, nao_recebeu: 0, cliente: 0 };
+  for (const c of contatos) porSituacao[c.situacao]++;
+  return {
+    disparadas: contatos.length,
+    receberam: contatos.length - porSituacao.nao_recebeu,
+    responderam: contatos.filter((c) => c.mensagensDoContato > 0 || c.resposta === "optout").length,
+    sim: contatos.filter((c) => c.resposta === "sim").length,
+    semInteresse: porSituacao.sem_interesse,
+    naoRecebeu: porSituacao.nao_recebeu,
+    porSituacao,
+  };
+}
+
 export function montarPainel(
   entrada: { leads: unknown[][]; historico?: unknown[][]; statusMeta?: unknown[][]; sessoes?: unknown[][] },
   periodo: Periodo,
   agora = Date.now(),
+  modelo: string = TODOS_OS_MODELOS,
 ): Painel {
   const cabLeads = (entrada.leads[0] ?? []) as unknown[];
   const linhas: LinhaFila[] = linhasDaFila(entrada.leads.slice(1), buildHeaderMap(cabLeads));
@@ -256,25 +291,28 @@ export function montarPainel(
       respondeuEm: doContato[0]?.quando ?? null,
       ultima: msgs.length ? msgs[msgs.length - 1] : null,
       mensagensDoContato: doContato.length,
+      template: l.template || templateAutomatico(l.tipo),
     });
   }
 
-  const porSituacao: Record<Situacao, number> = { atendente: 0, sim: 0, conversando: 0, sem_resposta: 0, sem_interesse: 0, nao_recebeu: 0, cliente: 0 };
-  for (const c of contatos) porSituacao[c.situacao]++;
-  const resumo: Resumo = {
-    disparadas: contatos.length,
-    receberam: contatos.length - porSituacao.nao_recebeu,
-    responderam: contatos.filter((c) => c.mensagensDoContato > 0 || c.resposta === "optout").length,
-    sim: contatos.filter((c) => c.resposta === "sim").length,
-    semInteresse: porSituacao.sem_interesse,
-    naoRecebeu: porSituacao.nao_recebeu,
-    porSituacao,
-  };
+  // Comparação entre mensagens: sempre com todos os contatos do período.
+  const porModelo = new Map<string, ContatoPainel[]>();
+  for (const c of contatos) porModelo.set(c.template, [...(porModelo.get(c.template) ?? []), c]);
+  const modelos: ComparacaoModelo[] = [...porModelo.entries()]
+    .map(([nome, cs]) => {
+      const r = resumir(cs);
+      return { nome, disparadas: r.disparadas, receberam: r.receberam, responderam: r.responderam, sim: r.sim, semInteresse: r.semInteresse };
+    })
+    .sort((a, b) => b.disparadas - a.disparadas || a.nome.localeCompare(b.nome));
+
+  const filtrarModelo = modelo && modelo !== TODOS_OS_MODELOS;
+  const doModelo = filtrarModelo ? contatos.filter((c) => c.template === modelo) : contatos;
+  const resumo = resumir(doModelo);
 
   // Quem precisa de atenção primeiro (pediu atendente, disse sim, está conversando), o mais recente no topo.
   const PESO: Record<Situacao, number> = { atendente: 6, sim: 5, conversando: 4, cliente: 3, sem_interesse: 2, sem_resposta: 1, nao_recebeu: 0 };
   const recente = (c: ContatoPainel) => c.ultima?.quando ?? c.respondeuEm ?? c.enviadoEm ?? 0;
-  contatos.sort((a, b) => PESO[b.situacao] - PESO[a.situacao] || recente(b) - recente(a));
+  doModelo.sort((a, b) => PESO[b.situacao] - PESO[a.situacao] || recente(b) - recente(a));
 
   const fonte = (cab: unknown[], tem: boolean, falta: [string, number][]) => ({
     aba: tem,
@@ -284,8 +322,10 @@ export function montarPainel(
 
   return {
     periodo,
+    modelo: filtrarModelo ? modelo : TODOS_OS_MODELOS,
+    modelos,
     resumo,
-    contatos: contatos.slice(0, 1000),
+    contatos: doModelo.slice(0, 1000),
     fontes: {
       historico: fonte(hCab, entrada.historico !== undefined, [
         ["telefone", hTel],

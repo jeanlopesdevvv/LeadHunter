@@ -6,6 +6,7 @@ import {
   Clock,
   Loader2,
   MessageCircle,
+  MessageSquareText,
   PartyPopper,
   PauseCircle,
   Play,
@@ -24,11 +25,14 @@ import { AnimatedNumber, confete } from "@/components/motion";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, cx, inputClass } from "@/components/ui";
 import { ApiError, api } from "@/lib/client/api";
-import { disparoLembrado, esquecerDisparo, lembrarDisparo } from "@/lib/client/sessao-salva";
+import { disparoLembrado, esquecerDisparo, lembrarDisparo, lembrarModelo, modeloLembrado } from "@/lib/client/sessao-salva";
 import type { ItemDisparo, ProgressoDisparo, StatusDisparo } from "@/lib/disparo-regras";
 import { SEGUNDOS_POR_LEAD } from "@/lib/disparo-regras";
 import { horaBrasilia, quandoCurto } from "@/lib/periodo";
 import { normalizePhone } from "@/lib/phone";
+import { AUTOMATICO } from "@/lib/templates-regras";
+
+import { EscolherModelo, PreviaWhatsApp, nomeDoModelo, previaAutomatica, type ListaDeModelosTela } from "./ModeloWhatsApp";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 
@@ -125,6 +129,10 @@ export function DisparoView({
   const [pedirConfirmacao, setPedirConfirmacao] = useState<Acao | null>(null);
   const [agindo, setAgindo] = useState<Acao | null>(null);
   const [agora, setAgora] = useState(() => Date.now());
+  const [modelos, setModelos] = useState<ListaDeModelosTela | null>(null);
+  const [modelo, setModelo] = useState<string>(AUTOMATICO);
+  const [escolhendoModelo, setEscolhendoModelo] = useState(false);
+  const [lendoModelos, setLendoModelos] = useState(false);
   const pedido = useRef(0);
   const preSelecaoRef = useRef(preSelecao);
 
@@ -138,7 +146,7 @@ export function DisparoView({
       if (a) {
         const lem = disparoLembrado();
         const interrompido = a.estado === "pausado" || a.estado === "cancelado" ? { como: a.estado, em: a.interrompidoEm ?? Date.now() } : null;
-        const base = { iniciadoEm: a.iniciadoEm, chaves: a.itens.map((i) => i.key), interrompido, retomadoEm: a.retomadoEm };
+        const base = { iniciadoEm: a.iniciadoEm, chaves: a.itens.map((i) => i.key), interrompido, retomadoEm: a.retomadoEm, modelo: s.modeloAtual };
         if (!lem || lem.iniciadoEm !== a.iniciadoEm) {
           // Disparo que este navegador ainda não conhecia: só comemora se vir ele terminar.
           lembrarDisparo({ ...base, comemorado: a.estado !== "enviando" });
@@ -188,7 +196,13 @@ export function DisparoView({
         if (lem) {
           s = await api<StatusDisparo>(
             "/api/disparo/acompanhar",
-            { iniciadoEm: lem.iniciadoEm, chaves: lem.chaves, interrompido: lem.interrompido ?? null, retomadoEm: lem.retomadoEm ?? null },
+            {
+              iniciadoEm: lem.iniciadoEm,
+              chaves: lem.chaves,
+              interrompido: lem.interrompido ?? null,
+              retomadoEm: lem.retomadoEm ?? null,
+              modelo: lem.modelo ?? null,
+            },
             { tentativas: 2 },
           ).catch(() => s);
         }
@@ -215,6 +229,33 @@ export function DisparoView({
       vivo = false;
     };
   }, [aplicar, onPreSelecaoVista]);
+
+  // Modelos do WhatsApp aprovados (para escolher a mensagem). Volta para a última escolha, se ainda dá para usar.
+  const lerModelos = useCallback(async (forcar = false) => {
+    setLendoModelos(true);
+    try {
+      const l = await api<ListaDeModelosTela>(`/api/disparo/modelos${forcar ? "?atualizar=1" : ""}`);
+      setModelos(l);
+      const lembrado = modeloLembrado();
+      setModelo((atualModelo) => {
+        const quero = atualModelo !== AUTOMATICO ? atualModelo : lembrado;
+        return quero && l.modelos.some((m) => m.nome === quero && m.utilizavel) ? quero : AUTOMATICO;
+      });
+    } catch {
+      setModelos({ configurado: true, modelos: [], erro: "Não foi possível ler os modelos agora." });
+    } finally {
+      setLendoModelos(false);
+    }
+  }, []);
+  useEffect(() => {
+    const t = window.setTimeout(() => void lerModelos(), 0);
+    return () => window.clearTimeout(t);
+  }, [lerModelos]);
+
+  function escolherModelo(nome: string) {
+    setModelo(nome);
+    lembrarModelo(nome);
+  }
 
   // Atualiza sozinho: rápido enquanto há disparo em andamento ou pausado, devagar no resto do tempo.
   const atual = status?.atual ?? null;
@@ -248,8 +289,8 @@ export function DisparoView({
     const inicio = Date.now();
     const escolhidos = [...marcados];
     try {
-      const s = await api<StatusDisparo>("/api/disparo", { telefones: escolhidos });
-      if (s.atual) lembrarDisparo({ iniciadoEm: s.atual.iniciadoEm, chaves: s.atual.itens.map((i) => i.key), comemorado: false });
+      const s = await api<StatusDisparo>("/api/disparo", { telefones: escolhidos, modelo });
+      if (s.atual) lembrarDisparo({ iniciadoEm: s.atual.iniciadoEm, chaves: s.atual.itens.map((i) => i.key), comemorado: false, modelo: s.modeloAtual });
       aplicar(s);
       setMarcados(new Set());
       setRecemChegados(0);
@@ -262,7 +303,7 @@ export function DisparoView({
       setConfirmar(false);
       if (e instanceof ApiError && e.dados.incerto) {
         // O n8n demorou a responder e pode ter começado: acompanha pela planilha em vez de arriscar disparar de novo.
-        lembrarDisparo({ iniciadoEm: inicio - 5_000, chaves: escolhidos, comemorado: false });
+        lembrarDisparo({ iniciadoEm: inicio - 5_000, chaves: escolhidos, comemorado: false, modelo: modelo === AUTOMATICO ? null : modelo });
         setMarcados(new Set());
         toast("O serviço de envio demorou a responder, mas o disparo pode ter começado. O Radar está acompanhando: não dispare de novo.", "info");
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -327,6 +368,8 @@ export function DisparoView({
   const nomesMarcados = itens.filter((i) => marcados.has(i.key));
   const fixosMarcados = nomesMarcados.filter((i) => ehFixo(i.telefone)).length;
   const travaErrada = Boolean(s?.trava.chaveErradaEm && (!s.trava.ultimaEm || s.trava.chaveErradaEm > s.trava.ultimaEm));
+  const modeloEscolhido = modelo === AUTOMATICO ? previaAutomatica(modelos) : (modelos?.modelos.find((m) => m.nome === modelo) ?? null);
+  const outrosModelos = (modelos?.modelos ?? []).filter((m) => m.utilizavel).length;
 
   function alternar(key: string) {
     setMarcados((m) => {
@@ -461,6 +504,22 @@ export function DisparoView({
                   {n(fixosMarcados)} {fixosMarcados === 1 ? "é telefone fixo" : "são telefones fixos"} (menos chance de ter WhatsApp).
                 </p>
               )}
+              <button
+                type="button"
+                onClick={() => setEscolhendoModelo(true)}
+                className="mt-4 flex w-full items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5 text-left transition hover:border-brand-200 hover:bg-surface/60"
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand">
+                  <MessageSquareText className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Mensagem</span>
+                  <span className="block truncate text-sm font-bold text-ink">{nomeDoModelo(modelo)}</span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-brand">
+                  {outrosModelos > 2 ? `Trocar (${n(outrosModelos)})` : "Ver"}
+                </span>
+              </button>
               {restamHoje !== null && qtd > restamHoje && (
                 <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   {restamHoje === 0
@@ -618,6 +677,29 @@ export function DisparoView({
                 ))}
               </ul>
             )}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold text-ink">
+                  Mensagem: <span className="text-brand">{nomeDoModelo(modelo)}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setEscolhendoModelo(true)}
+                  disabled={disparando}
+                  className="text-xs font-semibold text-brand underline underline-offset-2"
+                >
+                  Trocar
+                </button>
+              </div>
+              {modeloEscolhido ? (
+                <PreviaWhatsApp modelo={modeloEscolhido} />
+              ) : (
+                <p className="rounded-xl bg-surface px-3.5 py-2.5 text-muted">A mensagem de sempre: a de lava-jato ou a de autônomo, conforme o contato.</p>
+              )}
+              {modelo === AUTOMATICO && modeloEscolhido && (
+                <p className="text-xs text-muted">Exemplo com nome e cidade fictícios. Autônomos recebem a versão para profissionais.</p>
+              )}
+            </div>
             {s.fila > qtd && (
               <p className="text-muted">
                 Os outros {n(s.fila - qtd)} da fila não recebem agora: ficam como <b>aguardando</b> para o próximo disparo.
@@ -644,6 +726,16 @@ export function DisparoView({
           </div>
         )}
       </Modal>
+
+      <EscolherModelo
+        open={escolhendoModelo}
+        onClose={() => setEscolhendoModelo(false)}
+        lista={modelos}
+        valor={modelo}
+        onEscolher={escolherModelo}
+        onAtualizar={() => void lerModelos(true)}
+        atualizando={lendoModelos}
+      />
 
       <Modal
         open={pedirConfirmacao !== null}
@@ -731,6 +823,7 @@ function CartaoDisparo({
             <p className="text-xs text-muted">
               {inicio}
               {atual.interrompidoEm && (atual.estado === "pausado" || atual.estado === "cancelado") && ` · ${atual.estado} às ${horaBrasilia(atual.interrompidoEm)}`}
+              {` · mensagem ${nomeDoModelo(s.modeloAtual).toLowerCase()}`}
               {atual.estado === "enviando" && atual.travaConfirmada && (
                 <span className="ml-1 inline-flex items-center gap-0.5 text-emerald-700">
                   · <ShieldCheck className="size-3" /> trava ativa
@@ -792,7 +885,12 @@ function CartaoDisparo({
           {atual.estado === "parado" && (
             <>
               O envio parou com {n(atual.aguardando)} {atual.aguardando === 1 ? "contato restante" : "contatos restantes"}.{" "}
-              {limiteBatido ? (
+              {atual.erro ? (
+                <>
+                  <b>O WhatsApp recusou a mensagem:</b> {atual.erro.mensagem} Ninguém foi marcado como sem WhatsApp por isso. Cancele o resto e
+                  dispare de novo com outra mensagem, ou continue depois de corrigir.
+                </>
+              ) : limiteBatido ? (
                 <>
                   Motivo provável: <b>limite diário da Carol</b> (hoje: {n(s.hoje.enviadosHoje)} de {n(s.limiteDiario)}). Continue amanhã ou
                   aumente o limite.

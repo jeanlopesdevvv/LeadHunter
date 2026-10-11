@@ -129,6 +129,19 @@ describe("busca por quantidade de contatos novos", () => {
     expect(s.progresso.fim).toBe("esgotado");
   });
 
+  it("quem foi descartado numa busca anterior volta marcado e não conta como novo", async () => {
+    const descartado = lead();
+    const semFone = lead({ telefone: "", telefoneKey: "", telefoneTipo: "ausente" });
+    mockPaginas(() => ({ leads: [lead(), descartado, semFone], nextPageToken: null }));
+    const s = new SessaoDeBusca(plano(1), {
+      ignorarFechados: true,
+      descartados: new Set([descartado.telefoneKey, `id:${semFone.id}`]),
+    });
+    await s.executar({ alvo: 10, limite: 3, signal: new AbortController().signal, onUpdate: () => {} });
+    expect(s.progresso).toMatchObject({ novos: 1, descartadosAntes: 2 });
+    expect(s.leads.filter((l) => l.descartado).map((l) => l.id).sort()).toEqual([descartado.id, semFone.id].sort());
+  });
+
   it("com 'incluir telefone fixo', o fixo conta para a quantidade pedida", async () => {
     mockPaginas(() => ({ leads: [lead({ telefoneTipo: "fixo" }), lead()], nextPageToken: null }));
     const s = new SessaoDeBusca(plano(1), { ignorarFechados: false, incluirFixos: true });

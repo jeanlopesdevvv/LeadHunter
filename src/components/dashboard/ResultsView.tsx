@@ -12,9 +12,11 @@ import {
   MessageCircle,
   Play,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   Star,
+  Trash2,
   X,
 } from "lucide-react";
 import { useMemo, useState, type CSSProperties } from "react";
@@ -29,12 +31,19 @@ import type { Lead, LeadTipo } from "@/lib/types";
 import { podeEnviar, type CheckState, type SearchMeta, type SearchStats } from "./Dashboard";
 
 type FiltroFone = "todos" | "celular" | "fixo" | "sem";
-type FiltroSituacao = "disponiveis" | "todos" | "novos" | "planilha" | "enviados";
+type FiltroSituacao = "disponiveis" | "todos" | "novos" | "planilha" | "enviados" | "descartados";
 type Ordem = "relevancia" | "nome" | "avaliacoes" | "nota" | "cidade";
 
 const POR_PAGINA = 50;
 
 function situacaoBadge(lead: Lead) {
+  if (lead.descartado) {
+    return (
+      <Badge tone="gray" title="Você descartou: não vai para a planilha">
+        <Trash2 className="size-3" /> Descartado
+      </Badge>
+    );
+  }
   if (!lead.telefone && lead.planilha !== "enviado") return <span className="text-xs text-muted">—</span>;
   switch (lead.planilha) {
     case "enviado":
@@ -73,6 +82,7 @@ function foneBadge(lead: Lead) {
 
 /** Ordem da lista: quem dá para mandar primeiro; quem já está na planilha por último. */
 function grupo(l: Lead, incluirFixos: boolean): number {
+  if (l.descartado) return 4;
   if (podeEnviar(l, incluirFixos)) return 0;
   if (l.planilha === "enviado") return 2;
   if (l.planilha === "existente" || l.planilha === "optout") return 3;
@@ -80,6 +90,7 @@ function grupo(l: Lead, incluirFixos: boolean): number {
 }
 
 function motivoBloqueio(lead: Lead, incluirFixos: boolean): string {
+  if (lead.descartado) return "Descartado por você (dá para restaurar)";
   if (!lead.telefone) return "Sem telefone que dê para usar";
   if (lead.telefoneTipo === "fixo" && !incluirFixos) return "Telefone fixo: ligue 'Permitir telefone fixo' para escolher";
   if (lead.planilha === "existente") return "Já está na planilha";
@@ -88,9 +99,43 @@ function motivoBloqueio(lead: Lead, incluirFixos: boolean): string {
   return "";
 }
 
+/** Dá para descartar (ou restaurar): quem ainda iria para a planilha. */
+function descartavel(l: Lead): boolean {
+  return l.planilha === "novo" || l.planilha === "desconhecido";
+}
+
+function BotaoDescartar({ l, onDescartar, rotulo }: { l: Lead; onDescartar: (ids: string[], descartado: boolean) => void; rotulo?: boolean }) {
+  if (!descartavel(l)) return null;
+  if (l.descartado) {
+    return (
+      <button
+        type="button"
+        onClick={() => onDescartar([l.id], false)}
+        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50"
+        title="Voltar para as oportunidades"
+      >
+        <RotateCcw className="size-3.5" /> Restaurar
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onDescartar([l.id], true)}
+      className="inline-flex items-center gap-1 rounded-lg p-1.5 text-xs font-semibold text-muted transition hover:bg-red-50 hover:text-red-600"
+      title="Descartar: não vai para a planilha"
+      aria-label={`Descartar ${l.nome}`}
+    >
+      <Trash2 className="size-4" />
+      {rotulo && "Descartar"}
+    </button>
+  );
+}
+
 export function ResultsView({
   leads,
   onLeads,
+  onDescartar,
   meta,
   stats,
   rodando,
@@ -111,6 +156,7 @@ export function ResultsView({
 }: {
   leads: Lead[];
   onLeads: (l: Lead[]) => void;
+  onDescartar: (ids: string[], descartado: boolean) => void;
   meta: SearchMeta | null;
   stats: SearchStats;
   rodando: boolean;
@@ -147,6 +193,9 @@ export function ResultsView({
       if (fone === "fixo" && l.telefoneTipo !== "fixo") return false;
       if (fone === "sem" && l.telefone) return false;
       if (tipo !== "todos" && l.tipo !== tipo) return false;
+      if (situacao === "descartados") {
+        if (!l.descartado) return false;
+      } else if (situacao !== "todos" && l.descartado) return false;
       if (situacao === "disponiveis" && (l.planilha === "existente" || l.planilha === "optout")) return false;
       if (situacao === "novos" && l.planilha !== "novo" && l.planilha !== "desconhecido") return false;
       if (situacao === "planilha" && l.planilha !== "existente" && l.planilha !== "optout") return false;
@@ -186,6 +235,8 @@ export function ResultsView({
   const novos = leads.filter((l) => podeEnviar(l, incluirFixos)).length;
   const naPlanilha = leads.filter((l) => l.planilha === "existente" || l.planilha === "optout").length;
   const enviados = leads.filter((l) => l.planilha === "enviado").length;
+  const descartados = leads.filter((l) => l.descartado).length;
+  const marcadosVisiveis = leads.filter((l) => selecionados.has(l.id) && podeEnviar(l, incluirFixos)).map((l) => l.id);
 
   function alternar(id: string) {
     const s = new Set(selecionados);
@@ -349,6 +400,7 @@ export function ResultsView({
               <option value="novos">Só novos</option>
               <option value="planilha">Já na planilha</option>
               <option value="enviados">Enviados agora</option>
+              <option value="descartados">Descartados{descartados ? ` (${descartados})` : ""}</option>
             </select>
             <div className="relative">
               <ArrowDownUp className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted" />
@@ -380,6 +432,28 @@ export function ResultsView({
           </label>
           <Toggle checked={incluirFixos} onChange={onIncluirFixos} label="Permitir telefone fixo" hint="Alguns fixos têm WhatsApp Business." />
         </div>
+        {situacao !== "descartados" && situacao !== "todos" && descartados > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-4 py-2 text-xs text-muted">
+            <span>
+              <b className="text-ink tabular-nums">{descartados}</b> {descartados === 1 ? "contato descartado por você está escondido" : "contatos descartados por você estão escondidos"}.
+            </span>
+            <button type="button" onClick={() => (setSituacao("descartados"), setPagina(1))} className="font-semibold text-brand-700 hover:underline">
+              Ver descartados
+            </button>
+          </div>
+        )}
+        {situacao === "descartados" && descartados > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-4 py-2 text-xs text-muted">
+            <span>Descartados não vão para a planilha e não voltam como novos nas próximas buscas.</span>
+            <button
+              type="button"
+              onClick={() => onDescartar(leads.filter((l) => l.descartado).map((l) => l.id), false)}
+              className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline"
+            >
+              <RotateCcw className="size-3" /> Restaurar todos
+            </button>
+          </div>
+        )}
         {situacao === "disponiveis" && naPlanilha > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-4 py-2 text-xs text-muted">
             <span>
@@ -404,7 +478,7 @@ export function ResultsView({
                 <th className="py-3 pr-4">Cidade</th>
                 <th className="py-3 pr-4">Avaliação</th>
                 <th className="py-3 pr-4">Planilha</th>
-                <th className="py-3 pr-4 text-right">Links</th>
+                <th className="py-3 pr-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -412,7 +486,14 @@ export function ResultsView({
                 const elegivel = podeEnviar(l, incluirFixos);
                 const marcado = selecionados.has(l.id) && elegivel;
                 return (
-                  <tr key={l.id} className={cx("border-b border-line/70 align-top transition-colors last:border-0", marcado ? "bg-brand-50/50" : "hover:bg-surface/70")}>
+                  <tr
+                    key={l.id}
+                    className={cx(
+                      "border-b border-line/70 align-top transition-colors last:border-0",
+                      marcado ? "bg-brand-50/50" : "hover:bg-surface/70",
+                      l.descartado && "opacity-60",
+                    )}
+                  >
                     <td className="py-3.5 pl-4">
                       <input
                         type="checkbox"
@@ -484,6 +565,7 @@ export function ResultsView({
                             <MapPinned className="size-4" />
                           </a>
                         )}
+                        <BotaoDescartar l={l} onDescartar={onDescartar} />
                       </div>
                     </td>
                   </tr>
@@ -499,7 +581,7 @@ export function ResultsView({
             const elegivel = podeEnviar(l, incluirFixos);
             const marcado = selecionados.has(l.id) && elegivel;
             return (
-              <li key={l.id} className={cx("flex gap-3 p-4", marcado && "bg-brand-50/50")}>
+              <li key={l.id} className={cx("flex gap-3 p-4", marcado && "bg-brand-50/50", l.descartado && "opacity-70")}>
                 <input
                   type="checkbox"
                   className="check mt-1"
@@ -536,6 +618,9 @@ export function ResultsView({
                         Maps <ExternalLink className="inline size-3" />
                       </a>
                     )}
+                    <span className="ml-auto">
+                      <BotaoDescartar l={l} onDescartar={onDescartar} rotulo />
+                    </span>
                   </div>
                 </div>
               </li>
@@ -574,6 +659,17 @@ export function ResultsView({
             {!podeEnviarParaPlanilha && check.estado === "erro" && <span className="block text-xs text-red-300">Planilha indisponível</span>}
           </div>
           <div className="flex gap-2">
+            {paraEnviar > 0 && (
+              <Button
+                variant="ghost"
+                className="text-white/70 hover:bg-white/10 hover:text-white"
+                onClick={() => onDescartar(marcadosVisiveis, true)}
+                icon={<Trash2 className="size-4" />}
+                title="Descartar os marcados: não vão para a planilha"
+              >
+                <span className="max-sm:hidden">Descartar</span>
+              </Button>
+            )}
             {paraEnviar > 0 && (
               <Button variant="ghost" className="text-white/60 hover:bg-white/10 hover:text-white max-sm:hidden" onClick={() => onSelecionados(new Set())}>
                 Desmarcar

@@ -88,6 +88,29 @@ describe("painel da Carol", () => {
     expect(p.contatos.find((c) => c.nome === "Lava E")?.situacao).toBe("sem_resposta");
   });
 
+  it("compara as mensagens e filtra por mensagem", () => {
+    const cab = [...LEADS[0], "template"];
+    const leads = [cab, ...LEADS.slice(1).map((r, i) => [...r, i === 0 || i === 2 ? "carol_12meses" : ""])];
+    const p = montarPainel({ leads, historico: HIST }, "hoje", AGORA);
+    // Sem coluna preenchida, vale o automático pelo tipo (como o Fluxo 1 sempre fez).
+    expect(p.modelos.map((m) => [m.nome, m.disparadas, m.responderam])).toEqual([
+      ["carol_12meses", 2, 2],
+      ["carol_prospeccao_lavajato", 2, 1],
+      ["carol_prospeccao_autonomo", 1, 1],
+    ]);
+    expect(p.contatos.find((c) => c.nome === "Lava B")?.template).toBe("carol_prospeccao_autonomo");
+    const so = montarPainel({ leads, historico: HIST }, "hoje", AGORA, "carol_12meses");
+    expect(so.modelo).toBe("carol_12meses");
+    expect(so.contatos.map((c) => c.nome).sort()).toEqual(["Lava A", "Lava C"]);
+    expect(so.resumo).toMatchObject({ disparadas: 2, sim: 1 });
+    expect(so.modelos).toEqual(p.modelos); // a comparação ignora o filtro
+  });
+
+  it("botões novos como 'Quero saber' contam como sim", () => {
+    expect(lerResposta("Quero saber")).toBe("sim");
+    expect(lerResposta("Não quero")).toBe("nao");
+  });
+
   it("aponta colunas que faltam para o painel ler", () => {
     const p = montarPainel({ leads: LEADS, historico: [["data", "texto"]] }, "hoje", AGORA);
     expect(p.fontes.historico.faltando).toEqual(["telefone", "remetente"]);

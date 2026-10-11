@@ -36,6 +36,8 @@ export interface Lead {
   termo: string;
   capturadoEm: string;
   planilha: SheetState;
+  /** Descartado pelo usuário nas Oportunidades: não vai para a planilha. */
+  descartado?: boolean;
 }
 
 export interface Rect {

@@ -8,6 +8,7 @@ import {
   PARADO_APOS_MS,
   progressoDoDisparo,
   resumoDoDia,
+  type ErroDeEnvio,
   type Interrupcao,
   type LinhaFila,
   type ProgressoDisparo,
@@ -18,6 +19,9 @@ import { getConfig } from "./env";
 import { dataN8n, mockSheet } from "./mock";
 import { phoneKey } from "./phone";
 import { atualizarStatusLinhas, esquecerAbaLeads, lerAbaLeads } from "./sheets";
+import { modeloParaEnvio } from "./templates";
+import { AUTOMATICO, analisarTemplate, dadosDoContato, preencher, templateAutomatico, type TemplateMeta } from "./templates-regras";
+import { MODELOS_SIMULACAO } from "./templates";
 
 /**
  * Disparo da Carol: o Radar chama o webhook do n8n ("Disparo pelo Radar", no Fluxo 1)
@@ -40,6 +44,8 @@ interface DisparoAtual {
   chaves: string[];
   interrompido?: Interrupcao | null;
   retomadoEm?: number | null;
+  /** Modelo do WhatsApp escolhido (null = automático: lava-jato ou autônomo). */
+  modelo?: string | null;
 }
 
 interface ExecucaoN8n {
@@ -57,6 +63,8 @@ interface EstadoTrava {
   paradaConfirmadaEm: number | null;
   enviandoAgora: { key: string; em: number } | null;
   execucoes: Map<string, ExecucaoN8n>;
+  /** Último erro de envio que o n8n avisou (o fluxo para nele). */
+  erro: ErroDeEnvio | null;
 }
 
 const g = globalThis as unknown as {
@@ -75,6 +83,7 @@ function trava(): EstadoTrava {
     paradaConfirmadaEm: null,
     enviandoAgora: null,
     execucoes: new Map(),
+    erro: null,
   });
 }
 
@@ -89,6 +98,7 @@ function progressoAtual(linhas: LinhaFila[], agora: number): ProgressoDisparo | 
     paradaConfirmadaEm: t.paradaConfirmadaEm,
     ultimoMovimentoGeral: resumoDoDia(linhas, agora).ultimoMovimento,
     enviandoAgora: t.enviandoAgora,
+    erro: t.erro,
   });
 }
 
@@ -138,6 +148,7 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
     bloqueadosNaFila: naFilaTodos.filter((l) => bloqueados.has(l.key)).map((l) => ({ nome: l.nome, telefone: l.telefone, linha: l.linha })),
     atual,
     trava: { ultimaEm: t.ultimaEm, chaveErradaEm: t.chaveErradaEm },
+    modeloAtual: g.__radarDisparo?.modelo ?? null,
     atualizadoEm: agora,
   };
 }
@@ -172,9 +183,10 @@ function exclusivo<T>(fn: () => Promise<T>): Promise<T> {
  * (continuam na fila do Radar para um próximo disparo). Depois relê a planilha e só chama o n8n
  * se os pendentes forem exatamente os escolhidos.
  */
-export function iniciarDisparo(pedido: string[] | "todos" = "todos"): Promise<StatusDisparo> {
+export function iniciarDisparo(pedido: string[] | "todos" = "todos", modelo: string = AUTOMATICO): Promise<StatusDisparo> {
   return exclusivo(async () => {
     exigirConfigurado();
+    const escolhido = await resolverModelo(modelo);
     const agora = Date.now();
     const linhas = await lerLinhas(0); // leitura fresca na hora de disparar
     const bloqueados = telefonesBloqueados();
@@ -191,14 +203,25 @@ export function iniciarDisparo(pedido: string[] | "todos" = "todos"): Promise<St
 
     const anterior = progressoAtual(linhas, agora);
     conferirQueDaParaDisparar(linhas, anterior, agora);
-    await dispararPara(linhas, chaves, () => {
+    await dispararPara(linhas, chaves, escolhido, () => {
       // O que a Carol mandou no disparo anterior continua explicado (não é "fluxo rodando de fora").
       if (anterior?.ultimoMovimento) g.__radarMovimentoConhecido = Math.max(g.__radarMovimentoConhecido ?? 0, anterior.ultimoMovimento);
-      g.__radarDisparo = { iniciadoEm: agora, chaves };
+      g.__radarDisparo = { iniciadoEm: agora, chaves, modelo: escolhido?.name ?? null };
     });
     esquecerAbaLeads();
     return statusDisparo();
   });
+}
+
+/** Modelo escolhido na tela, conferido no Meta. null = automático (o Fluxo 1 escolhe pelo tipo). */
+async function resolverModelo(nome: string | null | undefined): Promise<TemplateMeta | null> {
+  const n = String(nome ?? "").trim();
+  if (!n || n === AUTOMATICO) return null;
+  const achado = await modeloParaEnvio(n);
+  if (!achado) {
+    throw new DisparoError("Esse modelo do WhatsApp não está disponível (não aprovado ou não suportado). Escolha outro.", 409);
+  }
+  return achado.bruto;
 }
 
 function exigirConfigurado() {
@@ -237,11 +260,13 @@ function conferirQueDaParaDisparar(linhas: LinhaFila[], anterior: ProgressoDispa
  * planilha e chama o n8n. `registrar` guarda o disparo; é chamado também quando o n8n não
  * responde a tempo (ele pode ter começado: o Radar acompanha em vez de deixar disparar por cima).
  */
-async function dispararPara(linhas: LinhaFila[], chaves: string[], registrar: () => void) {
+async function dispararPara(linhas: LinhaFila[], chaves: string[], modelo: TemplateMeta | null, registrar: () => void) {
   const cfg = getConfig();
 
   // Só os escolhidos ficam "pendente"; o resto (inclusive números bloqueados) vira "aguardando".
-  await atualizarStatusLinhas(mudancasParaDisparo(linhas, new Set(chaves), cfg.statusAguardando));
+  // Cada escolhido leva na coluna "template" o modelo que vai receber (para comparar no Desempenho).
+  const templatePara = (l: LinhaFila) => modelo?.name ?? templateAutomatico(l.tipo);
+  await atualizarStatusLinhas(mudancasParaDisparo(linhas, new Set(chaves), cfg.statusAguardando, templatePara));
 
   // Confere na planilha antes de chamar o n8n.
   const conferencia = (await lerLinhas(0)).filter(paraON8n).map((l) => l.key);
@@ -256,11 +281,12 @@ async function dispararPara(linhas: LinhaFila[], chaves: string[], registrar: ()
     );
   }
 
+  trava().erro = null;
   if (cfg.mock) {
-    simularN8n();
+    simularN8n(modelo);
   } else {
     try {
-      await chamarN8n(chaves.length);
+      await chamarN8n(chaves.length, modelo);
     } catch (e) {
       if (e instanceof DisparoError && e.incerto) {
         registrar();
@@ -323,9 +349,10 @@ export function continuarDisparo(): Promise<StatusDisparo> {
     if (!restantes.length) throw new DisparoError("Não sobrou ninguém para receber neste disparo.", 409);
 
     conferirQueDaParaDisparar(linhas, atual, agora);
+    const escolhido = await resolverModelo(d.modelo);
     const t = trava();
     for (const ex of t.execucoes.values()) ex.parada = true; // execuções antigas nunca mais passam
-    await dispararPara(linhas, restantes, () => {
+    await dispararPara(linhas, restantes, escolhido, () => {
       d.interrompido = null;
       d.retomadoEm = agora;
     });
@@ -410,6 +437,24 @@ export function registrarChaveErrada(agora = Date.now()) {
   trava().chaveErradaEm = agora;
 }
 
+/**
+ * O n8n avisa que o WhatsApp recusou um envio por algo que não é o número (modelo errado,
+ * limite, acesso expirado) e parou. O contato continua "pendente" (não vira sem_whatsapp).
+ */
+export function registrarErroDoN8n(dados: Record<string, unknown>, agora = Date.now()): ErroDeEnvio {
+  const t = trava();
+  const n = Number(dados.codigo ?? dados.erro_codigo);
+  const erro: ErroDeEnvio = {
+    em: agora,
+    codigo: Number.isInteger(n) && n > 0 ? n : null,
+    detalhe: String(dados.detalhe ?? dados.erro_detalhe ?? dados.mensagem ?? "").slice(0, 300),
+  };
+  t.erro = erro;
+  t.enviandoAgora = null;
+  console.error("[radar] n8n avisou erro de envio:", erro.codigo, erro.detalhe);
+  return erro;
+}
+
 /** Para a tela de Configuração: a trava já foi usada pelo n8n (desde que o servidor ligou)? */
 export function estadoDaTrava(): { ultimaEm: number | null; chaveErradaEm: number | null } {
   const t = trava();
@@ -423,7 +468,7 @@ export function estadoDaTrava(): { ultimaEm: number | null; chaveErradaEm: numbe
 export async function acompanharDisparo(
   iniciadoEm: number,
   chaves: string[],
-  extra: { interrompido?: Interrupcao | null; retomadoEm?: number | null } = {},
+  extra: { interrompido?: Interrupcao | null; retomadoEm?: number | null; modelo?: string | null } = {},
 ): Promise<StatusDisparo> {
   const agora = Date.now();
   const valido = Number.isFinite(iniciadoEm) && iniciadoEm > agora - 12 * 60 * 60_000 && iniciadoEm <= agora + 60_000;
@@ -433,19 +478,27 @@ export async function acompanharDisparo(
     const interrompido =
       i && (i.como === "pausado" || i.como === "cancelado") && Number.isFinite(i.em) && i.em >= iniciadoEm ? { como: i.como, em: i.em } : null;
     const retomadoEm = typeof extra.retomadoEm === "number" && extra.retomadoEm >= iniciadoEm ? extra.retomadoEm : null;
-    g.__radarDisparo = { iniciadoEm, chaves: limpas, interrompido, retomadoEm };
+    const modelo = typeof extra.modelo === "string" && /^[a-z0-9_]{1,512}$/.test(extra.modelo) ? extra.modelo : null;
+    g.__radarDisparo = { iniciadoEm, chaves: limpas, interrompido, retomadoEm, modelo };
   }
   return statusDisparo(agora);
 }
 
-async function chamarN8n(pendentes: number) {
+async function chamarN8n(pendentes: number, modelo: TemplateMeta | null) {
   const cfg = getConfig();
   let res: Response;
   try {
     res = await fetch(cfg.n8nDisparoUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(cfg.n8nDisparoToken ? { [cfg.n8nDisparoHeader]: cfg.n8nDisparoToken } : {}) },
-      body: JSON.stringify({ origem: "radar", pendentes, pedidoEm: new Date().toISOString() }),
+      // Sem "template", o Fluxo 1 escolhe o modelo pelo tipo (lava-jato ou autônomo), como sempre fez.
+      body: JSON.stringify({
+        origem: "radar",
+        pendentes,
+        pedidoEm: new Date().toISOString(),
+        template_nome: modelo?.name ?? AUTOMATICO,
+        ...(modelo ? { template: modelo } : {}),
+      }),
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
@@ -481,7 +534,7 @@ async function chamarN8n(pendentes: number) {
  * Simulação (MOCK_MODE), igual ao Fluxo 1: lê a lista de pendentes uma vez só e, a cada 2,5 s,
  * pergunta à trava e manda para o próximo.
  */
-function simularN8n() {
+function simularN8n(modelo: TemplateMeta | null) {
   if (g.__radarDisparoSim) clearInterval(g.__radarDisparoSim);
   const cfg = getConfig();
   const values = mockSheet().tabs[cfg.sheetTab] ?? mockSheet().tabs.leads;
@@ -493,6 +546,10 @@ function simularN8n() {
   const iStatus = h.indexOf("status");
   const iEm = h.indexOf("mensagem_enviada_em");
   const iOpt = h.indexOf("optout");
+  const textoDe = (nome: string, cidade: string, tipo: string) => {
+    const t = modelo ?? MODELOS_SIMULACAO.find((m) => m.name === templateAutomatico(tipo));
+    return t ? preencher(analisarTemplate(t).corpo, dadosDoContato(nome, cidade)) : "Oi! Aqui é a Carol, consultora comercial do Lavacar…";
+  };
   const lista = values.slice(1).filter((r) => String(r[iStatus] ?? "").trim() === "pendente" && !String(r[iOpt] ?? "").trim() && r[iTel]);
   const exec = `sim-${Date.now()}`;
   let n = 0;
@@ -509,6 +566,11 @@ function simularN8n() {
     void consultarTrava({ telefone: row[iTel], nome: row[iNome], tipo: row[iTipo], cidade: row[iCidade], status: row[iStatus] }, exec)
       .then((r) => {
         if (r.radar_parar) return parar();
+        // Simula um modelo que o WhatsApp recusa (como o Fluxo 1 v6.5: avisa o Radar e para).
+        if (modelo?.name === "carol_teste_erro") {
+          registrarErroDoN8n({ codigo: 132000, detalhe: "Number of parameters does not match the expected number of params" });
+          return parar();
+        }
         n++;
         const agora = Date.now();
         const quando = dataN8n(agora);
@@ -520,8 +582,11 @@ function simularN8n() {
         const tel = String(row[iTel]);
         const tabs = mockSheet().tabs;
         if (!semZap) {
-          tabs.historico_carol?.push([tel, new Date(agora).toISOString(), "carol", "Oi! Aqui é a Carol, consultora comercial do Lavacar…", `${tel}@s.whatsapp.net`]);
-          tabs.status_meta_carol?.push([tel, `wamid.sim${n}`, n % 3 === 0 ? "delivered" : "read", new Date(agora + 3000).toISOString(), ""]);
+          tabs.historico_carol?.push([tel, new Date(agora).toISOString(), "carol", textoDe(String(row[iNome] ?? ""), String(row[iCidade] ?? ""), String(row[iTipo] ?? "")), `${tel}@s.whatsapp.net`]);
+          // O Fluxo 6 só grava falhas (timestamp, telefone, wamid, status, erro_codigo, erro_detalhe, categoria).
+          if (n % 11 === 5) {
+            tabs.status_meta_carol?.push([new Date(agora + 3000).toISOString(), tel, `wamid.sim${n}`, "failed", "131049", "Message not delivered to maintain healthy ecosystem engagement", "marketing"]);
+          }
           const respostas = ["Sim, atendo", "Não tenho interesse", "Oi! Como funciona?"];
           if (n % 2 === 1) {
             setTimeout(() => {

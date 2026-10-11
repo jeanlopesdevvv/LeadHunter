@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { diaBrasilia, lerDataHora, linhasDaFila, naFila, progressoDoDisparo, resumoDoDia } from "@/lib/disparo-regras";
 import { buildHeaderMap } from "@/lib/sheet-mapping";
 
+import { aplicarBatchUpdate } from "./planilha-falsa";
+
 /**
  * Disparo da Carol: o Radar lê o que o n8n grava na aba leads para mostrar o progresso,
  * e nunca deixa começar um segundo disparo por cima do primeiro.
@@ -125,7 +127,7 @@ describe("iniciar disparo (servidor)", () => {
   }
 
   it("chama o webhook com a senha no cabeçalho e guarda quem estava na fila", async () => {
-    const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""], ["5531911110002", "B", "Empresa", "BH", "pendente", "", ""]]);
+    const chamadas = mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""], ["5531911110002", "B", "Empresa", "BH", "pendente", "", ""]]);
     const { iniciarDisparo } = await import("@/lib/disparo");
     const s = await iniciarDisparo();
     expect(chamadas).toHaveLength(1);
@@ -135,7 +137,7 @@ describe("iniciar disparo (servidor)", () => {
   });
 
   it("não deixa começar outro disparo enquanto o primeiro está enviando", async () => {
-    const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
+    const chamadas = mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
     const { iniciarDisparo } = await import("@/lib/disparo");
     await iniciarDisparo();
     await expect(iniciarDisparo()).rejects.toThrow(/Já tem um disparo em andamento/);
@@ -145,7 +147,7 @@ describe("iniciar disparo (servidor)", () => {
   it("não dispara se a Carol mandou mensagem há menos de 90 s (fluxo rodando direto no n8n)", async () => {
     const agora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const chamadas = mockGoogle([
-      CAB,
+      [...CAB],
       ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
       ["5531911110002", "B", "Empresa", "BH", "enviado", agora, ""],
     ]);
@@ -155,14 +157,14 @@ describe("iniciar disparo (servidor)", () => {
   });
 
   it("explica quando o fluxo não está publicado no n8n", async () => {
-    mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]], { status: 404 });
+    mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]], { status: 404 });
     const { iniciarDisparo } = await import("@/lib/disparo");
     await expect(iniciarDisparo()).rejects.toThrow(/não publicado/);
   });
 
   it("com optout marcado o bloqueado sai da fila e o disparo segue", async () => {
     const chamadas = mockGoogle([
-      CAB,
+      [...CAB],
       ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
       ["5531982149012", "Lavacar - Lava Jato Delivery", "Autônomo", "BH", "pendente", "", "sim"],
     ]);
@@ -174,7 +176,7 @@ describe("iniciar disparo (servidor)", () => {
 
   it("sem senha configurada, chama o webhook sem cabeçalho extra", async () => {
     vi.stubEnv("N8N_DISPARO_TOKEN", "");
-    const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
+    const chamadas = mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
     const { iniciarDisparo } = await import("@/lib/disparo");
     await iniciarDisparo();
     expect(Object.keys(chamadas[0].headers as Record<string, string>)).toEqual(["Content-Type"]);
@@ -182,7 +184,7 @@ describe("iniciar disparo (servidor)", () => {
 
   it("dispara só para os marcados: os outros pendentes (e o Lavacar) viram 'aguardando' antes de chamar o n8n", async () => {
     const planilha: unknown[][] = [
-      CAB,
+      [...CAB],
       ["5531982999779", "Jean Lopes", "Autônomo", "BH", "pendente", "", ""],
       ["5531982149012", "Lavacar - Lava Jato Delivery", "Autônomo", "BH", "pendente", "", ""],
       ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""],
@@ -200,11 +202,8 @@ describe("iniciar disparo (servidor)", () => {
         }
         if (url.includes("values:batchUpdate")) {
           const body = JSON.parse(String(init?.body)) as { data: { range: string; values: string[][] }[] };
-          for (const d of body.data) {
-            escritas.push(d);
-            const linha = Number(/(\d+)$/.exec(d.range)![1]);
-            planilha[linha - 1][4] = d.values[0][0];
-          }
+          escritas.push(...body.data);
+          aplicarBatchUpdate(planilha, body.data);
           return new Response("{}", { status: 200 });
         }
         return new Response(JSON.stringify({ values: planilha }), { status: 200 });
@@ -215,8 +214,12 @@ describe("iniciar disparo (servidor)", () => {
     expect(antes.itensFila.map((i) => i.nome)).toEqual(["Jean Lopes", "A", "B"]); // o Lavacar não aparece
     const s = await iniciarDisparo(["5531982999779"]);
     expect(escritas.map((e) => [e.range, e.values[0][0]])).toEqual([
+      ["'leads'!E2", "pendente"],
       ["'leads'!E3", "aguardando"],
       ["'leads'!E4", "aguardando"],
+      // Coluna "template" criada no fim do cabeçalho, com o modelo que o escolhido vai receber.
+      ["'leads'!H1", "template"],
+      ["'leads'!H2", "carol_prospeccao_autonomo"],
     ]);
     expect(planilha.slice(1).map((r) => r[4])).toEqual(["pendente", "aguardando", "aguardando", "aguardando", "enviado"]);
     expect(chamadasN8n).toHaveLength(1);
@@ -230,14 +233,14 @@ describe("iniciar disparo (servidor)", () => {
   });
 
   it("um marcado que estava 'aguardando' volta a 'pendente'", async () => {
-    const planilha: unknown[][] = [CAB, ["5531911110002", "B", "Empresa", "BH", "aguardando", "", ""]];
+    const planilha: unknown[][] = [[...CAB], ["5531911110002", "B", "Empresa", "BH", "aguardando", "", ""]];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url.startsWith("https://n8n.exemplo.com")) return new Response("{}", { status: 200 });
         if (url.includes("values:batchUpdate")) {
           const body = JSON.parse(String(init?.body)) as { data: { range: string; values: string[][] }[] };
-          for (const d of body.data) planilha[Number(/(\d+)$/.exec(d.range)![1]) - 1][4] = d.values[0][0];
+          aplicarBatchUpdate(planilha, body.data);
           return new Response("{}", { status: 200 });
         }
         return new Response(JSON.stringify({ values: planilha }), { status: 200 });
@@ -249,7 +252,7 @@ describe("iniciar disparo (servidor)", () => {
   });
 
   it("se a planilha não ficar como esperado, não chama o n8n", async () => {
-    const planilha: unknown[][] = [CAB, ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""], ["5531911110002", "B", "Empresa", "BH", "pendente", "", ""]];
+    const planilha: unknown[][] = [[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""], ["5531911110002", "B", "Empresa", "BH", "pendente", "", ""]];
     const chamadasN8n: unknown[] = [];
     vi.stubGlobal(
       "fetch",
@@ -267,8 +270,70 @@ describe("iniciar disparo (servidor)", () => {
     expect(chamadasN8n).toHaveLength(0);
   });
 
+  it("com um modelo escolhido, confere no Meta e manda o modelo para o n8n", async () => {
+    vi.stubEnv("META_TOKEN", "token-meta");
+    vi.stubEnv("META_WABA_ID", "123");
+    const planilha: unknown[][] = [[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]];
+    const corpos: Record<string, unknown>[] = [];
+    const modelo = {
+      name: "carol_12meses",
+      status: "APPROVED",
+      category: "MARKETING",
+      language: "pt_BR",
+      components: [{ type: "BODY", text: "Oi, {{1}}! 12 meses grátis {{2}}." }],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.startsWith("https://graph.facebook.com/")) {
+          expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer token-meta");
+          expect(url).toContain("/123/message_templates");
+          return new Response(JSON.stringify({ data: [modelo, { ...modelo, name: "en_only", language: "en_US" }] }), { status: 200 });
+        }
+        if (url.startsWith("https://n8n.exemplo.com")) {
+          corpos.push(JSON.parse(String(init?.body)));
+          return new Response("{}", { status: 200 });
+        }
+        if (url.includes("values:batchUpdate")) {
+          aplicarBatchUpdate(planilha, (JSON.parse(String(init?.body)) as { data: { range: string; values: unknown[][] }[] }).data);
+          return new Response("{}", { status: 200 });
+        }
+        return new Response(JSON.stringify({ values: planilha }), { status: 200 });
+      }),
+    );
+    (globalThis as { __radarModelos?: unknown }).__radarModelos = undefined;
+    const { iniciarDisparo } = await import("@/lib/disparo");
+    await expect(iniciarDisparo(["5531911110001"], "nao_existe")).rejects.toThrow(/não está disponível/);
+    const s = await iniciarDisparo(["5531911110001"], "carol_12meses");
+    expect(corpos).toHaveLength(1);
+    expect(corpos[0]).toMatchObject({ template_nome: "carol_12meses", template: { name: "carol_12meses" } });
+    expect(s.modeloAtual).toBe("carol_12meses");
+    expect(planilha[0][7]).toBe("template");
+    expect(planilha[1][7]).toBe("carol_12meses");
+  });
+
+  it("sem escolha, o n8n segue no automático (sem modelo no pedido)", async () => {
+    const chamadas = mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
+    const { iniciarDisparo } = await import("@/lib/disparo");
+    const s = await iniciarDisparo();
+    const corpo = JSON.parse(String(chamadas[0].body)) as Record<string, unknown>;
+    expect(corpo.template_nome).toBe("automatico");
+    expect(corpo.template).toBeUndefined();
+    expect(s.modeloAtual).toBeNull();
+  });
+
+  it("o n8n avisa um erro de envio: o disparo aparece parado com o motivo", async () => {
+    mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "pendente", "", ""]]);
+    const { iniciarDisparo, registrarErroDoN8n, statusDisparo } = await import("@/lib/disparo");
+    await iniciarDisparo();
+    registrarErroDoN8n({ codigo: "132001", detalhe: "Template name does not exist in the translation" });
+    const s = await statusDisparo();
+    expect(s.atual?.estado).toBe("parado");
+    expect(s.atual?.erro).toEqual({ codigo: 132001, mensagem: "O modelo não existe ou não está aprovado em português." });
+  });
+
   it("sem pendentes não chama o n8n", async () => {
-    const chamadas = mockGoogle([CAB, ["5531911110001", "A", "Empresa", "BH", "enviado", "01/09/2026, 10:00:00", ""]]);
+    const chamadas = mockGoogle([[...CAB], ["5531911110001", "A", "Empresa", "BH", "enviado", "01/09/2026, 10:00:00", ""]]);
     const { iniciarDisparo } = await import("@/lib/disparo");
     await expect(iniciarDisparo()).rejects.toThrow(/Não há ninguém na fila/);
     expect(chamadas).toHaveLength(0);

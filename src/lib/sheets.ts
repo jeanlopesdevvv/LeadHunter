@@ -259,7 +259,9 @@ export function esquecerAbaLeads() {
  * Muda o status de linhas da aba leads. Confere o telefone de cada linha; com `de`, só muda se o
  * status atual ainda for esse (o n8n pode ter acabado de gravar "enviado": nunca desfazer isso).
  */
-export function atualizarStatusLinhas(mudancasPedidas: { linha: number; key: string; status: string; de?: string }[]): Promise<void> {
+export function atualizarStatusLinhas(
+  mudancasPedidas: { linha: number; key: string; status: string; de?: string; template?: string }[],
+): Promise<void> {
   return exclusivo(async () => {
     if (!mudancasPedidas.length) return;
     const cfg = getConfig();
@@ -275,20 +277,30 @@ export function atualizarStatusLinhas(mudancasPedidas: { linha: number; key: str
     const statusStr = (row: unknown[]) => String(row[map.status!] ?? "").trim().toLowerCase();
     const mudancas = mudancasPedidas.filter((m) => m.de === undefined || statusStr(values[m.linha - 1]) === m.de.trim().toLowerCase());
     if (!mudancas.length) return;
+    // Modelo do WhatsApp do disparo: se a coluna "template" não existe, o Radar cria no fim do cabeçalho.
+    const comTemplate = mudancas.filter((m) => m.template !== undefined);
+    const colTemplate = comTemplate.length ? (map.template ?? ((values[0] ?? []) as unknown[]).length) : undefined;
+    const criarColuna = colTemplate !== undefined && map.template === undefined;
     if (cfg.mock) {
+      if (criarColuna) (values[0] as unknown[])[colTemplate] = "template";
       for (const m of mudancas) {
         const row = values[m.linha - 1] as unknown[];
-        while (row.length <= map.status) row.push("");
+        while (row.length <= Math.max(map.status, colTemplate ?? 0)) row.push("");
         row[map.status] = m.status;
+        if (m.template !== undefined && colTemplate !== undefined) row[colTemplate] = m.template;
       }
     } else {
+      const aba = quoteTab(cfg.sheetTab);
       const col = columnLetter(map.status);
+      const data = mudancas.map((m) => ({ range: `${aba}!${col}${m.linha}`, values: [[m.status]] }));
+      if (colTemplate !== undefined) {
+        const colT = columnLetter(colTemplate);
+        if (criarColuna) data.push({ range: `${aba}!${colT}1`, values: [["template"]] });
+        for (const m of comTemplate) data.push({ range: `${aba}!${colT}${m.linha}`, values: [[m.template ?? ""]] });
+      }
       await sheetsFetch(`/values:batchUpdate`, {
         method: "POST",
-        body: JSON.stringify({
-          valueInputOption: "RAW",
-          data: mudancas.map((m) => ({ range: `${quoteTab(cfg.sheetTab)}!${col}${m.linha}`, values: [[m.status]] })),
-        }),
+        body: JSON.stringify({ valueInputOption: "RAW", data }),
       });
     }
     esquecerAbaLeads();

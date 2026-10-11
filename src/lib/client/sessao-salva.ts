@@ -75,6 +75,8 @@ export interface DisparoLembrado {
   /** Pausado/cancelado no Radar (para o servidor lembrar se reiniciar). */
   interrompido?: { como: "pausado" | "cancelado"; em: number } | null;
   retomadoEm?: number | null;
+  /** Modelo do WhatsApp do disparo (null = automático). */
+  modelo?: string | null;
 }
 
 export function lembrarDisparo(d: DisparoLembrado) {
@@ -88,6 +90,26 @@ export function lembrarDisparo(d: DisparoLembrado) {
 export function esquecerDisparo() {
   try {
     localStorage.removeItem(CHAVE_DISPARO);
+  } catch {
+    /* sem acesso ao armazenamento */
+  }
+}
+
+/* ---------- última mensagem escolhida no disparo ---------- */
+
+const CHAVE_MODELO = "radar:modelo:v1";
+
+export function modeloLembrado(): string | null {
+  try {
+    return localStorage.getItem(CHAVE_MODELO);
+  } catch {
+    return null;
+  }
+}
+
+export function lembrarModelo(nome: string) {
+  try {
+    localStorage.setItem(CHAVE_MODELO, nome);
   } catch {
     /* sem acesso ao armazenamento */
   }

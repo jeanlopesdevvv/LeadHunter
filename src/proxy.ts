@@ -2,10 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 /**
- * Tudo exige a senha, exceto a tela de login, a rota que faz o login, o healthcheck e a trava
- * que o n8n consulta antes de cada mensagem (essa confere a própria chave).
+ * Tudo exige a senha, exceto a tela de login, a rota que faz o login, o healthcheck a trava
+ * que o n8n consulta antes de cada mensagem e o aviso de erro de envio (esses conferem a própria chave).
  */
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health", "/api/n8n/trava"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health", "/api/n8n/trava", "/api/n8n/erro"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

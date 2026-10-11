@@ -9,6 +9,7 @@ import { api } from "@/lib/client/api";
 import { clearHistory, loadHistory, removeHistory, upsertHistory, type HistoryEntry } from "@/lib/client/history";
 import { planejarBusca, SessaoDeBusca, type Progresso } from "@/lib/client/search-runner";
 import { carregarSessao, salvarSessao } from "@/lib/client/sessao-salva";
+import { aplicarDescartados, carregarDescartados, chaveDoDescarte, esquecerDescartados, lembrarDescartados } from "@/lib/client/descartados";
 import { confete } from "@/components/motion";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
@@ -40,7 +41,7 @@ export type CheckState = { estado: "idle" | "checando" | "ok" | "erro"; erro?: s
 
 /** Pode ir para a planilha? */
 export function podeEnviar(lead: Lead, incluirFixos: boolean): boolean {
-  if (!lead.telefone) return false;
+  if (!lead.telefone || lead.descartado) return false;
   if (lead.telefoneTipo !== "celular" && !(incluirFixos && lead.telefoneTipo === "fixo")) return false;
   return lead.planilha === "novo" || lead.planilha === "desconhecido";
 }
@@ -104,7 +105,7 @@ export function Dashboard() {
   const [preSelecaoDisparo, setPreSelecaoDisparo] = useState<string[] | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const [sessaoInicial] = useState(() => (salvo?.busca ? SessaoDeBusca.restaurar(salvo.busca, salvo.leads) : null));
+  const [sessaoInicial] = useState(() => (salvo?.busca ? SessaoDeBusca.restaurar(salvo.busca, salvo.leads, carregarDescartados()) : null));
   const sessaoRef = useRef<SessaoDeBusca | null>(sessaoInicial);
   const [temMais, setTemMais] = useState(() => Boolean(sessaoInicial?.temMais));
   /** Sempre a lista mais recente (inclui o "tipo" editado pelo usuário). */
@@ -310,7 +311,7 @@ export function Dashboard() {
       setUso(plano.uso);
       const { limite } = calcularLimite(form, plano.uso, maxPorBusca);
       if (limite <= 0) throw new Error(`As consultas grátis deste mês acabaram. Voltam em ${formatarRenovacaoCurta(plano.uso.renovaEm)}.`);
-      sessao = new SessaoDeBusca(plano, { ignorarFechados: form.ignorarFechados, incluirFixos: form.incluirFixos });
+      sessao = new SessaoDeBusca(plano, { ignorarFechados: form.ignorarFechados, incluirFixos: form.incluirFixos, descartados: carregarDescartados() });
       sessaoRef.current = sessao;
       await executar(sessao, form.alvo, limite, controller, minha);
       const p = sessao.progresso;
@@ -478,6 +479,60 @@ export function Dashboard() {
     [selecionados, meta, historico, atualizarLeads],
   );
 
+  /** Marca (ou desmarca) contatos como descartados. Devolve os que mudaram. */
+  const mudarDescarte = useCallback(
+    (ids: string[], descartado: boolean): { mudados: Lead[]; desmarcados: Set<string> } => {
+      const alvo = new Set(ids);
+      const mudados = leadsRef.current.filter((l) => alvo.has(l.id) && Boolean(l.descartado) !== descartado && l.planilha !== "enviado");
+      const desmarcados = new Set<string>(); // preenchido quando a seleção é atualizada (para o "Desfazer" remarcar)
+      if (!mudados.length) return { mudados, desmarcados };
+      const chaves = [...new Set(mudados.map(chaveDoDescarte))];
+      if (descartado) lembrarDescartados(chaves);
+      else esquecerDescartados(chaves);
+      // Outro lugar com o mesmo telefone também sai (ou volta).
+      const mesmas = new Set(chaves);
+      const atualizados = leadsRef.current.map((l) => (mesmas.has(chaveDoDescarte(l)) && l.planilha !== "enviado" ? { ...l, descartado } : l));
+      atualizarLeads(atualizados);
+      if (descartado) {
+        setSelecionados((s) => {
+          const novo = new Set(s);
+          atualizados.forEach((l) => {
+            if (l.descartado && novo.delete(l.id)) desmarcados.add(l.id);
+          });
+          return novo;
+        });
+      }
+      if (meta) {
+        const anterior = loadHistory().find((h) => h.id === meta.id);
+        if (anterior) setHistorico(upsertHistory({ ...anterior, leads: atualizados }));
+      }
+      return { mudados, desmarcados };
+    },
+    [atualizarLeads, meta],
+  );
+
+  /** Tira contatos da lista de oportunidades (não vão para a planilha). Lembrado neste navegador. */
+  const descartar = useCallback(
+    (ids: string[], descartado: boolean) => {
+      const { mudados, desmarcados } = mudarDescarte(ids, descartado);
+      if (!mudados.length) return;
+      const qtd = mudados.length;
+      const quem = qtd === 1 ? `"${mudados[0].nome}"` : `${qtd} contatos`;
+      if (!descartado) return toast(`${quem} de volta às oportunidades.`, "success");
+      toast(`${quem} ${qtd === 1 ? "descartado: não vai" : "descartados: não vão"} para a planilha.`, "info", {
+        rotulo: "Desfazer",
+        onClick: () => {
+          mudarDescarte(
+            mudados.map((l) => l.id),
+            false,
+          );
+          if (desmarcados.size) setSelecionados((s) => new Set([...s, ...desmarcados]));
+        },
+      });
+    },
+    [mudarDescarte, toast],
+  );
+
   const abrirHistorico = useCallback(
     async (entry: HistoryEntry) => {
       if (!entry.leads?.length) return toast("A lista desta busca não está mais guardada neste navegador.", "info");
@@ -489,7 +544,7 @@ export function Dashboard() {
       setStats({ brutos: entry.leads.length, repetidos: 0, fechados: 0 });
       setProgresso(null);
       setSelecionados(new Set());
-      atualizarLeads(entry.leads);
+      atualizarLeads(aplicarDescartados(entry.leads));
       setView("resultados");
       // A planilha pode ter mudado desde então. Nada vem marcado: reabrir é para conferir, e evita mandar sem querer.
       await conferirPlanilha(0);
@@ -545,6 +600,7 @@ export function Dashboard() {
         <ResultsView
           leads={leads}
           onLeads={atualizarLeads}
+          onDescartar={descartar}
           meta={meta}
           stats={stats}
           rodando={rodando}

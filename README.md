@@ -20,18 +20,23 @@ telefone        nome              tipo       cidade           status    mensagem
    (e de novo, até 64 pedaços) para achar mais.
 2. **Revisar**: cada lead mostra se o telefone é celular ou fixo, a sugestão de tipo (Autônomo/Empresa,
    editável), nota, site e link do Maps. Os que já estão na planilha aparecem como *Já na planilha*.
-   Exatamente a quantidade pedida já vem marcada.
+   Exatamente a quantidade pedida já vem marcada. **Descartar** (lixeira em cada linha, ou "Descartar" na barra
+   para os marcados, com "Desfazer") tira o contato da lista: ele não vai para a planilha e, nas próximas buscas
+   deste navegador, volta já marcado como descartado (filtro *Descartados*, com "Restaurar").
 3. **Enviar**: os marcados vão para o fim da aba `leads` com `status = pendente`.
 4. **Disparar**: na tela *Disparo*, você marca quem recebe (um, alguns ou todos da fila) e um botão manda o n8n
    (Fluxo 1) enviar a primeira mensagem da Carol; a tela acompanha o envio lendo a planilha (enviado / sem WhatsApp).
    Os não marcados ficam como `aguardando` na planilha, para um próximo disparo.
+   Em **Mensagem** você escolhe qual modelo aprovado do WhatsApp a Carol manda (com prévia); *Automática* é a de
+   sempre (lava-jato ou autônomo). O modelo de cada contato fica na coluna `template` da aba `leads`. Se o WhatsApp
+   recusar o modelo, o Fluxo 1 avisa o Radar e o disparo para mostrando o motivo (ninguém vira "sem WhatsApp").
    Nunca começa um segundo disparo por cima do primeiro. Configuração em [docs/SETUP.md](docs/SETUP.md#5-botão-de-disparo-n8n).
    Durante o envio dá para **Pausar** (continua depois de onde parou), **Cancelar** (quem não recebeu volta para a
    fila) e **Continuar** um disparo que parou (ex.: limite diário). Para parar no meio, o Fluxo 1 tem uma **trava**:
    antes de cada mensagem ele pergunta ao Radar se ainda pode enviar ([docs/SETUP.md](docs/SETUP.md#trava-pausar-e-cancelar)).
 5. **Desempenho**: disparadas, responderam, "Sim, atendo" e sem interesse; onde está cada contato (pediu
-   atendente, sim, em conversa, cliente, sem resposta, sem interesse, não recebeu); "Para atender agora" e lista
-   filtrável. Usa só o que os fluxos já gravam: abas `leads`, `historico_carol`, `sessoes_carol` e as falhas de
+   atendente, sim, em conversa, com a Sofia, sem resposta, sem interesse, não recebeu); "Para atender agora" e lista
+   filtrável. Filtro por **mensagem** e quadro **Comparar mensagens** (qual modelo traz mais respostas). Usa só o que os fluxos já gravam: abas `leads`, `historico_carol`, `sessoes_carol` e as falhas de
    `status_meta_carol` (período: hoje, 7 dias, 30 dias ou tudo; atualiza a cada minuto).
 
 ### Atendimento no Chatwoot

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { aplicarBatchUpdate } from "./planilha-falsa";
+
 /**
  * Pausar, cancelar e continuar o disparo, e a trava que o n8n consulta antes de cada mensagem.
  * A planilha e o n8n são simulados: o teste faz o papel do Fluxo 1.
@@ -28,7 +30,7 @@ let planilha: unknown[][];
 let chamadasN8n: number;
 
 function montar(linhas: unknown[][]) {
-  planilha = [CAB, ...linhas];
+  planilha = [[...CAB], ...linhas];
   chamadasN8n = 0;
   vi.stubGlobal(
     "fetch",
@@ -39,7 +41,7 @@ function montar(linhas: unknown[][]) {
       }
       if (url.includes("values:batchUpdate")) {
         const body = JSON.parse(String(init?.body)) as { data: { range: string; values: string[][] }[] };
-        for (const d of body.data) planilha[Number(/(\d+)$/.exec(d.range)![1]) - 1][4] = d.values[0][0];
+        aplicarBatchUpdate(planilha, body.data);
         return new Response("{}", { status: 200 });
       }
       return new Response(JSON.stringify({ values: planilha }), { status: 200 });

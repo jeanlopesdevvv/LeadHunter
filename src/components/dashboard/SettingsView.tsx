@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, Headset, KeyRound, Map, RefreshCw, Send, ShieldCheck, Table2, TriangleAlert, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, FlaskConical, Gauge, Headset, KeyRound, Map, MessageSquareText, RefreshCw, Send, ShieldCheck, Table2, TriangleAlert, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useToast } from "@/components/toast";
@@ -15,7 +15,13 @@ export interface StatusResponse {
   places: { configurada: boolean };
   uso?: Uso;
   projetoGoogle?: string;
-  disparo?: { configurado: boolean; destino: string; limiteDiario: number; trava?: { ultimaEm: number | null; chaveErradaEm: number | null } };
+  disparo?: {
+    configurado: boolean;
+    destino: string;
+    limiteDiario: number;
+    trava?: { ultimaEm: number | null; chaveErradaEm: number | null };
+    modelos?: boolean;
+  };
   chatwoot?: { url: string; apiLigada: boolean };
   limites: { maxConsultasPorBusca: number };
   planilha: {
@@ -208,6 +214,21 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
                     : trava?.ultimaEm
                       ? `Ativo: você pode pausar ou cancelar um disparo a qualquer momento (última verificação às ${horaBrasilia(trava.ultimaEm)}).`
                       : "Será confirmado automaticamente no próximo disparo."}
+                </p>
+              </Item>
+            )}
+
+            {status.disparo?.configurado && (
+              <Item
+                situacao={status.disparo.modelos ? "ok" : "atencao"}
+                rotulo={status.disparo.modelos ? "Ativo" : "Só a automática"}
+                icon={<MessageSquareText className="size-5" />}
+                titulo="Escolha da mensagem"
+              >
+                <p>
+                  {status.disparo.modelos
+                    ? "No Disparo você escolhe qual modelo aprovado do WhatsApp a Carol manda e compara os resultados em Desempenho."
+                    : `A Carol usa a mensagem automática (lava-jato ou autônomo). Para escolher outros modelos, o Radar precisa do acesso ao WhatsApp (META_TOKEN). ${FALE_COM_ADMIN}`}
                 </p>
               </Item>
             )}

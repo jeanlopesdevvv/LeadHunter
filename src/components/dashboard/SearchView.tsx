@@ -708,7 +708,7 @@ function CartaoProgresso({
   const pct = p.alvo ? Math.min(100, Math.round((p.novos / p.alvo) * 100)) : 0;
   const final = !p.rodando && p.fim;
   const meta = p.fim === "alvo";
-  const descartados = p.jaNaPlanilha + p.semCelular + p.repetidos + p.fechados;
+  const descartados = p.jaNaPlanilha + p.semCelular + p.repetidos + p.fechados + (p.descartadosAntes ?? 0);
 
   const mensagem = (() => {
     if (!final) return null;

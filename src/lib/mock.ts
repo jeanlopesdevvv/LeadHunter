@@ -113,21 +113,21 @@ export function mockSheet(): MockSheet {
     const iso = (ms: number) => new Date(ms).toISOString();
     // Alguns disparos antigos para o painel da Carol ter o que mostrar.
     const antigos = [
-      { tel: "5531977001001", nome: "Lava Jato Estrela Guia", tipo: "Empresa", quando: h(20), resposta: "Sim, atendo", estado: "FALANDO_COM_CAROL" },
+      { tel: "5531977001001", nome: "Lava Jato Estrela Guia", tipo: "Empresa", quando: h(20), resposta: "Quero saber", estado: "FALANDO_COM_CAROL", template: "carol_prospeccao_12meses" },
       { tel: "5531977001002", nome: "Marcos Lavagem a Domicílio", tipo: "Autônomo", quando: h(19), resposta: "Não tenho interesse", estado: "LEAD_PERDIDO", optout: true },
       { tel: "5531977001003", nome: "Auto Spa Savassi", tipo: "Empresa", quando: h(5), resposta: "Oi Carol, quanto custa pra entrar?", estado: "FALANDO_COM_CAROL" },
       { tel: "5531977001006", nome: "Lava Rápido Central", tipo: "Empresa", quando: h(4.5), resposta: "Prefiro falar com um atendente", estado: "AGUARDANDO_SUPORTE" },
-      { tel: "5531977001004", nome: "Ducha Prime", tipo: "Empresa", quando: h(4), resposta: "", estado: "FALANDO_COM_CAROL" },
+      { tel: "5531977001004", nome: "Ducha Prime", tipo: "Empresa", quando: h(4), resposta: "", estado: "FALANDO_COM_CAROL", template: "carol_prospeccao_12meses" },
       { tel: "5531977001005", nome: "Lavador Rafael", tipo: "Autônomo", quando: h(3), resposta: "", estado: "FALANDO_COM_CAROL", falhou: true },
     ];
     g.__lhMockSheet = {
       title: "Leads Lava-jatos (simulação)",
       tabs: {
         leads: [
-          ["telefone", "nome", "tipo", "cidade", "status", "mensagem_enviada_em", "optout"],
+          ["telefone", "nome", "tipo", "cidade", "status", "mensagem_enviada_em", "optout", "template"],
           ["5531982999779", "Jean Lopes", "Autônomo", "Belo Horizonte", "pendente", "", ""],
           ["5531991112233", "Lava Jato Teste Opt-out", "Empresa", "Belo Horizonte", "enviado", "10/09/2026 10:00", "sim"],
-          ...antigos.map((a) => [a.tel, a.nome, a.tipo, "Belo Horizonte", "enviado", dataN8n(a.quando), a.optout ? dataN8n(a.quando + 41 * 60_000) : ""]),
+          ...antigos.map((a) => [a.tel, a.nome, a.tipo, "Belo Horizonte", "enviado", dataN8n(a.quando), a.optout ? dataN8n(a.quando + 41 * 60_000) : "", a.template ?? ""]),
         ],
         historico_carol: [
           ["telefone", "timestamp", "remetente", "mensagem", "remoteJid"],

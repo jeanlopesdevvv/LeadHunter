@@ -12,7 +12,7 @@ import type { SendResultItem } from "./types";
 export type SheetField =
   | "telefone" | "nome" | "tipo" | "cidade" | "status" | "mensagem_enviada_em" | "optout"
   | "endereco" | "bairro" | "uf" | "site" | "maps_url" | "nota" | "avaliacoes" | "categoria"
-  | "place_id" | "origem" | "capturado_em" | "termo";
+  | "place_id" | "origem" | "capturado_em" | "termo" | "template";
 
 export const REQUIRED_FIELDS: SheetField[] = ["telefone", "nome", "tipo", "cidade", "status"];
 
@@ -37,6 +37,8 @@ const ALIASES: Record<SheetField, string[]> = {
   origem: ["origem", "fonte", "source"],
   capturado_em: ["capturado_em", "criado_em", "data_captura", "created_at"],
   termo: ["termo", "termo_busca", "busca"],
+  // Modelo do WhatsApp usado no disparo (o Radar grava ao disparar; serve para comparar modelos).
+  template: ["template", "modelo", "template_whatsapp", "modelo_whatsapp"],
 };
 
 /** Campos que o app nunca escreve (são da Carol). */

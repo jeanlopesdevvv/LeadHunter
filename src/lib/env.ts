@@ -100,6 +100,11 @@ export function getConfig() {
     chatwootToken: str("CHATWOOT_TOKEN"),
     // Opcional: endereço da API do Chatwoot visto do servidor (padrão: o mesmo de CHATWOOT_URL).
     chatwootApiUrl: str("CHATWOOT_API_URL"),
+    // Modelos (templates) do WhatsApp para escolher no disparo: token do Meta com acesso à conta do
+    // WhatsApp da Carol (o mesmo META_WHATSAPP_TOKEN do n8n serve) e o ID dessa conta (WABA).
+    metaToken: str("META_TOKEN") || str("META_WHATSAPP_TOKEN") || str("META_TOKEN_CAROL"),
+    metaWabaId: str("META_WABA_ID", "940955865200631"),
+    metaApiVersion: str("META_API_VERSION", "v21.0"),
     // Status de quem está na fila mas não foi marcado no disparo (o n8n só dispara "pendente").
     statusAguardando: str("STATUS_AGUARDANDO", "aguardando"),
     // Telefones que nunca entram (ex.: o próprio Lavacar). Separados por vírgula.

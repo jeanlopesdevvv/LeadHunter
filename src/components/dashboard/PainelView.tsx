@@ -10,6 +10,7 @@ import {
   MessagesSquare,
   RefreshCw,
   Search,
+  Trophy,
   Send,
   ThumbsDown,
   XCircle,
@@ -20,9 +21,11 @@ import { BotaoAtender, useChatwoot } from "@/components/chatwoot";
 import { AnimatedNumber } from "@/components/motion";
 import { Button, Card, cx, inputClass } from "@/components/ui";
 import { api } from "@/lib/client/api";
-import type { ContatoPainel, Painel, Periodo, Situacao } from "@/lib/painel-regras";
+import type { ComparacaoModelo, ContatoPainel, Painel, Periodo, Situacao } from "@/lib/painel-regras";
 import { quandoCurto } from "@/lib/periodo";
 import { normalizePhone, whatsappLink } from "@/lib/phone";
+
+import { nomeDoModelo } from "./ModeloWhatsApp";
 
 const PERIODOS: { id: Periodo; rotulo: string }[] = [
   { id: "hoje", rotulo: "Hoje" },
@@ -36,7 +39,7 @@ const SITUACOES: { id: Situacao; rotulo: string; icone: typeof Send; barra: stri
   { id: "atendente", rotulo: "Pediu atendente", icone: Headset, barra: "#f59e0b", selo: "bg-amber-50 text-amber-700 ring-amber-200" },
   { id: "sim", rotulo: "Sim, atendo", icone: Flame, barra: "#10b981", selo: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   { id: "conversando", rotulo: "Em conversa", icone: MessageCircle, barra: "#03abc9", selo: "bg-brand-50 text-brand-700 ring-brand-200" },
-  { id: "cliente", rotulo: "Cliente Lavacar", icone: BadgeCheck, barra: "#8b7cf6", selo: "bg-[#8b7cf6]/12 text-[#7c6cf2] ring-[#8b7cf6]/30" },
+  { id: "cliente", rotulo: "Com a Sofia", icone: BadgeCheck, barra: "#8b7cf6", selo: "bg-[#8b7cf6]/12 text-[#7c6cf2] ring-[#8b7cf6]/30" },
   { id: "sem_resposta", rotulo: "Sem resposta", icone: Clock, barra: "#94a3b8", selo: "bg-slate-100 text-slate-600 ring-slate-200" },
   { id: "sem_interesse", rotulo: "Sem interesse", icone: ThumbsDown, barra: "#f43f5e", selo: "bg-red-50 text-red-700 ring-red-200" },
   { id: "nao_recebeu", rotulo: "Não recebeu", icone: XCircle, barra: "#64748b", selo: "bg-slate-100 text-slate-600 ring-slate-200" },
@@ -46,7 +49,7 @@ const DICA: Record<Situacao, string> = {
   atendente: "A Carol parou e está esperando alguém da equipe",
   sim: "Respondeu \"Sim, atendo\"",
   conversando: "Respondeu e está conversando com a Carol",
-  cliente: "Já é cliente do Lavacar",
+  cliente: "Já é cliente ou foi passado para a Sofia (suporte)",
   sem_resposta: "Recebeu e ainda não respondeu",
   sem_interesse: "Disse que não tem interesse (não recebe mais mensagens)",
   nao_recebeu: "A mensagem não chegou (sem WhatsApp ou bloqueio do Meta)",
@@ -110,6 +113,73 @@ function Indicador({
   );
 }
 
+/** Compara as mensagens (modelos) usadas no período: qual traz mais respostas e mais "sim". */
+function CompararModelos({ modelos, atual, onEscolher }: { modelos: ComparacaoModelo[]; atual: string; onEscolher: (nome: string) => void }) {
+  const taxa = (m: ComparacaoModelo) => pct(m.responderam, m.receberam);
+  // "Melhor" só com pelo menos 10 que receberam, para não premiar sorte.
+  const elegiveis = modelos.filter((m) => m.receberam >= 10);
+  const melhor = elegiveis.length >= 2 ? elegiveis.reduce((a, b) => (taxa(b) > taxa(a) ? b : a)) : null;
+  const poucos = modelos.some((m) => m.receberam < 30);
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-4 sm:px-6">
+        <div>
+          <p className="text-base font-bold text-ink">Comparar mensagens</p>
+          <p className="text-xs text-muted sm:text-sm">Qual mensagem da Carol traz mais respostas. Toque numa para ver só os contatos dela.</p>
+        </div>
+      </div>
+      <ul className="divide-y divide-line">
+        {modelos.map((m) => {
+          const marcado = atual === m.nome;
+          const resp = taxa(m);
+          return (
+            <li key={m.nome}>
+              <button
+                type="button"
+                onClick={() => onEscolher(marcado ? "todos" : m.nome)}
+                aria-pressed={marcado}
+                className={cx("grid w-full grid-cols-1 gap-3 px-5 py-3.5 text-left transition sm:grid-cols-[minmax(0,1fr)_repeat(4,92px)] sm:items-center sm:px-6", marcado ? "bg-brand-50/70" : "hover:bg-surface/70")}
+              >
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                    {nomeDoModelo(m.nome)}
+                    {melhor?.nome === m.nome && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200 ring-inset">
+                        <Trophy className="size-3" /> Mais respostas
+                      </span>
+                    )}
+                  </span>
+                  <span className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-surface">
+                    <span className="h-full bg-brand transition-[width] duration-700" style={{ width: `${resp}%` }} />
+                  </span>
+                </span>
+                <span className="grid grid-cols-4 gap-2 sm:contents">
+                  {[
+                    ["Disparadas", n(m.disparadas)],
+                    ["Responderam", `${resp}%`],
+                    ["Sim", `${pct(m.sim, m.receberam)}%`],
+                    ["Sem interesse", `${pct(m.semInteresse, m.receberam)}%`],
+                  ].map(([rotulo, valor]) => (
+                    <span key={rotulo} className="sm:text-right">
+                      <span className="block text-base font-extrabold text-strong tabular-nums">{valor}</span>
+                      <span className="block text-[11px] text-muted">{rotulo}</span>
+                    </span>
+                  ))}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {poucos && (
+        <p className="border-t border-line bg-surface/60 px-5 py-2.5 text-xs text-muted sm:px-6">
+          Dica: compare depois de pelo menos 30 disparos de cada mensagem. Com poucos, a diferença pode ser sorte.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export function PainelView() {
   const chatwoot = useChatwoot();
   const [periodo, setPeriodo] = useState<Periodo>("7d");
@@ -118,14 +188,15 @@ export function PainelView() {
   const [carregando, setCarregando] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [busca, setBusca] = useState("");
+  const [modelo, setModelo] = useState("todos");
   const pedido = useRef(0);
   const listaRef = useRef<HTMLDivElement>(null);
 
-  const carregar = useCallback(async (p: Periodo) => {
+  const carregar = useCallback(async (p: Periodo, m: string) => {
     const meu = ++pedido.current;
     setCarregando(true);
     try {
-      const r = await api<Painel>(`/api/painel?periodo=${p}`);
+      const r = await api<Painel>(`/api/painel?periodo=${p}&modelo=${encodeURIComponent(m)}`);
       if (meu !== pedido.current) return;
       setPainel(r);
       setErro("");
@@ -137,15 +208,15 @@ export function PainelView() {
   }, []);
 
   useEffect(() => {
-    const t = window.setTimeout(() => void carregar(periodo), 0);
+    const t = window.setTimeout(() => void carregar(periodo, modelo), 0);
     const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") void carregar(periodo);
+      if (document.visibilityState === "visible") void carregar(periodo, modelo);
     }, 60_000);
     return () => {
       window.clearTimeout(t);
       window.clearInterval(id);
     };
-  }, [periodo, carregar]);
+  }, [periodo, modelo, carregar]);
 
   const r = painel?.resumo;
   const contatos = painel?.contatos ?? [];
@@ -155,6 +226,8 @@ export function PainelView() {
   );
   const paraAtender = contatos.filter((c) => c.situacao === "atendente" || c.situacao === "sim" || c.situacao === "conversando").slice(0, 8);
   const semDados = painel !== null && !contatos.length;
+  const modelosDoPeriodo = painel?.modelos ?? [];
+  const varios = modelosDoPeriodo.length > 1 || modelo !== "todos";
 
   function filtrar(f: Filtro) {
     setFiltro(f);
@@ -172,6 +245,22 @@ export function PainelView() {
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">Quem respondeu, quem quer conhecer o Lavacar e quem não tem interesse.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {varios && (
+            <select
+              value={modelo}
+              onChange={(e) => setModelo(e.target.value)}
+              aria-label="Mensagem"
+              className={cx(inputClass, "h-[42px] w-auto max-w-[240px] py-0 font-semibold")}
+            >
+              <option value="todos">Todas as mensagens</option>
+              {modelosDoPeriodo.map((m) => (
+                <option key={m.nome} value={m.nome}>
+                  {nomeDoModelo(m.nome)} ({n(m.disparadas)})
+                </option>
+              ))}
+              {modelo !== "todos" && !modelosDoPeriodo.some((m) => m.nome === modelo) && <option value={modelo}>{nomeDoModelo(modelo)} (0)</option>}
+            </select>
+          )}
           <div className="flex rounded-xl border border-line bg-card p-1" role="radiogroup" aria-label="Período">
             {PERIODOS.map((p) => (
               <button
@@ -188,7 +277,7 @@ export function PainelView() {
               </button>
             ))}
           </div>
-          <Button variant="outline" onClick={() => void carregar(periodo)} loading={carregando} icon={<RefreshCw className="size-4" />}>
+          <Button variant="outline" onClick={() => void carregar(periodo, modelo)} loading={carregando} icon={<RefreshCw className="size-4" />}>
             Atualizar
           </Button>
         </div>
@@ -243,6 +332,19 @@ export function PainelView() {
           dica="não recebem mais mensagens"
         />
       </div>
+
+      {modelo !== "todos" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-brand-100 bg-brand-50/70 px-4 py-2.5 text-sm text-brand-800">
+          <span>
+            Mostrando só quem recebeu a mensagem <b>{nomeDoModelo(modelo)}</b>.
+          </span>
+          <button type="button" onClick={() => setModelo("todos")} className="font-semibold underline underline-offset-2">
+            Ver todas
+          </button>
+        </div>
+      )}
+
+      {modelosDoPeriodo.length > 1 && <CompararModelos modelos={modelosDoPeriodo} atual={modelo} onEscolher={setModelo} />}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* Onde está cada contato */}
@@ -423,7 +525,12 @@ export function PainelView() {
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Selo s={c.situacao} />
-                      {c.enviadoEm && <span className="text-[11px] text-muted">disparo {quandoCurto(c.enviadoEm)}</span>}
+                      {c.enviadoEm && (
+                        <span className="text-[11px] text-muted">
+                          disparo {quandoCurto(c.enviadoEm)}
+                          {varios && ` · ${nomeDoModelo(c.template)}`}
+                        </span>
+                      )}
                     </div>
                     {c.ultima && <UltimaMensagem c={c} className="mt-2 rounded-lg bg-surface px-3 py-2" />}
                   </li>
@@ -453,7 +560,10 @@ export function PainelView() {
                             {c.tipo && ` · ${c.tipo}`}
                           </p>
                         </td>
-                        <td className="px-4 py-3 text-xs whitespace-nowrap text-muted">{c.enviadoEm ? quandoCurto(c.enviadoEm) : "—"}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap text-muted">
+                          {c.enviadoEm ? quandoCurto(c.enviadoEm) : "—"}
+                          {varios && <span className="block text-[11px] text-muted/80">{nomeDoModelo(c.template)}</span>}
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <Selo s={c.situacao} />
                         </td>

@@ -230,6 +230,22 @@ body {
 }
 
 /* Cartão de destaque azul-noite com brilho ciano (resumo da busca). Igual nos dois temas. */
+/* Prévia de mensagem no WhatsApp (escolha do modelo do disparo). */
+.zap-fundo {
+  background: #efeae2;
+}
+.zap-balao {
+  background: #ffffff;
+  color: #111b21;
+}
+[data-theme="dark"] .zap-fundo {
+  background: #0b141a;
+}
+[data-theme="dark"] .zap-balao {
+  background: #202c33;
+  color: #e9edef;
+}
+
 .cartao-noite {
   background:
     radial-gradient(420px 260px at 105% -10%, rgb(3 171 201 / 0.42), transparent 62%),

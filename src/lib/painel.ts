@@ -7,7 +7,7 @@ import { lerAbas } from "./sheets";
 export type { Painel, Periodo };
 
 /** Lê a aba leads e as abas da Carol e monta o painel de resultados. */
-export async function painelDaCarol(periodo: Periodo): Promise<Painel> {
+export async function painelDaCarol(periodo: Periodo, modelo?: string): Promise<Painel> {
   const cfg = getConfig();
   const nomes = [cfg.sheetTab, cfg.painelAbaHistorico, cfg.painelAbaStatus, cfg.painelAbaSessoes];
   const { dados } = await lerAbas(nomes);
@@ -19,5 +19,7 @@ export async function painelDaCarol(periodo: Periodo): Promise<Painel> {
       sessoes: dados[cfg.painelAbaSessoes],
     },
     periodo,
+    Date.now(),
+    modelo,
   );
 }

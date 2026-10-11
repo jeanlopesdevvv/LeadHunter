@@ -29,6 +29,8 @@ export async function GET(request: Request) {
       destino: cfg.mock ? "simulação" : destinoN8n(cfg.n8nDisparoUrl),
       limiteDiario: cfg.limiteDiarioCarol,
       trava: estadoDaTrava(),
+      // O Radar consegue ler os modelos aprovados do WhatsApp (para escolher a mensagem do disparo).
+      modelos: cfg.mock || Boolean(cfg.metaToken && cfg.metaWabaId),
     },
     limites: { maxConsultasPorBusca: cfg.maxRequestsPerSearch },
     chatwoot: (() => {

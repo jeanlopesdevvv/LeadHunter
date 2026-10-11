@@ -15,11 +15,12 @@ export async function GET(request: Request) {
 
 /** Manda o n8n disparar a primeira mensagem para os contatos escolhidos (ou toda a fila). */
 export async function POST(request: Request) {
-  const body = await readJson<{ telefones?: unknown; todos?: unknown }>(request);
+  const body = await readJson<{ telefones?: unknown; todos?: unknown; modelo?: unknown }>(request);
   const telefones = Array.isArray(body?.telefones) ? body.telefones.filter(isString).slice(0, 2000) : null;
   if (!telefones && body?.todos !== true) return jsonError("Diga para quem disparar: marque os contatos da fila.");
   try {
-    return Response.json(await iniciarDisparo(telefones ?? "todos"));
+    const modelo = isString(body?.modelo) ? body.modelo.slice(0, 512) : undefined;
+    return Response.json(await iniciarDisparo(telefones ?? "todos", modelo));
   } catch (e) {
     return handleError(e);
   }

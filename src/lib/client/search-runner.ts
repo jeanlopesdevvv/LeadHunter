@@ -24,6 +24,8 @@ export interface Progresso {
   fechados: number;
   jaNaPlanilha: number;
   semCelular: number;
+  /** Descartados pelo usuário numa busca anterior (não contam como novos). */
+  descartadosAntes?: number;
   etapa: string;
   avisos: string[];
   rodando: boolean;
@@ -73,6 +75,7 @@ export interface SnapshotBusca {
 
 /** Conta como "novo" para o alvo: celular (ou fixo, se permitido) e fora da planilha. */
 export function contaComoNovo(lead: Lead, incluirFixos = false): boolean {
+  if (lead.descartado) return false;
   const fone = lead.telefoneTipo === "celular" || (incluirFixos && lead.telefoneTipo === "fixo");
   return fone && (lead.planilha === "novo" || lead.planilha === "desconhecido");
 }
@@ -95,7 +98,11 @@ export class SessaoDeBusca {
   readonly progresso: Progresso;
   ultimoUso: Uso | null;
 
-  constructor(plano: PlanResult, opts: { ignorarFechados: boolean; incluirFixos?: boolean }) {
+  /** Contatos descartados antes pelo usuário (não contam como novos). */
+  private descartados: Set<string>;
+
+  constructor(plano: PlanResult, opts: { ignorarFechados: boolean; incluirFixos?: boolean; descartados?: Set<string> }) {
+    this.descartados = opts.descartados ?? new Set();
     this.fila = plano.tarefas.map((t) => ({ ...t, paginas: 0, pageToken: null, recebidos: 0 }));
     this.areas = plano.areas;
     this.ignorarFechados = opts.ignorarFechados;
@@ -144,10 +151,10 @@ export class SessaoDeBusca {
   }
 
   /** Recria a busca a partir do que foi salvo no navegador (depois de recarregar a página). */
-  static restaurar(s: SnapshotBusca, leads: Lead[]): SessaoDeBusca {
+  static restaurar(s: SnapshotBusca, leads: Lead[], descartados?: Set<string>): SessaoDeBusca {
     const sessao = new SessaoDeBusca(
       { tarefas: [], areas: s.areas, cidades: [], uso: s.ultimoUso as Uso },
-      { ignorarFechados: s.ignorarFechados, incluirFixos: s.incluirFixos },
+      { ignorarFechados: s.ignorarFechados, incluirFixos: s.incluirFixos, descartados },
     );
     sessao.fila = s.fila.map((i) => ({ ...i }));
     s.semArea.forEach((c) => sessao.semArea.add(c));
@@ -336,7 +343,10 @@ export class SessaoDeBusca {
       this.porId.set(lead.id, lead);
       if (lead.telefoneKey) this.porTelefone.add(lead.telefoneKey);
       p.unicos++;
-      if (lead.planilha === "existente" || lead.planilha === "optout") p.jaNaPlanilha++;
+      if (this.descartados.has(lead.telefoneKey || `id:${lead.id}`) && lead.planilha !== "existente" && lead.planilha !== "optout") {
+        lead.descartado = true;
+        p.descartadosAntes = (p.descartadosAntes ?? 0) + 1;
+      } else if (lead.planilha === "existente" || lead.planilha === "optout") p.jaNaPlanilha++;
       else if (!(lead.telefoneTipo === "celular" || (this.incluirFixos && lead.telefoneTipo === "fixo"))) p.semCelular++;
       else p.novos++;
     }
