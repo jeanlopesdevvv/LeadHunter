@@ -271,7 +271,10 @@ export function montarPainel(
     const falhouEm = falhas.has(l.key) ? falhas.get(l.key) : undefined;
     const falhaDesteDisparo = falhouEm !== undefined && (falhouEm === null || l.quando === null || falhouEm >= l.quando - 60_000);
     let situacao: Situacao;
-    if (l.situacao === "sem_whatsapp" || estado === "SEM_WHATSAPP" || (falhaDesteDisparo && !doContato.length)) situacao = "nao_recebeu";
+    // Quem respondeu tem WhatsApp: a marca "sem WhatsApp" (aba leads ou sessão) e as falhas do
+    // Meta só valem enquanto o contato não escreveu nada.
+    const semWhatsApp = l.situacao === "sem_whatsapp" || estado === "SEM_WHATSAPP" || falhaDesteDisparo;
+    if (semWhatsApp && !doContato.length) situacao = "nao_recebeu";
     else if (estado === "CLIENTE_ATIVO") situacao = "cliente";
     else if (resposta === "optout" || resposta === "nao" || estado === "LEAD_PERDIDO") situacao = "sem_interesse";
     else if (estado === "AGUARDANDO_SUPORTE") situacao = "atendente";

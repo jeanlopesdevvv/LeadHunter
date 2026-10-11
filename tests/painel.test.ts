@@ -81,6 +81,16 @@ describe("painel da Carol", () => {
     expect(p.contatos.find((c) => c.nome === "Lava A")?.situacao).toBe("sim");
   });
 
+  it("quem respondeu recebeu, mesmo marcado como sem WhatsApp na aba leads ou na sessão", () => {
+    const hist = [...HIST, ["5531900000004", "2026-09-30T00:30:00Z", "lead", "Oi, como funciona?", ""]];
+    const sessoes = [...SESSOES, ["5531900000004@s.whatsapp.net", "31900000004", "Lava D", "SEM_WHATSAPP", ""]];
+    const p = montarPainel({ leads: LEADS, historico: hist, sessoes }, "hoje", AGORA);
+    expect(p.contatos.find((c) => c.nome === "Lava D")?.situacao).toBe("conversando");
+    // sem resposta, continua "não recebeu"
+    const q = montarPainel({ leads: LEADS, historico: HIST, sessoes }, "hoje", AGORA);
+    expect(q.contatos.find((c) => c.nome === "Lava D")?.situacao).toBe("nao_recebeu");
+  });
+
   it("período 'tudo' inclui os antigos e funciona sem as abas opcionais", () => {
     const p = montarPainel({ leads: LEADS, historico: HIST }, "tudo", AGORA);
     expect(p.resumo.disparadas).toBe(6);
