@@ -26,6 +26,8 @@ export interface StatusResponse {
   limites: { maxConsultasPorBusca: number };
   planilha: {
     configurada: boolean;
+    /** Onde fica a lista de leads: banco do Lavacar (padrão) ou Google Sheets. */
+    fonte?: "banco" | "planilha";
     contaServico: string;
     planilhaId: string;
     planilhaUrl: string;
@@ -174,16 +176,26 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
               </Item>
             )}
 
-            <Item situacao={p?.ok ? "ok" : p?.configurada ? "atencao" : "erro"} icon={<Table2 className="size-5" />} titulo="Planilha de leads">
+            <Item
+              situacao={p?.ok ? "ok" : p?.configurada ? "atencao" : "erro"}
+              icon={<Table2 className="size-5" />}
+              titulo={p?.fonte === "banco" ? "Lista de leads" : "Planilha de leads"}
+            >
               {p?.ok ? (
                 <p>
-                  Conectada a <b className="text-ink">{p.titulo}</b>, com{" "}
+                  {p.fonte === "banco" ? "Guardada no " : "Conectada a "}
+                  <b className="text-ink">{p.titulo}</b>, com{" "}
                   <b className="text-ink tabular-nums">{(p.telefonesUnicos ?? 0).toLocaleString("pt-BR")}</b>{" "}
                   {(p.telefonesUnicos ?? 0) === 1 ? "contato" : "contatos"}. Quem já está nela nunca recebe mensagem repetida.
                 </p>
               ) : (
                 <p>
-                  {p?.configurada ? "Não foi possível acessar a planilha." : "A planilha ainda não está configurada."} {FALE_COM_ADMIN}
+                  {p?.fonte === "banco"
+                    ? "Não foi possível acessar a lista de leads no banco."
+                    : p?.configurada
+                      ? "Não foi possível acessar a planilha."
+                      : "A planilha ainda não está configurada."}{" "}
+                  {FALE_COM_ADMIN}
                 </p>
               )}
               {p?.planilhaUrl && (

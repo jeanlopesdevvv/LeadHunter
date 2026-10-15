@@ -1,6 +1,8 @@
 import "server-only";
 
+import * as banco from "./banco";
 import { getConfig } from "./env";
+import { SheetsError } from "./erros";
 import { GoogleAuthError, googleAccessToken } from "./google-auth";
 import { phoneKey } from "./phone";
 import { mockSheet } from "./mock";
@@ -20,19 +22,19 @@ import {
 import type { SendResult } from "./types";
 
 /**
- * Google Sheets via conta de serviço.
+ * Lista de leads: no banco do Lavacar (padrão desde 15/10/2026, quando a senha do banco está no
+ * servidor) ou no Google Sheets via conta de serviço (FONTE_LEADS=planilha, para voltar atrás).
  * A planilha precisa estar compartilhada com o e-mail da conta de serviço (Editor).
  */
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
 
-export class SheetsError extends Error {
-  constructor(
-    message: string,
-    public status = 502,
-  ) {
-    super(message);
-  }
+export { SheetsError };
+
+/** A lista de leads vem do banco? (simulação continua na planilha falsa) */
+export function usaBanco(): boolean {
+  const cfg = getConfig();
+  return !cfg.mock && cfg.fonteLeads === "banco";
 }
 
 async function accessToken(): Promise<string> {
@@ -110,6 +112,7 @@ interface TabData {
 
 async function readMainTab(): Promise<TabData> {
   const cfg = getConfig();
+  if (usaBanco()) return banco.abaPrincipal();
   if (cfg.mock) {
     const s = mockSheet();
     const values = s.tabs[cfg.sheetTab] ?? s.tabs.leads;
@@ -134,6 +137,7 @@ async function readMainTab(): Promise<TabData> {
 /** Lê os telefones das abas extras que existem na planilha (as que não existem são ignoradas). */
 async function readExtraTabKeys(existingTabs: string[]): Promise<{ keys: Set<string>; lidas: string[]; ausentes: string[] }> {
   const cfg = getConfig();
+  if (usaBanco()) return banco.telefonesDasAbasExtras(cfg.dedupExtraTabs);
   const keys = new Set<string>();
   const byLower = new Map(existingTabs.map((t) => [t.trim().toLowerCase(), t]));
   const lidas = [
@@ -202,6 +206,7 @@ function esquecerExistentes() {
 }
 
 export function sheetUrl(): string {
+  if (usaBanco()) return "";
   return `https://docs.google.com/spreadsheets/d/${getConfig().sheetId}/edit`;
 }
 
@@ -215,6 +220,7 @@ function exclusivo<T>(fn: () => Promise<T>): Promise<T> {
 
 async function readValues(): Promise<unknown[][]> {
   const cfg = getConfig();
+  if (usaBanco()) return banco.valoresLeads();
   const data = await sheetsFetch<{ values?: unknown[][] }>(
     `/values/${encodeURIComponent(quoteTab(cfg.sheetTab))}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`,
   );
@@ -264,6 +270,12 @@ export function atualizarStatusLinhas(
 ): Promise<void> {
   return exclusivo(async () => {
     if (!mudancasPedidas.length) return;
+    if (usaBanco()) {
+      await banco.atualizarStatus(mudancasPedidas);
+      esquecerAbaLeads();
+      esquecerExistentes();
+      return;
+    }
     const cfg = getConfig();
     const values: unknown[][] = cfg.mock ? (mockSheet().tabs[cfg.sheetTab] ?? mockSheet().tabs.leads) : await readValues();
     const map = buildHeaderMap(values[0] ?? []);
@@ -319,6 +331,7 @@ export function lerAbas(nomes: string[], maxAgeMs = 20_000): Promise<{ abas: str
   if (!cacheAbas || cacheAbas.chave !== chave || agora - cacheAbas.em > maxAgeMs) {
     const cfg = getConfig();
     const valor = (async () => {
+      if (usaBanco()) return banco.lerAbas(nomes);
       if (cfg.mock) {
         const sheet = mockSheet();
         const dados: Record<string, unknown[][]> = {};
@@ -353,6 +366,12 @@ export function lerAbas(nomes: string[], maxAgeMs = 20_000): Promise<{ abas: str
 export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
   return exclusivo(async () => {
     const cfg = getConfig();
+    if (usaBanco()) {
+      const r = await banco.appendLeads(leads, cfg.defaultStatus, cfg.dedupExtraTabs);
+      esquecerExistentes();
+      esquecerAbaLeads();
+      return r;
+    }
     const existing = await loadExisting(); // relido na hora de gravar
     const { toAppend, ignorados } = planSend(leads, existing);
     const now = new Date();
@@ -405,7 +424,9 @@ export function appendLeads(leads: LeadForSheet[]): Promise<SendResult> {
 
 export async function sheetStatus() {
   const cfg = getConfig();
+  if (usaBanco()) return { ...(await banco.status(cfg.dedupExtraTabs)), statusPadrao: cfg.defaultStatus };
   const base = {
+    fonte: "planilha" as const,
     configurada: cfg.mock || Boolean(cfg.serviceAccount),
     contaServico: cfg.mock ? "simulacao@leadhunter.local" : cfg.serviceAccount?.client_email ?? "",
     planilhaId: cfg.sheetId,

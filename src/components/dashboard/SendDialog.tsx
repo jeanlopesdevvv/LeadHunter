@@ -306,14 +306,16 @@ export function SendDialog({
             <Button variant="ghost" className="max-sm:hidden" onClick={fechar}>
               Fechar
             </Button>
-            <a
-              href={resultado.planilhaUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-card px-4 text-sm font-semibold text-ink transition hover:bg-surface"
-            >
-              <ExternalLink className="size-4" /> Abrir planilha
-            </a>
+            {resultado.planilhaUrl && (
+              <a
+                href={resultado.planilhaUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-card px-4 text-sm font-semibold text-ink transition hover:bg-surface"
+              >
+                <ExternalLink className="size-4" /> Abrir planilha
+              </a>
+            )}
             {resultado.adicionados.length > 0 && (
               <Button
                 onClick={() => {

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { lerSenhaBanco } from "./banco-regras";
+
 /**
  * Configuração vinda das variáveis de ambiente (.env do servidor ou painel da hospedagem).
  * Nada de segredo vai para o navegador.
@@ -59,10 +61,36 @@ export function isMockMode(): boolean {
   return str("MOCK_MODE") === "1" && process.env.VERCEL_ENV !== "production" && str("LEADHUNTER_PRODUCAO") !== "1";
 }
 
+/**
+ * Banco de dados do atendimento (Supabase do Lavacar, schema "atendimento"), usuário radar_atendimento.
+ * Basta a senha no ambiente (ex.: variável "radar-atendimento"); o resto tem padrão.
+ * Também aceita o endereço completo (postgres://...) na mesma variável ou em ATENDIMENTO_DATABASE_URL.
+ */
+function bancoConfig() {
+  const senhaOuUrl = lerSenhaBanco(process.env);
+  const url = str("ATENDIMENTO_DATABASE_URL") || (/^postgres(ql)?:\/\//i.test(senhaOuUrl) ? senhaOuUrl : "");
+  const senha = url ? "" : senhaOuUrl;
+  if (!url && !senha) return null;
+  return {
+    url,
+    host: str("ATENDIMENTO_DB_HOST", "aws-0-sa-east-1.pooler.supabase.com"),
+    porta: int("ATENDIMENTO_DB_PORT", 6543),
+    nome: str("ATENDIMENTO_DB_NAME", "postgres"),
+    usuario: str("ATENDIMENTO_DB_USER", "radar_atendimento.htohsnljdgkcbykaxiby"),
+    senha,
+  };
+}
+
 export function getConfig() {
+  const banco = bancoConfig();
+  // Onde fica a lista de leads: no banco quando ele está configurado; FONTE_LEADS=planilha volta para o Google Sheets.
+  const fonte = str("FONTE_LEADS").toLowerCase();
+  const fonteLeads: "banco" | "planilha" = fonte === "planilha" || fonte === "sheets" ? "planilha" : banco ? "banco" : "planilha";
   const serviceAccountRaw = str("GOOGLE_SERVICE_ACCOUNT_JSON") || str("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   return {
     mock: isMockMode(),
+    banco,
+    fonteLeads,
     appPassword: str("APP_PASSWORD"),
     authSecret: str("AUTH_SECRET"),
     placesApiKey: str("GOOGLE_MAPS_API_KEY"),

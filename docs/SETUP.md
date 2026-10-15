@@ -112,6 +112,21 @@ Não mexa nos outros registros (o `lavacar.app` principal aponta para o Lovable)
    `EASYPANEL_DEPLOY_WEBHOOK` (*Settings → Secrets and variables → Actions → New repository secret*).
    A cada push na `main`, o GitHub testa, publica a imagem e avisa o EasyPanel.
 
+### 4.1 Lista de leads no banco do Lavacar (desde 15/10/2026)
+
+A lista de leads (antes a aba `leads` da planilha) mora no Supabase do Lavacar, tabela
+`atendimento.leads`. O Radar entra com o usuário `radar_atendimento`, que só lê o atendimento e grava
+em leads (não apaga nada). Os Fluxos 1, 2 e 6 do n8n leem e gravam na mesma tabela.
+
+- **Ambiente:** basta a senha do `radar_atendimento` numa variável. O Radar aceita estes nomes:
+  `RADAR_ATENDIMENTO_SENHA`, `radar-atendimento`, `RADAR_ATENDIMENTO`. Endereço, porta (6543, pooler em
+  modo transação) e usuário já têm padrão (`ATENDIMENTO_DB_HOST`, `ATENDIMENTO_DB_PORT`,
+  `ATENDIMENTO_DB_USER` mudam se precisar). Também aceita o endereço completo em `ATENDIMENTO_DATABASE_URL`.
+- **Conferir:** Configuração → "Lista de leads: Guardada no Banco de dados do Lavacar".
+- **Voltar para a planilha:** `FONTE_LEADS=planilha` → Implantar. Atenção: os leads novos desde a troca
+  estão só no banco; antes de voltar, copie a tabela para a aba (peça ao assistente).
+- As abas `historico_*`, `sessoes_*` e `status_meta_carol` do Desempenho também passam a ser lidas do banco.
+
 ## 5. Botão de disparo (n8n)
 
 A tela **Disparo** manda o n8n rodar o *Fluxo 1 - Disparo de Leads* e mostra o progresso lendo a aba `leads`
