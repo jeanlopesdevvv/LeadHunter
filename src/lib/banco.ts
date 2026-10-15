@@ -2,7 +2,7 @@ import "server-only";
 
 import postgres from "postgres";
 
-import { CABECALHOS_ABAS, CABECALHO_LEADS, nomeDeAba, registrosComoAba, telefoneDoBanco } from "./banco-regras";
+import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, nomeDeAba, registrosComoAba, telefoneDoBanco, type EdicaoLead } from "./banco-regras";
 import { getConfig } from "./env";
 import { SheetsError } from "./erros";
 import { phoneKey } from "./phone";
@@ -275,4 +275,69 @@ export async function status(extras: string[]) {
   } catch (e) {
     return { ...base, ok: false, erro: (e as Error).message };
   }
+}
+
+// ---------------------------------------------------------------- tela "Leads"
+
+export interface LeadDaLista {
+  telefone: string;
+  nome: string;
+  tipo: string;
+  cidade: string;
+  status: string;
+  mensagem_enviada_em: string;
+  optout: string;
+  template: string;
+  ordem: number;
+  atualizado_em: string;
+}
+
+function comoLead(r: Registro): LeadDaLista {
+  const t = (v: unknown) => (v === null || v === undefined ? "" : v instanceof Date ? v.toISOString() : String(v));
+  return {
+    telefone: t(r.telefone),
+    nome: t(r.nome),
+    tipo: t(r.tipo),
+    cidade: t(r.cidade),
+    status: t(r.status),
+    mensagem_enviada_em: t(r.mensagem_enviada_em),
+    optout: t(r.optout),
+    template: t(r.template),
+    ordem: Number(r.ordem ?? 0),
+    atualizado_em: t(r.atualizado_em),
+  };
+}
+
+/** Todos os leads, do mais novo para o mais antigo. */
+export async function listarLeads(): Promise<LeadDaLista[]> {
+  const regs = await noBanco(
+    (sql) => sql<Registro[]>`
+      select telefone, nome, tipo, cidade, status, mensagem_enviada_em, optout, template, ordem, atualizado_em
+        from atendimento.leads
+       order by ordem desc`,
+  );
+  return regs.map(comoLead);
+}
+
+/** Edita um lead (o que não veio fica como está). Opt-out ligado guarda a data, como o n8n faz. */
+export async function editarLead(e: EdicaoLead): Promise<LeadDaLista> {
+  const optout = e.optout === undefined ? null : e.optout;
+  const r = await noBanco(
+    (sql) => sql<Registro[]>`
+      update atendimento.leads set
+        nome = coalesce(${e.nome ?? null}::text, nome),
+        tipo = coalesce(${e.tipo ?? null}::text, tipo),
+        cidade = coalesce(${e.cidade ?? null}::text, cidade),
+        status = coalesce(${e.status ?? null}::text, status),
+        optout = case
+          when ${optout}::boolean is null then optout
+          when ${optout}::boolean then coalesce(nullif(btrim(coalesce(optout, '')), ''), ${agoraBrasilia()}::text)
+          else '' end,
+        atualizado_em = now()
+      where telefone = ${e.telefone}
+      returning telefone, nome, tipo, cidade, status, mensagem_enviada_em, optout, template, ordem, atualizado_em`,
+    false,
+  );
+  if (!r.length) throw new SheetsError("Esse lead não está mais na lista.", 404);
+  return comoLead(r[0]);
 }

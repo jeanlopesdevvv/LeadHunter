@@ -256,6 +256,13 @@ export function esquecerAbaLeads() {
   cacheValores = null;
 }
 
+/** Depois de editar a lista por fora do disparo (tela Leads): a próxima leitura vem fresca. */
+export function esquecerLeituras() {
+  cacheValores = null;
+  cacheExistentes = null;
+  cacheAbas = null;
+}
+
 /**
  * Troca o status de algumas linhas da aba leads (usado pelo disparo: "pendente" para quem vai
  * receber agora, "aguardando" para quem fica para depois). Antes de gravar, confere se cada

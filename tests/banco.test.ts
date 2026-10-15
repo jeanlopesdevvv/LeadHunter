@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { CABECALHO_LEADS, comoTexto, lerSenhaBanco, registrosComoAba, telefoneDoBanco } from "@/lib/banco-regras";
+import { CABECALHO_LEADS, comoTexto, lerSenhaBanco, registrosComoAba, situacaoDoLead, telefoneDoBanco, validarEdicao } from "@/lib/banco-regras";
 
 describe("regras da lista de leads no banco", () => {
   it("converte registros em aba com o mesmo cabeçalho da planilha", () => {
@@ -27,6 +27,30 @@ describe("regras da lista de leads no banco", () => {
     expect(lerSenhaBanco({ "radar-atendimento": " s3nha " })).toBe("s3nha");
     expect(lerSenhaBanco({ RADAR_ATENDIMENTO_SENHA: "a", "radar-atendimento": "b" })).toBe("a");
     expect(lerSenhaBanco({})).toBe("");
+  });
+});
+
+describe("tela Leads: regras", () => {
+  it("situação: fora da lista e não quer contato vêm antes do status", () => {
+    expect(situacaoDoLead({ status: "removido", optout: "10/10/2026" })).toBe("fora");
+    expect(situacaoDoLead({ status: "enviado", optout: "10/10/2026, 18:00:00" })).toBe("nao_quer");
+    expect(situacaoDoLead({ status: "aguardando", optout: "" })).toBe("fila");
+    expect(situacaoDoLead({ status: "pendente" })).toBe("fila");
+    expect(situacaoDoLead({ status: "sem_whatsapp" })).toBe("sem_whatsapp");
+    expect(situacaoDoLead({ status: "duplicado" })).toBe("outro");
+  });
+
+  it("edição: só campos conhecidos, com valores válidos", () => {
+    expect(validarEdicao({ telefone: "5531982999779", nome: "  Lava  Jato  ", status: "removido", optout: true })).toEqual({
+      ok: true,
+      edicao: { telefone: "5531982999779", nome: "Lava Jato", status: "removido", optout: true },
+    });
+    expect(validarEdicao({ telefone: "123", nome: "x" })).toMatchObject({ ok: false });
+    expect(validarEdicao({ telefone: "5531982999779" })).toMatchObject({ ok: false, erro: "Nada para alterar." });
+    expect(validarEdicao({ telefone: "5531982999779", status: "toString" })).toMatchObject({ ok: false });
+    expect(validarEdicao({ telefone: "5531982999779", tipo: "Loja" })).toMatchObject({ ok: false });
+    expect(validarEdicao({ telefone: "5531982999779", nome: "" })).toMatchObject({ ok: false });
+    expect(validarEdicao({ telefone: "5531982999779", optout: "sim" })).toMatchObject({ ok: false });
   });
 });
 
@@ -152,6 +176,22 @@ describe.skipIf(!URL_TESTE || !URL_ADMIN)("lista de leads no banco (integração
     const { sheetStatus } = await import("@/lib/sheets");
     const s = await sheetStatus();
     expect(s).toMatchObject({ ok: true, fonte: "banco", linhas: 3, telefonesUnicos: 3, optout: 1, planilhaUrl: "" });
+  });
+
+  it("tela Leads: lista do mais novo para o mais antigo e edita", async () => {
+    const banco = await import("@/lib/banco");
+    const lista = await banco.listarLeads();
+    expect(lista.map((l) => l.nome)).toEqual(["Sem Interesse", "Lava Jato Top Cleaner", "Jean Lopes"]);
+    const e1 = await banco.editarLead({ telefone: "5531982999779", nome: "Jean L.", tipo: "Empresa", optout: true });
+    expect(e1).toMatchObject({ nome: "Jean L.", tipo: "Empresa", cidade: "Belo Horizonte", status: "pendente" });
+    expect(e1.optout).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    const e2 = await banco.editarLead({ telefone: "5531982999779", status: "removido", optout: false });
+    expect(e2).toMatchObject({ status: "removido", optout: "" });
+    // quem saiu da lista continua contando como "já está": a busca não traz de novo
+    const { loadExisting, esquecerLeituras } = await import("@/lib/sheets");
+    esquecerLeituras();
+    expect((await loadExisting()).keys.has("5531982999779")).toBe(true);
+    await expect(banco.editarLead({ telefone: "5531900000000", nome: "x" })).rejects.toMatchObject({ status: 404 });
   });
 
   it("o usuário do Radar não consegue apagar leads", async () => {

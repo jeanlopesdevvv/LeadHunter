@@ -16,6 +16,7 @@ import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
 
 import { DisparoView } from "./DisparoView";
 import { HistoryView } from "./HistoryView";
+import { LeadsView } from "./LeadsView";
 import { PainelView } from "./PainelView";
 import { ResultsView } from "./ResultsView";
 import { calcularLimite, SearchView, type SearchForm } from "./SearchView";
@@ -65,7 +66,7 @@ function primeirosElegiveis(lista: Lead[], max: number, incluirFixos: boolean): 
   return ids;
 }
 
-const VIEWS: View[] = ["buscar", "resultados", "disparo", "painel", "historico", "config"];
+const VIEWS: View[] = ["buscar", "resultados", "disparo", "leads", "painel", "historico", "config"];
 
 export function Dashboard() {
   const toast = useToast();
@@ -621,6 +622,7 @@ export function Dashboard() {
         />
       )}
       {view === "disparo" && <DisparoView preSelecao={preSelecaoDisparo} onPreSelecaoVista={preSelecaoVista} />}
+      {view === "leads" && <LeadsView />}
       {view === "painel" && <PainelView />}
       {view === "historico" && (
         <HistoryView

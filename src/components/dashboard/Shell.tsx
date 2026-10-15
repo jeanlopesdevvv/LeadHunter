@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, WifiOff } from "lucide-react";
+import { ArrowUpRight, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, Users, WifiOff } from "lucide-react";
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
@@ -11,12 +11,13 @@ import type { Uso } from "@/lib/types";
 
 import { UsoMini } from "./UsoCota";
 
-export type View = "buscar" | "resultados" | "disparo" | "painel" | "historico" | "config";
+export type View = "buscar" | "resultados" | "disparo" | "leads" | "painel" | "historico" | "config";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
   { id: "buscar", label: "Nova prospecção", icon: Search },
   { id: "resultados", label: "Oportunidades", icon: ListChecks },
   { id: "disparo", label: "Disparo", icon: Send },
+  { id: "leads", label: "Leads", icon: Users },
   { id: "painel", label: "Desempenho", icon: TrendingUp },
   { id: "historico", label: "Histórico", icon: History },
   { id: "config", label: "Configuração", icon: Settings2 },
