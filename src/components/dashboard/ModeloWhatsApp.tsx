@@ -4,7 +4,20 @@ import { CheckCircle2, MessageSquareText, RefreshCw, Sparkles } from "lucide-rea
 import { Fragment, type ReactNode } from "react";
 
 import { Badge, Button, Modal, cx } from "@/components/ui";
-import { AUTOMATICO, EXEMPLO, MODELO_AUTONOMO, MODELO_LAVAJATO, nomeAmigavel, preencher, type ModeloWhatsApp } from "@/lib/templates-regras";
+import {
+  AUTOMATICO,
+  EXEMPLO,
+  FIM_VAR,
+  INICIO_VAR,
+  MODELO_AUTONOMO,
+  MODELO_LAVAJATO,
+  dadosDoContato,
+  nomeAmigavel,
+  preencherMarcado,
+  templateAutomatico,
+  type DadosDoContato,
+  type ModeloWhatsApp,
+} from "@/lib/templates-regras";
 
 /** O que a tela recebe de /api/disparo/modelos. */
 export interface ListaDeModelosTela {
@@ -13,25 +26,62 @@ export interface ListaDeModelosTela {
   erro: string;
 }
 
-/** *negrito* e _itálico_ como no WhatsApp. */
-function formatar(texto: string): ReactNode {
-  const partes = texto.split(/(\*[^*\n]+\*|_[^_\n]+_)/g);
-  return partes.map((p, i) => {
-    if (/^\*[^*]+\*$/.test(p)) return <b key={i}>{p.slice(1, -1)}</b>;
-    if (/^_[^_]+_$/.test(p)) return <i key={i}>{p.slice(1, -1)}</i>;
-    return <Fragment key={i}>{p}</Fragment>;
+/** Contato usado na prévia (o que muda de um para outro no disparo). */
+export interface ContatoDaPrevia {
+  nome: string;
+  cidade: string;
+  tipo: string;
+}
+
+const MARCA = new RegExp(`(${INICIO_VAR}[^${FIM_VAR}]*${FIM_VAR})`, "g");
+
+/** Trechos que vieram de variável (nome, cidade) ficam destacados; o resto sai como texto. */
+function comDestaque(texto: string, destacar: boolean, chave: string): ReactNode {
+  return texto.split(MARCA).map((p, i) => {
+    if (!p.startsWith(INICIO_VAR)) return <Fragment key={`${chave}-${i}`}>{p}</Fragment>;
+    const v = p.slice(1, -1);
+    return destacar ? (
+      <mark key={`${chave}-${i}`} className="zap-variavel" title="Muda para cada contato">
+        {v}
+      </mark>
+    ) : (
+      <Fragment key={`${chave}-${i}`}>{v}</Fragment>
+    );
   });
 }
 
-/** Como o contato vê a mensagem no WhatsApp (com nome e cidade de exemplo). */
-export function PreviaWhatsApp({ modelo, compacta }: { modelo: ModeloWhatsApp; compacta?: boolean }) {
-  const cabecalho = preencher(modelo.cabecalho, EXEMPLO);
-  const corpo = preencher(modelo.corpo, EXEMPLO);
+/** *negrito* e _itálico_ como no WhatsApp. */
+function formatar(texto: string, destacar = false): ReactNode {
+  const partes = texto.split(/(\*[^*\n]+\*|_[^_\n]+_)/g);
+  return partes.map((p, i) => {
+    if (/^\*[^*]+\*$/.test(p)) return <b key={i}>{comDestaque(p.slice(1, -1), destacar, String(i))}</b>;
+    if (/^_[^_]+_$/.test(p)) return <i key={i}>{comDestaque(p.slice(1, -1), destacar, String(i))}</i>;
+    return <Fragment key={i}>{comDestaque(p, destacar, String(i))}</Fragment>;
+  });
+}
+
+/**
+ * Como o contato vê a mensagem no WhatsApp. Com `dados`, usa o nome e a cidade de verdade (mesma regra do
+ * Fluxo 1); sem, um exemplo. `destacar` marca o que muda de um contato para outro.
+ */
+export function PreviaWhatsApp({
+  modelo,
+  compacta,
+  dados = EXEMPLO,
+  destacar,
+}: {
+  modelo: ModeloWhatsApp;
+  compacta?: boolean;
+  dados?: DadosDoContato;
+  destacar?: boolean;
+}) {
+  const cabecalho = preencherMarcado(modelo.cabecalho, dados);
+  const corpo = preencherMarcado(modelo.corpo, dados);
   return (
     <div className="zap-fundo rounded-xl p-3">
       <div className="zap-balao max-w-[92%] rounded-lg rounded-tl-none px-3 py-2 text-[13px] leading-snug shadow-sm">
-        {cabecalho && <p className="mb-1 font-bold">{cabecalho}</p>}
-        <p className={cx("whitespace-pre-line", compacta && "line-clamp-4")}>{formatar(corpo)}</p>
+        {cabecalho && <p className="mb-1 font-bold">{comDestaque(cabecalho, Boolean(destacar), "c")}</p>}
+        <p className={cx("whitespace-pre-line", compacta && "line-clamp-4")}>{formatar(corpo, Boolean(destacar))}</p>
         {modelo.rodape && <p className="mt-1.5 text-[11px] opacity-60">{modelo.rodape}</p>}
       </div>
       {modelo.botoes.length > 0 && !compacta && (
@@ -54,9 +104,9 @@ export function nomeDoModelo(nome: string | null | undefined): string {
   return nomeAmigavel(nome);
 }
 
-/** Prévia da escolha "automática": a de lava-jato (a de autônomo é parecida). */
-export function previaAutomatica(lista: ListaDeModelosTela | null): ModeloWhatsApp | null {
-  return lista?.modelos.find((m) => m.nome === MODELO_LAVAJATO) ?? null;
+/** Prévia da escolha "automática": a do tipo do contato (sem contato, a de lava-jato). */
+export function previaAutomatica(lista: ListaDeModelosTela | null, tipo = ""): ModeloWhatsApp | null {
+  return lista?.modelos.find((m) => m.nome === templateAutomatico(tipo)) ?? null;
 }
 
 const CATEGORIA: Record<string, string> = { MARKETING: "Marketing", UTILITY: "Utilidade", AUTHENTICATION: "Código" };
@@ -70,6 +120,7 @@ export function EscolherModelo({
   onEscolher,
   onAtualizar,
   atualizando,
+  contato,
 }: {
   open: boolean;
   onClose: () => void;
@@ -78,11 +129,14 @@ export function EscolherModelo({
   onEscolher: (nome: string) => void;
   onAtualizar: () => void;
   atualizando: boolean;
+  /** Primeiro contato marcado: as prévias saem com o nome e a cidade dele. */
+  contato?: ContatoDaPrevia | null;
 }) {
   const usaveis = (lista?.modelos ?? []).filter((m) => m.utilizavel && m.nome !== MODELO_LAVAJATO && m.nome !== MODELO_AUTONOMO);
   const padroes = (lista?.modelos ?? []).filter((m) => m.nome === MODELO_LAVAJATO || m.nome === MODELO_AUTONOMO);
   const fora = (lista?.modelos ?? []).filter((m) => !m.utilizavel);
-  const auto = previaAutomatica(lista);
+  const auto = previaAutomatica(lista, contato?.tipo);
+  const dados = contato ? dadosDoContato(contato.nome, contato.cidade) : EXEMPLO;
 
   const opcao = (nome: string, titulo: ReactNode, sub: ReactNode, previa: ModeloWhatsApp | null, destaque?: ReactNode) => {
     const marcado = valor === nome;
@@ -116,7 +170,7 @@ export function EscolherModelo({
         </div>
         {previa && (
           <div className="mt-3">
-            <PreviaWhatsApp modelo={previa} compacta={!marcado} />
+            <PreviaWhatsApp modelo={previa} compacta={!marcado} dados={dados} destacar={marcado} />
           </div>
         )}
       </button>
@@ -129,6 +183,15 @@ export function EscolherModelo({
         <p className="text-muted">
           Teste mensagens diferentes e compare em <b className="text-ink">Desempenho</b> qual traz mais respostas. Só aparecem os modelos aprovados
           pelo WhatsApp.
+        </p>
+        <p className="-mt-2 text-xs text-muted">
+          {contato ? (
+            <>
+              Prévias com o primeiro contato marcado, <b className="text-ink">{contato.nome || "(sem nome)"}</b>. Na confirmação dá para ver cada um.
+            </>
+          ) : (
+            "Prévias com nome e cidade de exemplo. Marque contatos para ver com os dados de verdade."
+          )}
         </p>
 
         <div className="space-y-2.5">

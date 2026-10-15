@@ -140,6 +140,7 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
       nome: l.nome,
       telefone: l.telefone,
       cidade: l.cidade,
+      tipo: l.tipo,
       situacao: l.situacao === "pendente" ? ("pendente" as const) : ("aguardando" as const),
     })),
     hoje,

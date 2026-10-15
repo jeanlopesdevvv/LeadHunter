@@ -3,7 +3,10 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
+  Eye,
   Loader2,
   MessageCircle,
   MessageSquareText,
@@ -30,7 +33,7 @@ import type { ItemDisparo, ProgressoDisparo, StatusDisparo } from "@/lib/disparo
 import { SEGUNDOS_POR_LEAD } from "@/lib/disparo-regras";
 import { horaBrasilia, quandoCurto } from "@/lib/periodo";
 import { normalizePhone } from "@/lib/phone";
-import { AUTOMATICO } from "@/lib/templates-regras";
+import { AUTOMATICO, dadosDoContato, modeloDoContato } from "@/lib/templates-regras";
 
 import { EscolherModelo, PreviaWhatsApp, nomeDoModelo, previaAutomatica, type ListaDeModelosTela } from "./ModeloWhatsApp";
 
@@ -121,6 +124,8 @@ export function DisparoView({
   const [erro, setErro] = useState("");
   const [atualizando, setAtualizando] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
+  /** Qual contato marcado aparece na prévia da confirmação. */
+  const [previaIdx, setPreviaIdx] = useState(0);
   const [disparando, setDisparando] = useState(false);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState("");
@@ -370,6 +375,11 @@ export function DisparoView({
   const travaErrada = Boolean(s?.trava.chaveErradaEm && (!s.trava.ultimaEm || s.trava.chaveErradaEm > s.trava.ultimaEm));
   const modeloEscolhido = modelo === AUTOMATICO ? previaAutomatica(modelos) : (modelos?.modelos.find((m) => m.nome === modelo) ?? null);
   const outrosModelos = (modelos?.modelos ?? []).filter((m) => m.utilizavel).length;
+  const idxPrevia = Math.min(previaIdx, Math.max(0, nomesMarcados.length - 1));
+  const contatoPrevia = nomesMarcados[idxPrevia] ?? null;
+  const modeloDaPrevia = contatoPrevia
+    ? (modelos?.modelos.find((m) => m.nome === modeloDoContato(modelo, contatoPrevia.tipo)) ?? null)
+    : modeloEscolhido;
 
   function alternar(key: string) {
     setMarcados((m) => {
@@ -536,7 +546,10 @@ export function DisparoView({
                 size="lg"
                 className={cx("mt-4 w-full", !travado && qtd > 0 && "animate-glow")}
                 disabled={travado || qtd === 0}
-                onClick={() => setConfirmar(true)}
+                onClick={() => {
+                  setPreviaIdx(0);
+                  setConfirmar(true);
+                }}
                 icon={<Zap className="size-4" />}
               >
                 {ocupado ? "Termine o disparo atual" : qtd > 0 ? `Disparar para ${n(qtd)}` : "Marque quem vai receber"}
@@ -668,36 +681,96 @@ export function DisparoView({
               (cerca de {minutos(qtd * SEGUNDOS_POR_LEAD)}).
             </p>
             {nomesMarcados.length > 0 && (
-              <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl bg-surface px-3.5 py-2.5">
-                {nomesMarcados.map((i) => (
-                  <li key={i.key} className="flex justify-between gap-3">
-                    <span className="truncate font-semibold text-ink">{i.nome || "(sem nome)"}</span>
-                    <span className="shrink-0 text-muted tabular-nums">{telefone(i.telefone)}</span>
-                  </li>
-                ))}
+              <ul className="max-h-48 space-y-0.5 overflow-y-auto rounded-xl bg-surface p-1.5" aria-label="Contatos do disparo">
+                {nomesMarcados.map((i, idx) => {
+                  const vendo = idx === idxPrevia;
+                  return (
+                    <li key={i.key}>
+                      <button
+                        type="button"
+                        onClick={() => setPreviaIdx(idx)}
+                        aria-pressed={vendo}
+                        title="Ver a mensagem deste contato"
+                        className={cx(
+                          "flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left transition",
+                          vendo ? "bg-card shadow-sm ring-1 ring-brand/40" : "hover:bg-card/70",
+                        )}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Eye className={cx("size-3.5 shrink-0", vendo ? "text-brand" : "text-transparent")} aria-hidden />
+                          <span className="truncate font-semibold text-ink">{i.nome || "(sem nome)"}</span>
+                        </span>
+                        <span className="shrink-0 text-muted tabular-nums">{telefone(i.telefone)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-ink">
+                <p className="min-w-0 font-semibold text-ink">
                   Mensagem: <span className="text-brand">{nomeDoModelo(modelo)}</span>
+                  {modelo === AUTOMATICO && contatoPrevia && modeloDaPrevia && (
+                    <span className="font-normal text-muted">
+                      {" "}
+                      · {modeloDoContato(modelo, contatoPrevia.tipo).endsWith("autonomo") ? "versão autônomo" : "versão lava-jato"}
+                    </span>
+                  )}
                 </p>
                 <button
                   type="button"
                   onClick={() => setEscolhendoModelo(true)}
                   disabled={disparando}
-                  className="text-xs font-semibold text-brand underline underline-offset-2"
+                  className="shrink-0 text-xs font-semibold text-brand underline underline-offset-2"
                 >
                   Trocar
                 </button>
               </div>
-              {modeloEscolhido ? (
-                <PreviaWhatsApp modelo={modeloEscolhido} />
+              {contatoPrevia && modeloDaPrevia && (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-xs text-muted">
+                    Como <b className="text-ink">{contatoPrevia.nome || "(sem nome)"}</b> vai receber
+                  </p>
+                  {nomesMarcados.length > 1 && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreviaIdx((idxPrevia - 1 + nomesMarcados.length) % nomesMarcados.length)}
+                        className="grid size-7 place-items-center rounded-full border border-line text-muted transition hover:border-brand-200 hover:text-brand"
+                        aria-label="Contato anterior"
+                      >
+                        <ChevronLeft className="size-4" />
+                      </button>
+                      <span className="min-w-14 text-center text-xs font-semibold text-muted tabular-nums">
+                        {n(idxPrevia + 1)} de {n(nomesMarcados.length)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPreviaIdx((idxPrevia + 1) % nomesMarcados.length)}
+                        className="grid size-7 place-items-center rounded-full border border-line text-muted transition hover:border-brand-200 hover:text-brand"
+                        aria-label="Próximo contato"
+                      >
+                        <ChevronRight className="size-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {modeloDaPrevia ? (
+                <PreviaWhatsApp
+                  modelo={modeloDaPrevia}
+                  dados={contatoPrevia ? dadosDoContato(contatoPrevia.nome, contatoPrevia.cidade) : undefined}
+                  destacar={Boolean(contatoPrevia)}
+                />
               ) : (
                 <p className="rounded-xl bg-surface px-3.5 py-2.5 text-muted">A mensagem de sempre: a de lava-jato ou a de autônomo, conforme o contato.</p>
               )}
-              {modelo === AUTOMATICO && modeloEscolhido && (
-                <p className="text-xs text-muted">Exemplo com nome e cidade fictícios. Autônomos recebem a versão para profissionais.</p>
+              {contatoPrevia && modeloDaPrevia && (
+                <p className="text-xs text-muted">
+                  <mark className="zap-variavel whitespace-nowrap">Em destaque</mark>: o que muda para cada contato.
+                  {nomesMarcados.length > 1 && " Clique num nome da lista para ver a mensagem dele."}
+                </p>
               )}
             </div>
             {s.fila > qtd && (
@@ -735,6 +808,7 @@ export function DisparoView({
         onEscolher={escolherModelo}
         onAtualizar={() => void lerModelos(true)}
         atualizando={lendoModelos}
+        contato={nomesMarcados[0] ?? null}
       />
 
       <Modal

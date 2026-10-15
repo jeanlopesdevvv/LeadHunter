@@ -110,6 +110,23 @@ export function preencher(texto: string, d: DadosDoContato): string {
   return String(texto ?? "").replace(VAR, (_, k: string) => valorDaVariavel(k, d) ?? `{{${k}}}`);
 }
 
+/** Marcas em volta do que veio de variável (a prévia destaca esses trechos). */
+export const INICIO_VAR = "\u0001";
+export const FIM_VAR = "\u0002";
+
+/** Igual a preencher(), mas com INICIO_VAR/FIM_VAR em volta de cada valor preenchido. */
+export function preencherMarcado(texto: string, d: DadosDoContato): string {
+  return String(texto ?? "").replace(VAR, (_, k: string) => {
+    const v = valorDaVariavel(k, d);
+    return v === null ? `{{${k}}}` : `${INICIO_VAR}${v}${FIM_VAR}`;
+  });
+}
+
+/** Qual modelo o contato recebe: o escolhido ou, na "Automática", o do tipo dele (como o Fluxo 1). */
+export function modeloDoContato(escolhido: string, tipo: string): string {
+  return !escolhido || escolhido === AUTOMATICO ? templateAutomatico(tipo) : escolhido;
+}
+
 /** Botão que significa "não quero mais receber": vira o payload de opt-out que o Fluxo 2 reconhece. */
 export function ehBotaoDeSaida(texto: string): boolean {
   return /n[aã]o tenho interesse|descadastr|sair da lista|parar de receber|n[aã]o quero receber/i.test(String(texto ?? ""));

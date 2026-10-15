@@ -350,7 +350,7 @@ export interface StatusDisparo {
   destino: string;
   fila: number;
   /** Quem está na fila (pendente ou aguardando), na ordem da planilha. */
-  itensFila: { key: string; linha: number; nome: string; telefone: string; cidade: string; situacao: "pendente" | "aguardando" }[];
+  itensFila: { key: string; linha: number; nome: string; telefone: string; cidade: string; tipo: string; situacao: "pendente" | "aguardando" }[];
   hoje: ResumoDia;
   limiteDiario: number;
   /** A Carol mexeu na planilha há pouco e não foi o disparo acompanhado pelo Radar: alguém rodou o fluxo no n8n. */

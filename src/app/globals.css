@@ -245,6 +245,18 @@ body {
   background: #202c33;
   color: #e9edef;
 }
+/* Na prévia do disparo: o que muda para cada contato (nome, cidade). */
+.zap-variavel {
+  background: rgb(6 182 212 / 0.16);
+  color: inherit;
+  border-radius: 4px;
+  padding: 0 2px;
+  box-shadow: inset 0 -1.5px 0 rgb(6 182 212 / 0.55);
+}
+[data-theme="dark"] .zap-variavel {
+  background: rgb(34 211 238 / 0.18);
+  box-shadow: inset 0 -1.5px 0 rgb(34 211 238 / 0.6);
+}
 
 .cartao-noite {
   background:

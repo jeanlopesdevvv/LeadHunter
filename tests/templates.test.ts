@@ -8,7 +8,9 @@ import {
   dadosDoContato,
   ehBotaoDeSaida,
   montarComponentes,
+  modeloDoContato,
   preencher,
+  preencherMarcado,
   templateAutomatico,
   type TemplateMeta,
 } from "@/lib/templates-regras";
@@ -150,5 +152,32 @@ describe("disparo com modelo escolhido", () => {
   it("explica erros desconhecidos sem esconder o código", () => {
     expect(mensagemDoErro(999999, "Something odd")).toBe("O WhatsApp recusou o envio (erro 999999): Something odd");
     expect(mensagemDoErro(null)).toBe("O WhatsApp recusou o envio.");
+  });
+});
+
+describe("prévia do disparo com os dados de cada contato", () => {
+  const corpo = "Olá, {{1}}! Aqui é a Carol, do Lavacar.\n\nVi que vocês atendem {{2}} e queria confirmar.";
+
+  it("preenche com o nome e a cidade do contato, como o Fluxo 1", () => {
+    expect(preencher(corpo, dadosDoContato("Jean Lopes", "Belo Horizonte"))).toBe(
+      "Olá, Jean! Aqui é a Carol, do Lavacar.\n\nVi que vocês atendem em Belo Horizonte e queria confirmar.",
+    );
+    expect(preencher(corpo, dadosDoContato("Lava Jato do Bahia", ""))).toContain("Olá, pessoal do Lava Jato do Bahia!");
+    expect(preencher(corpo, dadosDoContato("Lava Jato do Bahia", ""))).toContain("atendem na sua região");
+  });
+
+  it("marca o que veio de variável e mantém o resto igual", () => {
+    const m = preencherMarcado(corpo, dadosDoContato("Jean Lopes", "Belo Horizonte"));
+    expect(m).toContain("Olá, \u0001Jean\u0002!");
+    expect(m).toContain("atendem \u0001em Belo Horizonte\u0002 e");
+    expect(m.replace(/[\u0001\u0002]/g, "")).toBe(preencher(corpo, dadosDoContato("Jean Lopes", "Belo Horizonte")));
+    expect(preencherMarcado("Oi {{9}}", dadosDoContato("Ana", "BH"))).toBe("Oi {{9}}");
+  });
+
+  it("na Automática, cada contato recebe o modelo do tipo dele", () => {
+    expect(modeloDoContato("automatico", "Autônomo")).toBe("carol_prospeccao_autonomo");
+    expect(modeloDoContato("automatico", "Empresa")).toBe("carol_prospeccao_lavajato");
+    expect(modeloDoContato("", "")).toBe("carol_prospeccao_lavajato");
+    expect(modeloDoContato("carol_prospeccao_teste_cidade", "Autônomo")).toBe("carol_prospeccao_teste_cidade");
   });
 });
