@@ -46,6 +46,11 @@ interface DisparoAtual {
   retomadoEm?: number | null;
   /** Modelo do WhatsApp escolhido (null = automático: lava-jato ou autônomo). */
   modelo?: string | null;
+  /**
+   * Como o disparo terminou. Depois de concluído ele não muda mais: se alguém voltar um contato
+   * para a fila (tela Leads), o contato vai para a fila nova, e o cartão continua "concluído".
+   */
+  concluido?: ProgressoDisparo | null;
 }
 
 interface ExecucaoN8n {
@@ -90,8 +95,9 @@ function trava(): EstadoTrava {
 function progressoAtual(linhas: LinhaFila[], agora: number): ProgressoDisparo | null {
   const d = g.__radarDisparo;
   if (!d) return null;
+  if (d.concluido) return d.concluido;
   const t = trava();
-  return progressoDoDisparo(d.chaves, d.iniciadoEm, linhas, agora, {
+  const p = progressoDoDisparo(d.chaves, d.iniciadoEm, linhas, agora, {
     interrompido: d.interrompido,
     retomadoEm: d.retomadoEm,
     ultimaTrava: t.ultimaEm,
@@ -100,6 +106,9 @@ function progressoAtual(linhas: LinhaFila[], agora: number): ProgressoDisparo | 
     enviandoAgora: t.enviandoAgora,
     erro: t.erro,
   });
+  // Só congela quando achou todos os contatos (uma leitura falha não "conclui" o disparo).
+  if (p.estado === "concluido" && p.itens.every((i) => i.situacao !== "sumiu")) d.concluido = p;
+  return p;
 }
 
 function destinoDe(url: string): string {

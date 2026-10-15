@@ -233,6 +233,28 @@ describe("pausar, continuar e cancelar", () => {
     expect(chamadasN8n).toBe(2);
   });
 
+  it("disparo concluído não reabre quando um contato volta para a fila (tela Leads)", async () => {
+    montar([
+      [A, "Lava A", "Empresa", "BH", "pendente", "", ""],
+      [B, "Lava B", "Empresa", "BH", "pendente", "", ""],
+    ]);
+    const { iniciarDisparo, statusDisparo, continuarDisparo } = await import("@/lib/disparo");
+    const { esquecerAbaLeads } = await import("@/lib/sheets");
+    await iniciarDisparo([A, B]);
+    enviou(A);
+    enviou(B);
+    esquecerAbaLeads();
+    expect((await statusDisparo()).atual).toMatchObject({ estado: "concluido", enviados: 2 });
+
+    // Alguém põe o A na fila de novo para outro teste.
+    planilha.find((r) => r[0] === A)![4] = "pendente";
+    esquecerAbaLeads();
+    const s = await statusDisparo();
+    expect(s.atual).toMatchObject({ estado: "concluido", enviados: 2, aguardando: 0 });
+    expect(s.itensFila.map((i) => i.key)).toEqual([A]); // vai para a fila nova, não para o cartão antigo
+    await expect(continuarDisparo()).rejects.toMatchObject({ status: 409 });
+  });
+
 });
 
 describe("disparo em seguida de outro", () => {

@@ -77,6 +77,8 @@ export interface DisparoLembrado {
   retomadoEm?: number | null;
   /** Modelo do WhatsApp do disparo (null = automático). */
   modelo?: string | null;
+  /** Terminou: se o servidor reiniciar, não precisa voltar a acompanhar. */
+  concluido?: boolean;
 }
 
 export function lembrarDisparo(d: DisparoLembrado) {

@@ -151,7 +151,14 @@ export function DisparoView({
       if (a) {
         const lem = disparoLembrado();
         const interrompido = a.estado === "pausado" || a.estado === "cancelado" ? { como: a.estado, em: a.interrompidoEm ?? Date.now() } : null;
-        const base = { iniciadoEm: a.iniciadoEm, chaves: a.itens.map((i) => i.key), interrompido, retomadoEm: a.retomadoEm, modelo: s.modeloAtual };
+        const base = {
+          iniciadoEm: a.iniciadoEm,
+          chaves: a.itens.map((i) => i.key),
+          interrompido,
+          retomadoEm: a.retomadoEm,
+          modelo: s.modeloAtual,
+          concluido: a.estado === "concluido",
+        };
         if (!lem || lem.iniciadoEm !== a.iniciadoEm) {
           // Disparo que este navegador ainda não conhecia: só comemora se vir ele terminar.
           lembrarDisparo({ ...base, comemorado: a.estado !== "enviando" });
@@ -197,8 +204,9 @@ export function DisparoView({
     api<StatusDisparo>("/api/disparo")
       .then(async (s) => {
         // O servidor reiniciou (ex.: atualização) no meio de um disparo: volta a acompanhar pelo que o navegador lembra.
+        // Disparo que já terminou não volta: um contato recolocado na fila não pode "reabrir" o cartão.
         const lem = !s.atual ? disparoLembrado() : null;
-        if (lem) {
+        if (lem && !lem.concluido) {
           s = await api<StatusDisparo>(
             "/api/disparo/acompanhar",
             {
