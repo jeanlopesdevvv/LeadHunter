@@ -19,7 +19,8 @@ export function proxy(request: NextRequest) {
   }
   const url = request.nextUrl.clone();
   url.pathname = "/login";
-  url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
+  const destino = `${pathname}${request.nextUrl.search}`;
+  url.search = destino === "/" ? "" : `?next=${encodeURIComponent(destino)}`;
   return NextResponse.redirect(url);
 }
 

@@ -319,6 +319,29 @@ export async function listarLeads(): Promise<LeadDaLista[]> {
   return regs.map(comoLead);
 }
 
+/** Cidade onde gente abriu o app do Lavacar sem lava-jato parceiro a 20 km (só números). */
+export interface CidadeComProcura {
+  cidade: string;
+  estado: string | null;
+  pessoas: number;
+  pedidosAviso: number;
+  tentaramComprar: number;
+  prioridade: number;
+}
+
+/** Cidades com procura e sem parceiro, mais urgentes primeiro (função atendimento.cidades_com_procura). */
+export async function cidadesComProcura(): Promise<CidadeComProcura[]> {
+  const regs = await noBanco((sql) => sql<Registro[]>`select * from atendimento.cidades_com_procura()`);
+  return regs.map((r) => ({
+    cidade: String(r.cidade ?? ""),
+    estado: r.estado ? String(r.estado) : null,
+    pessoas: Number(r.pessoas ?? 0),
+    pedidosAviso: Number(r.pedidos_aviso ?? 0),
+    tentaramComprar: Number(r.tentaram_comprar ?? 0),
+    prioridade: Number(r.prioridade ?? 0),
+  })).filter((c) => c.cidade);
+}
+
 /** Edita um lead (o que não veio fica como está). Opt-out ligado guarda a data, como o n8n faz. */
 export async function editarLead(e: EdicaoLead): Promise<LeadDaLista> {
   const optout = e.optout === undefined ? null : e.optout;

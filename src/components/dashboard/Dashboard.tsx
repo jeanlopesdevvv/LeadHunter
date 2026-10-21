@@ -73,11 +73,22 @@ export function Dashboard() {
   const router = useRouter();
   // O que estava na tela antes de recarregar (lista, seleção, busca em andamento). Lido uma vez.
   const [salvo] = useState(() => carregarSessao());
-  const [view, setView] = useState<View>(() => (salvo && VIEWS.includes(salvo.view as View) ? (salvo.view as View) : "buscar"));
+  // Link vindo do painel do Lavacar (aba Regiões, "Prospectar"): /?cidade=São Paulo - SP já abre a busca com a cidade.
+  const [cidadeDoLink] = useState(() => (typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("cidade")?.trim() || null));
+  const [view, setView] = useState<View>(() => (cidadeDoLink ? "buscar" : salvo && VIEWS.includes(salvo.view as View) ? (salvo.view as View) : "buscar"));
   const [form, setForm] = useState<SearchForm>(() => {
     const f = { ...FORM_INICIAL, ...(salvo?.form as Partial<SearchForm> | undefined) };
-    return { ...f, alvo: quantidadeValida(f.alvo) };
+    const atuais = splitLines(f.cidades);
+    const cidades = cidadeDoLink && !atuais.some((c) => c.toLowerCase() === cidadeDoLink.toLowerCase()) ? [...atuais, cidadeDoLink].join("\n") : f.cidades;
+    return { ...f, cidades, alvo: quantidadeValida(f.alvo) };
   });
+  // Tira o ?cidade= do endereço para não somar de novo ao recarregar.
+  useEffect(() => {
+    if (!cidadeDoLink) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("cidade");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [cidadeDoLink]);
   const [rodando, setRodando] = useState(false);
   const [progresso, setProgresso] = useState<Progresso | null>(() =>
     salvo?.progresso ? { ...salvo.progresso, rodando: false, etapa: "", fim: salvo.rodando ? "parado" : salvo.progresso.fim } : null,

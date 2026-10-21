@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Car,
   Check,
+  Flame,
   ChevronDown,
   CircleStop,
   Gauge,
@@ -95,6 +96,63 @@ const SUGESTOES_TERMOS = [
 const SUGESTOES_CIDADES = ["Belo Horizonte - MG", "Contagem - MG", "Nova Lima - MG", "Betim - MG", "São Paulo - SP", "Rio de Janeiro - RJ"];
 
 const n = (v: number) => v.toLocaleString("pt-BR");
+
+/** Cidade com procura no app do Lavacar e sem parceiro perto (rota /api/procura). */
+interface CidadeComProcura {
+  cidade: string;
+  estado: string | null;
+  pessoas: number;
+  pedidosAviso: number;
+  tentaramComprar: number;
+}
+const rotuloCidade = (c: CidadeComProcura) => (c.estado ? `${c.cidade} - ${c.estado}` : c.cidade);
+
+/**
+ * Onde o app já tem procura e ainda não tem parceiro: um toque põe a cidade na busca.
+ * Some sozinho se não houver dados (planilha, banco fora do ar).
+ */
+function CidadesComProcura({ cidades, onAdicionar, disabled }: { cidades: string[]; onAdicionar: (c: string) => void; disabled?: boolean }) {
+  const [lista, setLista] = useState<CidadeComProcura[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/procura", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { cidades: [] }))
+      .then((d: { cidades?: CidadeComProcura[] }) => vivo && setLista(d.cidades ?? []))
+      .catch(() => vivo && setLista([]));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  if (disabled || !lista) return null;
+  const tem = (v: string) => cidades.some((x) => x.toLowerCase() === v.toLowerCase());
+  const restantes = lista.filter((c) => !tem(rotuloCidade(c))).slice(0, 8);
+  if (!restantes.length) return null;
+  return (
+    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200">
+        <Flame className="size-3.5" /> Clientes procurando no app, sem lava-jato parceiro perto:
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {restantes.map((c) => {
+          const rotulo = rotuloCidade(c);
+          const detalhe = [`${n(c.pessoas)} ${c.pessoas === 1 ? "pessoa" : "pessoas"}`, c.tentaramComprar ? `${n(c.tentaramComprar)} tentou comprar` : "", c.pedidosAviso ? `${n(c.pedidosAviso)} pediu aviso` : ""].filter(Boolean).join(" · ");
+          return (
+            <button
+              key={rotulo}
+              type="button"
+              title={detalhe}
+              onClick={() => onAdicionar(rotulo)}
+              className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-card px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-brand hover:bg-brand-50 hover:text-brand-700 dark:border-amber-500/40"
+            >
+              <Plus className="size-3.5" /> {rotulo}
+              <span className="font-medium text-muted">· {n(c.pessoas)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** Pontos no radar do resumo: mais oportunidades, mais pontos. */
 const PONTOS_POR_QUANTIDADE: Record<number, number> = { 10: 3, 25: 5, 50: 8, 100: 12, 250: 18, 500: 26 };
@@ -432,6 +490,7 @@ export function SearchView({
               disabled={rodando}
               vazio="Nenhuma região ainda. Adicione uma cidade ou bairro abaixo."
             />
+            <CidadesComProcura cidades={cidades} disabled={rodando} onAdicionar={(c) => set({ cidades: [...cidades, c].join("\n") })} />
           </Passo>
 
           <Passo i={2} num={3} titulo="Quantas oportunidades novas?">
