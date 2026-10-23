@@ -30,7 +30,7 @@ import { Badge, Button, Card, Modal, cx, inputClass } from "@/components/ui";
 import { ApiError, api } from "@/lib/client/api";
 import { disparoLembrado, esquecerDisparo, lembrarDisparo, lembrarModelo, modeloLembrado } from "@/lib/client/sessao-salva";
 import type { ItemDisparo, ProgressoDisparo, StatusDisparo } from "@/lib/disparo-regras";
-import { SEGUNDOS_POR_LEAD } from "@/lib/disparo-regras";
+import { LIMITE_DIARIO_MAX, LIMITE_DIARIO_MIN, SEGUNDOS_POR_LEAD, avisoDoLimite, validarLimiteDiario } from "@/lib/disparo-regras";
 import { horaBrasilia, quandoCurto } from "@/lib/periodo";
 import { normalizePhone } from "@/lib/phone";
 import { AUTOMATICO, dadosDoContato, modeloDoContato } from "@/lib/templates-regras";
@@ -138,6 +138,10 @@ export function DisparoView({
   const [modelo, setModelo] = useState<string>(AUTOMATICO);
   const [escolhendoModelo, setEscolhendoModelo] = useState(false);
   const [lendoModelos, setLendoModelos] = useState(false);
+  // 23/10/2026: limite diário da Carol editável aqui (fica no banco; o Fluxo 1 do n8n lê de lá).
+  const [editandoLimite, setEditandoLimite] = useState(false);
+  const [novoLimite, setNovoLimite] = useState("");
+  const [salvandoLimite, setSalvandoLimite] = useState(false);
   const pedido = useRef(0);
   const preSelecaoRef = useRef(preSelecao);
 
@@ -329,6 +333,30 @@ export function DisparoView({
     }
   }
 
+  function abrirLimite() {
+    if (status) setNovoLimite(String(status.limiteDiario));
+    setEditandoLimite(true);
+  }
+
+  async function salvarLimite() {
+    const v = validarLimiteDiario(novoLimite);
+    if (!v.ok) {
+      toast(v.erro, "error");
+      return;
+    }
+    setSalvandoLimite(true);
+    try {
+      const novo = await api<StatusDisparo>("/api/disparo/limite", { valor: v.valor });
+      aplicar(novo);
+      setEditandoLimite(false);
+      toast(`Limite da Carol: ${n(v.valor)} ${v.valor === 1 ? "mensagem" : "mensagens"} por dia.`, "success");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setSalvandoLimite(false);
+    }
+  }
+
   async function executar(acao: Acao) {
     setPedirConfirmacao(null);
     setAgindo(acao);
@@ -505,6 +533,11 @@ export function DisparoView({
                   Hoje: <AnimatedNumber value={s.hoje.enviadosHoje} className="font-bold" />{" "}
                   {s.hoje.enviadosHoje === 1 ? "mensagem enviada" : "mensagens enviadas"}
                   {s.limiteDiario > 0 && <span className="text-muted"> de {n(s.limiteDiario)} por dia</span>}
+                  {s.limiteEditavel && (
+                    <button type="button" onClick={abrirLimite} className="ml-1.5 text-xs font-semibold text-brand-700 underline-offset-2 hover:underline">
+                      alterar limite
+                    </button>
+                  )}
                 </p>
                 {s.hoje.semWhatsappHoje > 0 && (
                   <p className="text-muted">
@@ -546,6 +579,11 @@ export function DisparoView({
                   {restamHoje > 0 && (
                     <button type="button" onClick={soOsDeHoje} className="mt-1 block font-semibold text-amber-900 underline underline-offset-2">
                       Deixar marcados só {n(restamHoje)} (celulares primeiro)
+                    </button>
+                  )}
+                  {s.limiteEditavel && (
+                    <button type="button" onClick={abrirLimite} className="mt-1 block font-semibold text-amber-900 underline underline-offset-2">
+                      Mudar o limite por dia
                     </button>
                   )}
                 </div>
@@ -680,6 +718,55 @@ export function DisparoView({
           )}
         </Card>
       </div>
+
+      <Modal open={editandoLimite} onClose={() => !salvandoLimite && setEditandoLimite(false)} title="Limite de mensagens por dia">
+        {s &&
+          (() => {
+            const v = validarLimiteDiario(novoLimite);
+            const aviso = v.ok ? avisoDoLimite(v.valor, s.limiteDiario) : null;
+            return (
+              <div className="space-y-4 text-sm">
+                <p>
+                  Quantas mensagens a Carol pode mandar por dia nos disparos. Só conta o que a Meta confirmou como enviado; número sem WhatsApp não
+                  gasta o limite.
+                </p>
+                <label className="block">
+                  <span className="text-xs font-semibold text-muted">
+                    Mensagens por dia (de {LIMITE_DIARIO_MIN} a {LIMITE_DIARIO_MAX})
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={LIMITE_DIARIO_MIN}
+                    max={LIMITE_DIARIO_MAX}
+                    step={1}
+                    value={novoLimite}
+                    onChange={(e) => setNovoLimite(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && v.ok && void salvarLimite()}
+                    className={cx(inputClass, "mt-1 w-full text-lg font-bold tabular-nums")}
+                    aria-label="Mensagens por dia"
+                    autoFocus
+                  />
+                </label>
+                {!v.ok && novoLimite.trim() !== "" && <p className="text-xs font-medium text-red-700">{v.erro}</p>}
+                {aviso && <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{aviso}</div>}
+                <p className="text-xs text-muted">
+                  Hoje já foram {n(s.hoje.enviadosHoje)}. Vale a partir do próximo disparo (um disparo em andamento usa o limite novo quando for
+                  retomado).
+                  {s.limiteMudadoEm && <> Última mudança: {quandoCurto(Date.parse(s.limiteMudadoEm))}.</>}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setEditandoLimite(false)} disabled={salvandoLimite}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={() => void salvarLimite()} loading={salvandoLimite} disabled={!v.ok || v.valor === s.limiteDiario}>
+                    Salvar limite
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+      </Modal>
 
       <Modal open={confirmar} onClose={() => !disparando && setConfirmar(false)} title="Confirmar disparo">
         {s && (

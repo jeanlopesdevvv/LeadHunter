@@ -1,3 +1,4 @@
+import { lerLimiteDiario } from "@/lib/banco";
 import { infoChatwoot } from "@/lib/chatwoot";
 import { estadoDaTrava } from "@/lib/disparo";
 import { getConfig } from "@/lib/env";
@@ -17,7 +18,11 @@ function destinoN8n(url: string): string {
 export async function GET(request: Request) {
   void request; // rota sempre dinâmica
   const cfg = getConfig();
-  const [planilha, uso] = await Promise.all([sheetStatus(), obterUso({ forcar: true })]);
+  const [planilha, uso, limiteBanco] = await Promise.all([
+    sheetStatus(),
+    obterUso({ forcar: true }),
+    cfg.mock ? Promise.resolve(null) : lerLimiteDiario().catch(() => null),
+  ]);
   return Response.json({
     simulacao: cfg.mock,
     places: { configurada: cfg.mock || Boolean(cfg.placesApiKey) },
@@ -27,7 +32,7 @@ export async function GET(request: Request) {
     disparo: {
       configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
       destino: cfg.mock ? "simulação" : destinoN8n(cfg.n8nDisparoUrl),
-      limiteDiario: cfg.limiteDiarioCarol,
+      limiteDiario: limiteBanco?.valor ?? cfg.limiteDiarioCarol,
       trava: estadoDaTrava(),
       // O Radar consegue ler os modelos aprovados do WhatsApp (para escolher a mensagem do disparo).
       modelos: cfg.mock || Boolean(cfg.metaToken && cfg.metaWabaId),

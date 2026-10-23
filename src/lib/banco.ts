@@ -364,3 +364,40 @@ export async function editarLead(e: EdicaoLead): Promise<LeadDaLista> {
   if (!r.length) throw new SheetsError("Esse lead não está mais na lista.", 404);
   return comoLead(r[0]);
 }
+
+// ---------------------------------------------------------------------------
+// Limite diário de disparos da Carol (atendimento.config, chave carol_limite_diario). O Fluxo 1 lê daqui.
+export interface LimiteDiarioBanco {
+  valor: number;
+  atualizadoEm: string | null;
+  por: string | null;
+}
+
+function comoLimite(r: Registro | undefined): LimiteDiarioBanco | null {
+  if (!r || r.valor === null || r.valor === undefined) return null;
+  const em = r.atualizado_em ? new Date(r.atualizado_em as string) : null;
+  return { valor: Number(r.valor), atualizadoEm: em && !Number.isNaN(em.getTime()) ? em.toISOString() : null, por: (r.atualizado_por as string) ?? null };
+}
+
+/** Limite atual (null se o banco não está configurado ou ainda não tem o valor). */
+export async function lerLimiteDiario(): Promise<LimiteDiarioBanco | null> {
+  if (!getConfig().banco) return null;
+  const r = await noBanco((sql) =>
+    sql<Registro[]>`select (valor->>'valor')::int as valor, atualizado_em, atualizado_por from atendimento.config where chave = 'carol_limite_diario'`,
+  );
+  return comoLimite(r[0]);
+}
+
+/** Grava o novo limite (o banco guarda o histórico e recusa fora de 1 a 250). */
+export async function salvarLimiteDiario(valor: number, por: string): Promise<LimiteDiarioBanco> {
+  const r = await noBanco(
+    (sql) => sql<Registro[]>`
+      insert into atendimento.config (chave, valor, atualizado_por) values ('carol_limite_diario', ${sql.json({ valor })}, ${por})
+      on conflict (chave) do update set valor = excluded.valor, atualizado_por = excluded.atualizado_por
+      returning (valor->>'valor')::int as valor, atualizado_em, atualizado_por`,
+    false,
+  );
+  const l = comoLimite(r[0]);
+  if (!l) throw new SheetsError("O banco não confirmou o novo limite. Tente de novo.", 502);
+  return l;
+}

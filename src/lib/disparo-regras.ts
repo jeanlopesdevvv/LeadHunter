@@ -353,6 +353,10 @@ export interface StatusDisparo {
   itensFila: { key: string; linha: number; nome: string; telefone: string; cidade: string; tipo: string; situacao: "pendente" | "aguardando" }[];
   hoje: ResumoDia;
   limiteDiario: number;
+  /** O limite fica no banco (atendimento.config) e dá para mudar pelo Radar. */
+  limiteEditavel: boolean;
+  /** Quando o limite foi mudado pela última vez (ISO), se veio do banco. */
+  limiteMudadoEm: string | null;
   /** A Carol mexeu na planilha há pouco e não foi o disparo acompanhado pelo Radar: alguém rodou o fluxo no n8n. */
   movimentoRecente: boolean;
   /** Números bloqueados (ex.: o próprio Lavacar) que estão pendentes na planilha: travam o disparo. */
@@ -363,4 +367,30 @@ export interface StatusDisparo {
   /** Modelo do WhatsApp do disparo atual (null = automático: lava-jato ou autônomo). */
   modeloAtual: string | null;
   atualizadoEm: number;
+}
+
+// ---------------------------------------------------------------------------
+// Limite diário de disparos da Carol (23/10/2026). Fica no banco (atendimento.config); o Fluxo 1 do n8n lê
+// de lá antes de cada disparo. O banco também recusa fora de 1 a 250.
+export const LIMITE_DIARIO_MIN = 1;
+/** Teto mais baixo da Meta para conversas novas por dia num número comercial. */
+export const LIMITE_DIARIO_MAX = 250;
+/** Acima disso, o Radar recomenda subir aos poucos. */
+export const LIMITE_DIARIO_AVISO = 50;
+
+export function validarLimiteDiario(v: unknown): { ok: true; valor: number } | { ok: false; erro: string } {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v.trim()) : NaN;
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, erro: "Digite um número inteiro de mensagens por dia." };
+  if (n < LIMITE_DIARIO_MIN) return { ok: false, erro: `O mínimo é ${LIMITE_DIARIO_MIN} mensagem por dia.` };
+  if (n > LIMITE_DIARIO_MAX) return { ok: false, erro: `O máximo é ${LIMITE_DIARIO_MAX} por dia (o teto mais baixo da Meta para conversas novas).` };
+  return { ok: true, valor: n };
+}
+
+/** Aviso antes de salvar um limite alto ou um aumento grande de uma vez. */
+export function avisoDoLimite(novo: number, atual: number): string | null {
+  if (novo > LIMITE_DIARIO_AVISO) {
+    return `Acima de ${LIMITE_DIARIO_AVISO} por dia, suba aos poucos (por exemplo, +20% por semana) e acompanhe se as pessoas bloqueiam ou denunciam a Carol: isso derruba a qualidade do número na Meta.`;
+  }
+  if (atual > 0 && novo > atual * 2) return "É um aumento grande de uma vez. O mais seguro é subir aos poucos e acompanhar as respostas.";
+  return null;
 }

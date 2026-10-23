@@ -14,6 +14,7 @@ import {
   type ProgressoDisparo,
   type StatusDisparo,
 } from "./disparo-regras";
+import { lerLimiteDiario, type LimiteDiarioBanco } from "./banco";
 import { telefonesBloqueados } from "./bloqueio";
 import { getConfig } from "./env";
 import { dataN8n, mockSheet } from "./mock";
@@ -138,6 +139,15 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
       : new Set<string>();
   const fila = naFilaTodos.filter((l) => !bloqueados.has(l.key) && !doDisparo.has(l.key));
   const t = trava();
+  // 23/10/2026: o limite diário vem do banco (o Fluxo 1 lê o mesmo valor). Sem banco, vale o que o n8n informou.
+  let limiteBanco: LimiteDiarioBanco | null = null;
+  if (!cfg.mock) {
+    try {
+      limiteBanco = await lerLimiteDiario();
+    } catch {
+      limiteBanco = null;
+    }
+  }
   return {
     configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
     simulacao: cfg.mock,
@@ -153,7 +163,9 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
       situacao: l.situacao === "pendente" ? ("pendente" as const) : ("aguardando" as const),
     })),
     hoje,
-    limiteDiario: t.limiteN8n ?? cfg.limiteDiarioCarol,
+    limiteDiario: limiteBanco?.valor ?? t.limiteN8n ?? cfg.limiteDiarioCarol,
+    limiteEditavel: !cfg.mock && Boolean(cfg.banco),
+    limiteMudadoEm: limiteBanco?.atualizadoEm ?? null,
     movimentoRecente: atual?.estado !== "enviando" && movimentoDeFora(hoje.ultimoMovimento, atual, agora),
     bloqueadosNaFila: naFilaTodos.filter((l) => bloqueados.has(l.key)).map((l) => ({ nome: l.nome, telefone: l.telefone, linha: l.linha })),
     atual,

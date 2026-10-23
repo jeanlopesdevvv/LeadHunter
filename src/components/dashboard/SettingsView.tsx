@@ -208,7 +208,7 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
             <Item situacao={status.disparo?.configurado ? "ok" : "erro"} icon={<Send className="size-5" />} titulo="Disparo da Carol">
               <p>
                 {status.disparo?.configurado
-                  ? `Envio pelo WhatsApp ativo, com limite de ${status.disparo.limiteDiario} mensagens por dia.`
+                  ? `Envio pelo WhatsApp ativo, com limite de ${status.disparo.limiteDiario} mensagens por dia (dá para mudar na tela Disparo).`
                   : `O disparo ainda não está configurado. ${FALE_COM_ADMIN}`}
               </p>
             </Item>
