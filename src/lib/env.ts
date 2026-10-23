@@ -132,6 +132,8 @@ export function getConfig() {
     // WhatsApp da Carol (o mesmo META_WHATSAPP_TOKEN do n8n serve) e o ID dessa conta (WABA).
     metaToken: str("META_TOKEN") || str("META_WHATSAPP_TOKEN") || str("META_TOKEN_CAROL"),
     metaWabaId: str("META_WABA_ID", "940955865200631"),
+    // Conta do WhatsApp da Sofia (aba Modelos: listar e criar os modelos dela). O mesmo token precisa ter acesso a ela.
+    metaWabaIdSofia: str("META_WABA_ID_SOFIA", "1352869003322561"),
     metaApiVersion: str("META_API_VERSION", "v21.0"),
     // Status de quem está na fila mas não foi marcado no disparo (o n8n só dispara "pendente").
     statusAguardando: str("STATUS_AGUARDANDO", "aguardando"),

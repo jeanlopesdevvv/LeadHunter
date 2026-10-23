@@ -92,3 +92,18 @@ export async function linkDaConversa(telefone: string): Promise<string | null> {
   cacheConversa.set(key, { em: Date.now(), url });
   return url;
 }
+
+/** Caixa (inbox) de uma conversa do Chatwoot. */
+export async function caixaDaConversa(conversa: number): Promise<number | null> {
+  if (!infoChatwoot().apiLigada) return null;
+  const c = await api<{ inbox_id?: number }>(`/conversations/${conversa}`);
+  return typeof c.inbox_id === "number" ? c.inbox_id : null;
+}
+
+/** Nota privada na conversa (o n8n lê comandos como "#template nome" nas notas). */
+export async function notaPrivada(conversa: number, texto: string): Promise<void> {
+  await api(`/conversations/${conversa}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ content: texto, message_type: "outgoing", private: true }),
+  });
+}

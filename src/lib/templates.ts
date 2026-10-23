@@ -146,6 +146,11 @@ function carregar(forcar = false) {
   return valor;
 }
 
+/** Esquece a lista guardada (depois de criar um modelo, a próxima leitura vem do Meta). */
+export function esquecerModelos(): void {
+  g.__radarModelos = undefined;
+}
+
 export async function listarModelos(forcar = false): Promise<ListaDeModelos> {
   try {
     return (await carregar(forcar)).lista;
