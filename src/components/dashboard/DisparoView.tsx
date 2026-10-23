@@ -36,6 +36,7 @@ import { normalizePhone } from "@/lib/phone";
 import { AUTOMATICO, dadosDoContato, modeloDoContato } from "@/lib/templates-regras";
 
 import { EscolherModelo, PreviaWhatsApp, nomeDoModelo, previaAutomatica, type ListaDeModelosTela } from "./ModeloWhatsApp";
+import { AvisoSaude, CartaoSaude } from "./SaudeNumero";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 
@@ -334,7 +335,7 @@ export function DisparoView({
   }
 
   function abrirLimite() {
-    if (status) setNovoLimite(String(status.limiteDiario));
+    if (status) setNovoLimite(String(status.limiteConfigurado));
     setEditandoLimite(true);
   }
 
@@ -405,7 +406,8 @@ export function DisparoView({
   const qtd = marcados.size;
   const restamHoje = s && s.limiteDiario > 0 ? Math.max(0, s.limiteDiario - s.hoje.enviadosHoje) : null;
   const ocupado = ativo(atual);
-  const travado = !s || !s.configurado || ocupado || s.movimentoRecente;
+  const pausadoPelaSaude = s?.saude?.freio === "pausado";
+  const travado = !s || !s.configurado || ocupado || s.movimentoRecente || pausadoPelaSaude;
   const nomesMarcados = itens.filter((i) => marcados.has(i.key));
   const fixosMarcados = nomesMarcados.filter((i) => ehFixo(i.telefone)).length;
   const travaErrada = Boolean(s?.trava.chaveErradaEm && (!s.trava.ultimaEm || s.trava.chaveErradaEm > s.trava.ultimaEm));
@@ -469,6 +471,8 @@ export function DisparoView({
 
       {s && !s.configurado && <NaoConfigurado />}
 
+      <AvisoSaude s={s} />
+
       {travaErrada && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="flex items-start gap-2.5">
@@ -515,105 +519,116 @@ export function DisparoView({
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        {/* Resumo e botão */}
-        <Card className="h-fit p-5 sm:p-6 lg:sticky lg:top-6">
-          <p className="flex items-center gap-2 text-sm font-bold text-ink">
-            <Users className="size-4 text-brand" /> Na fila da Carol
-          </p>
-          {!s ? (
-            <div className="skeleton mt-4 h-10 w-24 rounded" />
-          ) : (
-            <>
-              <div className="mt-3 flex items-baseline gap-2">
-                <AnimatedNumber value={s.fila} className="text-5xl font-extrabold tracking-tight text-strong" />
-                <span className="text-sm text-muted">{s.fila === 1 ? "contato esperando" : "contatos esperando"}</span>
-              </div>
-              <div className="mt-4 space-y-1 rounded-xl bg-surface px-3.5 py-3 text-sm">
-                <p>
-                  Hoje: <AnimatedNumber value={s.hoje.enviadosHoje} className="font-bold" />{" "}
-                  {s.hoje.enviadosHoje === 1 ? "mensagem enviada" : "mensagens enviadas"}
-                  {s.limiteDiario > 0 && <span className="text-muted"> de {n(s.limiteDiario)} por dia</span>}
-                  {s.limiteEditavel && (
-                    <button type="button" onClick={abrirLimite} className="ml-1.5 text-xs font-semibold text-brand-700 underline-offset-2 hover:underline">
-                      alterar limite
-                    </button>
+        {/* Resumo e botão; embaixo, a saúde do número na Meta (23/10/2026) */}
+        <div className="h-fit space-y-6 lg:sticky lg:top-6">
+          <Card className="p-5 sm:p-6">
+            <p className="flex items-center gap-2 text-sm font-bold text-ink">
+              <Users className="size-4 text-brand" /> Na fila da Carol
+            </p>
+            {!s ? (
+              <div className="skeleton mt-4 h-10 w-24 rounded" />
+            ) : (
+              <>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <AnimatedNumber value={s.fila} className="text-5xl font-extrabold tracking-tight text-strong" />
+                  <span className="text-sm text-muted">{s.fila === 1 ? "contato esperando" : "contatos esperando"}</span>
+                </div>
+                <div className="mt-4 space-y-1 rounded-xl bg-surface px-3.5 py-3 text-sm">
+                  <p>
+                    Hoje: <AnimatedNumber value={s.hoje.enviadosHoje} className="font-bold" />{" "}
+                    {s.hoje.enviadosHoje === 1 ? "mensagem enviada" : "mensagens enviadas"}
+                    {s.limiteDiario > 0 && <span className="text-muted"> de {n(s.limiteDiario)} por dia</span>}
+                    {s.saude?.freio === "metade" && <span className="text-amber-700"> (reduzido de {n(s.limiteConfigurado)})</span>}
+                    {pausadoPelaSaude && <span className="font-semibold text-red-700"> · disparos pausados</span>}
+                    {s.limiteEditavel && (
+                      <button type="button" onClick={abrirLimite} className="ml-1.5 text-xs font-semibold text-brand-700 underline-offset-2 hover:underline">
+                        alterar limite
+                      </button>
+                    )}
+                  </p>
+                  {s.hoje.semWhatsappHoje > 0 && (
+                    <p className="text-muted">
+                      <b className="text-ink tabular-nums">{n(s.hoje.semWhatsappHoje)}</b> sem WhatsApp
+                    </p>
                   )}
+                  {s.hoje.ultimoMovimento && <p className="text-xs text-muted">Última mensagem {quandoCurto(s.hoje.ultimoMovimento)}.</p>}
+                </div>
+                <p className="mt-4 text-sm text-ink">
+                  <AnimatedNumber value={qtd} className="font-bold" /> {qtd === 1 ? "marcado" : "marcados"}
+                  {qtd > 0 && <span className="text-muted"> · cerca de {minutos(qtd * SEGUNDOS_POR_LEAD)}</span>}
                 </p>
-                {s.hoje.semWhatsappHoje > 0 && (
-                  <p className="text-muted">
-                    <b className="text-ink tabular-nums">{n(s.hoje.semWhatsappHoje)}</b> sem WhatsApp
+                {fixosMarcados > 0 && (
+                  <p className="mt-1 text-xs text-muted">
+                    {n(fixosMarcados)} {fixosMarcados === 1 ? "é telefone fixo" : "são telefones fixos"} (menos chance de ter WhatsApp).
                   </p>
                 )}
-                {s.hoje.ultimoMovimento && <p className="text-xs text-muted">Última mensagem {quandoCurto(s.hoje.ultimoMovimento)}.</p>}
-              </div>
-              <p className="mt-4 text-sm text-ink">
-                <AnimatedNumber value={qtd} className="font-bold" /> {qtd === 1 ? "marcado" : "marcados"}
-                {qtd > 0 && <span className="text-muted"> · cerca de {minutos(qtd * SEGUNDOS_POR_LEAD)}</span>}
-              </p>
-              {fixosMarcados > 0 && (
-                <p className="mt-1 text-xs text-muted">
-                  {n(fixosMarcados)} {fixosMarcados === 1 ? "é telefone fixo" : "são telefones fixos"} (menos chance de ter WhatsApp).
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={() => setEscolhendoModelo(true)}
-                className="mt-4 flex w-full items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5 text-left transition hover:border-brand-200 hover:bg-surface/60"
-              >
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand">
-                  <MessageSquareText className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Mensagem</span>
-                  <span className="block truncate text-sm font-bold text-ink">{nomeDoModelo(modelo)}</span>
-                </span>
-                <span className="shrink-0 text-xs font-semibold text-brand">
-                  {outrosModelos > 2 ? `Trocar (${n(outrosModelos)})` : "Ver"}
-                </span>
-              </button>
-              {restamHoje !== null && qtd > restamHoje && (
-                <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  {restamHoje === 0
-                    ? `O limite de ${n(s.limiteDiario)} por dia já foi atingido hoje: o disparo para no primeiro contato.`
-                    : `Hoje só cabem mais ${n(restamHoje)} (limite de ${n(s.limiteDiario)} por dia). O resto ficaria parado na vez.`}
-                  {restamHoje > 0 && (
-                    <button type="button" onClick={soOsDeHoje} className="mt-1 block font-semibold text-amber-900 underline underline-offset-2">
-                      Deixar marcados só {n(restamHoje)} (celulares primeiro)
-                    </button>
-                  )}
-                  {s.limiteEditavel && (
-                    <button type="button" onClick={abrirLimite} className="mt-1 block font-semibold text-amber-900 underline underline-offset-2">
-                      Mudar o limite por dia
-                    </button>
-                  )}
-                </div>
-              )}
-              <Button
-                size="lg"
-                className={cx("mt-4 w-full", !travado && qtd > 0 && "animate-glow")}
-                disabled={travado || qtd === 0}
-                onClick={() => {
-                  setPreviaIdx(0);
-                  setConfirmar(true);
-                }}
-                icon={<Zap className="size-4" />}
-              >
-                {ocupado ? "Termine o disparo atual" : qtd > 0 ? `Disparar para ${n(qtd)}` : "Marque quem vai receber"}
-              </Button>
-              {s.configurado && (
-                <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted">
-                  {s.trava.ultimaEm ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-700">
-                      <ShieldCheck className="size-3" /> Pausar e cancelar disponíveis
-                    </span>
-                  ) : (
-                    "Você pode pausar ou cancelar durante o envio."
-                  )}
-                </p>
-              )}
-            </>
-          )}
-        </Card>
+                <button
+                  type="button"
+                  onClick={() => setEscolhendoModelo(true)}
+                  className="mt-4 flex w-full items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5 text-left transition hover:border-brand-200 hover:bg-surface/60"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand">
+                    <MessageSquareText className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Mensagem</span>
+                    <span className="block truncate text-sm font-bold text-ink">{nomeDoModelo(modelo)}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-brand">
+                    {outrosModelos > 2 ? `Trocar (${n(outrosModelos)})` : "Ver"}
+                  </span>
+                </button>
+                {restamHoje !== null && qtd > restamHoje && (
+                  <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {restamHoje === 0
+                      ? `O limite de ${n(s.limiteDiario)} por dia já foi atingido hoje: o disparo para no primeiro contato.`
+                      : `Hoje só cabem mais ${n(restamHoje)} (limite de ${n(s.limiteDiario)} por dia). O resto ficaria parado na vez.`}
+                    {restamHoje > 0 && (
+                      <button type="button" onClick={soOsDeHoje} className="mt-1 block font-semibold text-amber-900 underline underline-offset-2">
+                        Deixar marcados só {n(restamHoje)} (celulares primeiro)
+                      </button>
+                    )}
+                    {s.limiteEditavel && (
+                      <button type="button" onClick={abrirLimite} className="mt-1 block font-semibold text-amber-900 underline underline-offset-2">
+                        Mudar o limite por dia
+                      </button>
+                    )}
+                  </div>
+                )}
+                <Button
+                  size="lg"
+                  className={cx("mt-4 w-full", !travado && qtd > 0 && "animate-glow")}
+                  disabled={travado || qtd === 0}
+                  onClick={() => {
+                    setPreviaIdx(0);
+                    setConfirmar(true);
+                  }}
+                  icon={<Zap className="size-4" />}
+                >
+                  {pausadoPelaSaude
+                    ? "Pausado pela saúde do número"
+                    : ocupado
+                      ? "Termine o disparo atual"
+                      : qtd > 0
+                        ? `Disparar para ${n(qtd)}`
+                        : "Marque quem vai receber"}
+                </Button>
+                {s.configurado && (
+                  <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted">
+                    {s.trava.ultimaEm ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700">
+                        <ShieldCheck className="size-3" /> Pausar e cancelar disponíveis
+                      </span>
+                    ) : (
+                      "Você pode pausar ou cancelar durante o envio."
+                    )}
+                  </p>
+                )}
+              </>
+            )}
+          </Card>
+          <CartaoSaude s={s} />
+        </div>
 
         {/* Fila com seleção */}
         <Card className="overflow-hidden">
@@ -723,7 +738,7 @@ export function DisparoView({
         {s &&
           (() => {
             const v = validarLimiteDiario(novoLimite);
-            const aviso = v.ok ? avisoDoLimite(v.valor, s.limiteDiario) : null;
+            const aviso = v.ok ? avisoDoLimite(v.valor, s.limiteConfigurado) : null;
             return (
               <div className="space-y-4 text-sm">
                 <p>
@@ -755,11 +770,17 @@ export function DisparoView({
                   retomado).
                   {s.limiteMudadoEm && <> Última mudança: {quandoCurto(Date.parse(s.limiteMudadoEm))}.</>}
                 </p>
+                {s.saude && (s.saude.freio === "metade" || s.saude.freio === "pausado") && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Hoje vale {s.saude.freio === "pausado" ? "0 (disparos pausados)" : n(s.saude.limiteEfetivo)} por causa da saúde do número na
+                    Meta. Quando a qualidade voltar ao verde, vale de novo o limite que você escolher aqui.
+                  </p>
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" onClick={() => setEditandoLimite(false)} disabled={salvandoLimite}>
                     Cancelar
                   </Button>
-                  <Button onClick={() => void salvarLimite()} loading={salvandoLimite} disabled={!v.ok || v.valor === s.limiteDiario}>
+                  <Button onClick={() => void salvarLimite()} loading={salvandoLimite} disabled={!v.ok || v.valor === s.limiteConfigurado}>
                     Salvar limite
                   </Button>
                 </div>
@@ -1058,6 +1079,11 @@ function CartaoDisparo({
                 <>
                   <b>O WhatsApp recusou a mensagem:</b> {atual.erro.mensagem} Ninguém foi marcado como sem WhatsApp por isso. Cancele o resto e
                   dispare de novo com outra mensagem, ou continue depois de corrigir.
+                </>
+              ) : s.saude?.freio === "pausado" ? (
+                <>
+                  Motivo: <b>disparos pausados pela saúde do número na Meta</b> (qualidade {s.saude.qualidadeTexto}). Continue quando a qualidade
+                  voltar.
                 </>
               ) : limiteBatido ? (
                 <>

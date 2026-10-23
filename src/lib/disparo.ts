@@ -12,9 +12,13 @@ import {
   type Interrupcao,
   type LinhaFila,
   type ProgressoDisparo,
+  type SaudeNumero,
   type StatusDisparo,
+  motivoDaSaude,
+  saudeDoBanco,
+  saudeSimulada,
 } from "./disparo-regras";
-import { lerLimiteDiario, type LimiteDiarioBanco } from "./banco";
+import { lerLimiteDiario, lerSaudeNumero, type LimiteDiarioBanco } from "./banco";
 import { telefonesBloqueados } from "./bloqueio";
 import { getConfig } from "./env";
 import { dataN8n, mockSheet } from "./mock";
@@ -79,6 +83,8 @@ const g = globalThis as unknown as {
   __radarDisparo?: DisparoAtual | null;
   __radarDisparoSim?: ReturnType<typeof setInterval> | null;
   __radarTrava?: EstadoTrava;
+  /** Última leitura da saúde do número no banco (cache curto: a trava pergunta a cada mensagem). */
+  __radarSaude?: { em: number; s: SaudeNumero | null };
 };
 
 function trava(): EstadoTrava {
@@ -120,6 +126,36 @@ function destinoDe(url: string): string {
   }
 }
 
+/**
+ * Saúde do número da Carol (23/10/2026): lida do banco com cache curto. Se o banco falhar, usa a
+ * última leitura de até 10 minutos; depois disso, null (sem freio pelo Radar; o Fluxo 1 tem o próprio).
+ */
+async function saudeAtual(maxAgeMs = 30_000, agora = Date.now()): Promise<SaudeNumero | null> {
+  const cfg = getConfig();
+  if (cfg.mock) return saudeSimulada(process.env.MOCK_SAUDE, cfg.limiteDiarioCarol, 0, agora);
+  if (!cfg.banco) return null;
+  const c = g.__radarSaude;
+  if (c && agora - c.em < maxAgeMs) return c.s;
+  try {
+    const s = saudeDoBanco(await lerSaudeNumero());
+    g.__radarSaude = { em: agora, s };
+    return s;
+  } catch {
+    return c && agora - c.em < 10 * 60_000 ? c.s : null;
+  }
+}
+
+/** Não começa nem retoma disparo com o número pausado pela saúde na Meta. */
+async function exigirNumeroSaudavel() {
+  const s = await saudeAtual(0);
+  if (s?.freio === "pausado") {
+    throw new DisparoError(
+      `Disparos pausados pela saúde do número da Carol na Meta (qualidade ${s.qualidadeTexto}). Eles voltam sozinhos quando a Meta liberar o número.`,
+      409,
+    );
+  }
+}
+
 async function lerLinhas(maxAgeMs?: number): Promise<LinhaFila[]> {
   const { map, rows } = await lerAbaLeads(maxAgeMs);
   return linhasDaFila(rows, map);
@@ -148,6 +184,9 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
       limiteBanco = null;
     }
   }
+  // 23/10/2026: saúde do número na Meta. O limite que vale hoje já vem com o freio (metade ou 0).
+  const saude = await saudeAtual();
+  const limiteConfigurado = saude?.limiteConfigurado ?? limiteBanco?.valor ?? t.limiteN8n ?? cfg.limiteDiarioCarol;
   return {
     configurado: cfg.mock || Boolean(cfg.n8nDisparoUrl),
     simulacao: cfg.mock,
@@ -163,7 +202,9 @@ export async function statusDisparo(agora = Date.now()): Promise<StatusDisparo> 
       situacao: l.situacao === "pendente" ? ("pendente" as const) : ("aguardando" as const),
     })),
     hoje,
-    limiteDiario: limiteBanco?.valor ?? t.limiteN8n ?? cfg.limiteDiarioCarol,
+    limiteDiario: saude?.limiteEfetivo ?? limiteConfigurado,
+    limiteConfigurado,
+    saude,
     limiteEditavel: !cfg.mock && Boolean(cfg.banco),
     limiteMudadoEm: limiteBanco?.atualizadoEm ?? null,
     movimentoRecente: atual?.estado !== "enviando" && movimentoDeFora(hoje.ultimoMovimento, atual, agora),
@@ -208,6 +249,7 @@ function exclusivo<T>(fn: () => Promise<T>): Promise<T> {
 export function iniciarDisparo(pedido: string[] | "todos" = "todos", modelo: string = AUTOMATICO): Promise<StatusDisparo> {
   return exclusivo(async () => {
     exigirConfigurado();
+    await exigirNumeroSaudavel();
     const escolhido = await resolverModelo(modelo);
     const agora = Date.now();
     const linhas = await lerLinhas(0); // leitura fresca na hora de disparar
@@ -358,6 +400,7 @@ export function continuarDisparo(): Promise<StatusDisparo> {
     exigirConfigurado();
     const d = g.__radarDisparo;
     if (!d) throw new DisparoError("Não há disparo para continuar.", 404);
+    await exigirNumeroSaudavel();
     const agora = Date.now();
     const linhas = await lerLinhas(0);
     const atual = progressoAtual(linhas, agora);
@@ -427,10 +470,15 @@ export async function consultarTrava(
   const key = phoneKey(String(contato.telefone ?? ""));
   const d = g.__radarDisparo;
 
+  // 23/10/2026: saúde do número na Meta (vermelha = para tudo; amarela = para no limite reduzido).
+  const saude = await saudeAtual(60_000, agora);
+  const motivoSaude = motivoDaSaude(saude, saude?.enviadosHoje ?? 0);
+
   let motivo = "";
   if (ex.parada) motivo = "disparo pausado ou cancelado no Radar";
   else if (d?.interrompido) motivo = d.interrompido.como === "cancelado" ? "disparo cancelado no Radar" : "disparo pausado no Radar";
   else if (key && telefonesBloqueados().has(key)) motivo = "número bloqueado";
+  else if (motivoSaude) motivo = motivoSaude;
   else if (key) {
     try {
       const linhas = await lerLinhas(2_000);

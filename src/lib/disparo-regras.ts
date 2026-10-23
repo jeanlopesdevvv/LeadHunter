@@ -352,6 +352,7 @@ export interface StatusDisparo {
   /** Quem está na fila (pendente ou aguardando), na ordem da planilha. */
   itensFila: { key: string; linha: number; nome: string; telefone: string; cidade: string; tipo: string; situacao: "pendente" | "aguardando" }[];
   hoje: ResumoDia;
+  /** Limite que vale hoje: o do Radar, com o freio da saúde do número (metade ou 0). */
   limiteDiario: number;
   /** O limite fica no banco (atendimento.config) e dá para mudar pelo Radar. */
   limiteEditavel: boolean;
@@ -366,6 +367,10 @@ export interface StatusDisparo {
   trava: { ultimaEm: number | null; chaveErradaEm: number | null };
   /** Modelo do WhatsApp do disparo atual (null = automático: lava-jato ou autônomo). */
   modeloAtual: string | null;
+  /** Limite escolhido no Radar (limiteDiario é o que vale hoje, já com o freio da saúde do número). */
+  limiteConfigurado: number;
+  /** Saúde do número da Carol na Meta (null = banco fora do ar ou não configurado). */
+  saude: SaudeNumero | null;
   atualizadoEm: number;
 }
 
@@ -393,4 +398,153 @@ export function avisoDoLimite(novo: number, atual: number): string | null {
   }
   if (atual > 0 && novo > atual * 2) return "É um aumento grande de uma vez. O mais seguro é subir aos poucos e acompanhar as respostas.";
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Saúde do número da Carol na Meta (23/10/2026). O n8n lê a Meta de hora em hora e grava no banco;
+// atendimento.carol_saude_atual() devolve a situação e o limite que vale agora (o Fluxo 1 usa o mesmo).
+// Amarela = limite do dia pela metade; vermelha, sinalizado, restrito ou bloqueado = disparos pausados.
+export type FreioSaude = "normal" | "metade" | "pausado" | "sem_leitura";
+
+export interface SaudeNumero {
+  freio: FreioSaude;
+  /** Limite que a equipe escolheu no Radar. */
+  limiteConfigurado: number;
+  /** Limite que vale hoje, já com o freio (0 = pausado). */
+  limiteEfetivo: number;
+  /** Explicação do freio (vazio quando não há freio). */
+  motivo: string;
+  /** Última leitura da Meta que funcionou (ISO). */
+  checadoEm: string | null;
+  qualidade: "GREEN" | "YELLOW" | "RED" | "UNKNOWN" | null;
+  qualidadeTexto: string;
+  situacaoTexto: string;
+  nome: string | null;
+  nomeStatus: string | null;
+  /** Limite de conversas da Meta (ex.: TIER_250), quando a Meta informa. */
+  limiteMeta: string | null;
+  /** Avisos da Meta sobre envio, já em português quando conhecidos. */
+  avisos: string[];
+  ultimaTentativaEm: string | null;
+  ultimaTentativaOk: boolean | null;
+  ultimoErro: string | null;
+  enviadosHoje: number;
+  semWhatsappHoje: number;
+  /** Pessoas que pediram para não receber mais nos últimos 7 dias. */
+  optouts7d: number;
+}
+
+const FREIOS: FreioSaude[] = ["normal", "metade", "pausado", "sem_leitura"];
+const QUALIDADES = ["GREEN", "YELLOW", "RED", "UNKNOWN"] as const;
+
+function inteiro(v: unknown, padrao = 0): number {
+  const n = Number(v);
+  return v !== null && v !== "" && Number.isInteger(n) ? n : padrao;
+}
+
+function texto(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+function iso(v: unknown): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const d = new Date(v as string);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Converte o jsonb de atendimento.carol_saude_atual() (ou o texto dele). Inválido = null. */
+export function saudeDoBanco(bruto: unknown): SaudeNumero | null {
+  let a = bruto;
+  if (typeof a === "string") {
+    try {
+      a = JSON.parse(a);
+    } catch {
+      return null;
+    }
+  }
+  if (!a || typeof a !== "object" || Array.isArray(a)) return null;
+  const r = a as Record<string, unknown>;
+  const freio = FREIOS.includes(r.freio as FreioSaude) ? (r.freio as FreioSaude) : null;
+  const configurado = inteiro(r.limite_configurado, -1);
+  const efetivo = inteiro(r.limite_efetivo, -1);
+  if (!freio || configurado < 0 || efetivo < 0) return null;
+  const q = String(r.qualidade ?? "").toUpperCase();
+  return {
+    freio,
+    limiteConfigurado: configurado,
+    limiteEfetivo: efetivo,
+    motivo: texto(r.motivo) ?? "",
+    checadoEm: iso(r.checado_em),
+    qualidade: (QUALIDADES as readonly string[]).includes(q) ? (q as SaudeNumero["qualidade"]) : null,
+    qualidadeTexto: texto(r.qualidade_pt) ?? "sem nota da Meta",
+    situacaoTexto: texto(r.situacao_pt) ?? "",
+    nome: texto(r.nome),
+    nomeStatus: texto(r.nome_status),
+    limiteMeta: texto(r.limite_meta),
+    avisos: Array.isArray(r.avisos) ? r.avisos.filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, 5) : [],
+    ultimaTentativaEm: iso(r.ultima_tentativa_em),
+    ultimaTentativaOk: typeof r.ultima_tentativa_ok === "boolean" ? r.ultima_tentativa_ok : null,
+    ultimoErro: texto(r.ultimo_erro),
+    enviadosHoje: inteiro(r.enviados_hoje),
+    semWhatsappHoje: inteiro(r.sem_whatsapp_hoje),
+    optouts7d: inteiro(r.optouts_7d),
+  };
+}
+
+/**
+ * Por que a trava deve parar o disparo por causa da saúde do número ("" = pode seguir).
+ * Pausado para tudo; com a metade, para quando os enviados de hoje chegam ao limite reduzido.
+ */
+export function motivoDaSaude(s: SaudeNumero | null, enviadosHoje: number): string {
+  if (!s) return "";
+  if (s.freio === "pausado") return "disparos pausados pela saúde do número da Carol na Meta";
+  if (s.freio === "metade" && enviadosHoje >= s.limiteEfetivo) {
+    return `limite do dia reduzido pela saúde do número (${enviadosHoje} de ${s.limiteEfetivo})`;
+  }
+  return "";
+}
+
+/** "TIER_250" vira "250 conversas novas por dia". */
+export function limiteMetaTexto(tier: string | null): string | null {
+  if (!tier) return null;
+  if (/UNLIMITED/i.test(tier)) return "sem limite de conversas novas";
+  const m = /TIER_(\d+)(K?)/i.exec(tier);
+  if (!m) return null;
+  const qtd = Number(m[1]) * (m[2] ? 1000 : 1);
+  return `${qtd.toLocaleString("pt-BR")} conversas novas por dia`;
+}
+
+/** Situação de mentira para o modo simulação (MOCK_SAUDE=verde|amarela|vermelha|sem). */
+export function saudeSimulada(modo: string | undefined, limite: number, enviadosHoje: number, agora = Date.now()): SaudeNumero {
+  const m = (modo ?? "verde").toLowerCase();
+  const freio: FreioSaude = m === "amarela" ? "metade" : m === "vermelha" ? "pausado" : m === "sem" ? "sem_leitura" : "normal";
+  const efetivo = freio === "pausado" ? 0 : freio === "metade" ? Math.max(1, Math.ceil(limite / 2)) : limite;
+  const qualidade = freio === "metade" ? "YELLOW" : freio === "pausado" ? "RED" : freio === "sem_leitura" ? null : "GREEN";
+  const motivos: Record<FreioSaude, string> = {
+    pausado: "Disparos pausados: vermelha (baixa), conectado.",
+    metade: `Qualidade amarela na Meta: o limite do dia caiu de ${limite} para ${efetivo}.`,
+    sem_leitura: "Sem leitura da Meta há mais de 3 horas: vale o limite normal.",
+    normal: "",
+  };
+  const textos: Record<string, string> = { GREEN: "verde (alta)", YELLOW: "amarela (média)", RED: "vermelha (baixa)" };
+  return {
+    freio,
+    limiteConfigurado: limite,
+    limiteEfetivo: efetivo,
+    motivo: motivos[freio],
+    checadoEm: new Date(agora - (freio === "sem_leitura" ? 5 * 3_600_000 : 20 * 60_000)).toISOString(),
+    qualidade,
+    qualidadeTexto: qualidade ? textos[qualidade] : "sem nota da Meta",
+    situacaoTexto: "conectado; envio limitado pela Meta; nome de exibição recusado",
+    nome: "Carol do Lavacar",
+    nomeStatus: "DECLINED",
+    limiteMeta: null,
+    avisos: ["O nome de exibição ainda não foi aprovado; o limite de mensagens da Meta sobe depois da aprovação."],
+    ultimaTentativaEm: new Date(agora - (freio === "sem_leitura" ? 10 : 20) * 60_000).toISOString(),
+    ultimaTentativaOk: freio !== "sem_leitura",
+    ultimoErro: freio === "sem_leitura" ? "Error validating access token" : null,
+    enviadosHoje,
+    semWhatsappHoje: 1,
+    optouts7d: 0,
+  };
 }

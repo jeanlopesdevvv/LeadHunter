@@ -401,3 +401,13 @@ export async function salvarLimiteDiario(valor: number, por: string): Promise<Li
   if (!l) throw new SheetsError("O banco não confirmou o novo limite. Tente de novo.", 502);
   return l;
 }
+
+/**
+ * Saúde do número da Carol na Meta e o limite que vale agora (23/10/2026): jsonb de
+ * atendimento.carol_saude_atual(), o mesmo que o Fluxo 1 usa. null se o banco não está configurado.
+ */
+export async function lerSaudeNumero(): Promise<unknown> {
+  if (!getConfig().banco) return null;
+  const r = await noBanco((sql) => sql<Registro[]>`select atendimento.carol_saude_atual() as s`);
+  return r[0]?.s ?? null;
+}
