@@ -1,11 +1,11 @@
 import "server-only";
 
-import { caixaDaConversa, infoChatwoot, notaPrivada } from "./chatwoot";
 import { getConfig } from "./env";
 import {
   CONTAS,
-  comandoTemplate,
+  ehDaAssistente,
   motivoDaRecusa,
+  motivoSemEnvio,
   nomeTecnico,
   payloadMeta,
   validarRascunho,
@@ -16,8 +16,8 @@ import { MODELOS_SIMULACAO, esquecerModelos } from "./templates";
 import { analisarTemplate, type ModeloWhatsApp, type TemplateMeta } from "./templates-regras";
 
 /**
- * Aba "Modelos": lê e cria os modelos do WhatsApp da Carol e da Sofia na Meta (Graph API) e manda o comando
- * "#template nome" para a conversa do Chatwoot (quem envia de fato é o n8n, Fluxos 4 e S4).
+ * Aba "Modelos": lê e cria os templates do WhatsApp da Carol e da Sofia na Meta (Graph API).
+ * O envio ao cliente fica na aba "📤 Enviar Template" (n8n), que já existia.
  */
 
 export class ModelosError extends Error {
@@ -33,6 +33,10 @@ export interface ModeloDaConta extends ModeloWhatsApp {
   id: string;
   /** Motivo da recusa da Meta, em português (vazio se não foi recusado). */
   recusa: string;
+  /** Template da Carol/Sofia (false = da automação: avisos, lembretes, repasses). */
+  daAssistente: boolean;
+  /** Por que não dá para enviar ao cliente pela aba "📤 Enviar Template" (vazio = dá). */
+  semEnvio: string;
 }
 
 export interface ListaDaConta {
@@ -40,8 +44,6 @@ export interface ListaDaConta {
   configurado: boolean;
   modelos: ModeloDaConta[];
   erro: string;
-  /** O Radar consegue escrever na conversa do Chatwoot (CHATWOOT_TOKEN). Sem ele, a tela oferece copiar o comando. */
-  chatwootLigado: boolean;
 }
 
 function wabaDe(conta: ContaWhatsApp): string {
@@ -71,18 +73,26 @@ function erroDaMeta(e: RespostaMeta["error"]): string {
   return `A Meta recusou${e.code ? ` (erro ${e.code})` : ""}: ${detalhe}`.trim();
 }
 
-function paraTela(t: TemplateMeta & { rejected_reason?: string }): ModeloDaConta {
-  return { ...analisarTemplate(t), id: String(t.id ?? t.name), recusa: motivoDaRecusa(t.rejected_reason) };
+function paraTela(t: TemplateMeta & { rejected_reason?: string }, conta: ContaWhatsApp): ModeloDaConta {
+  const m = analisarTemplate(t);
+  return { ...m, id: String(t.id ?? t.name), recusa: motivoDaRecusa(t.rejected_reason), daAssistente: ehDaAssistente(m.nome, conta), semEnvio: motivoSemEnvio(m, conta) };
 }
+
+/** Só na simulação (MOCK_MODE): a conta da Sofia com um de cada situação. */
+const SIMULACAO_SOFIA: (TemplateMeta & { rejected_reason?: string })[] = [
+  { name: "sofia_retomada_contato", status: "APPROVED", category: "MARKETING", language: "pt_BR", components: [{ type: "BODY", text: "Oi, {{1}}! Aqui é a Sofia, do Lavacar. Podemos retomar de onde paramos?" }] },
+  { name: "sofia_aviso_novidade", status: "PENDING", category: "UTILITY", language: "pt_BR", components: [{ type: "BODY", text: "Oi, {{1}}! Temos novidade no app do Lavacar." }] },
+  { name: "sofia_promo_recusada", status: "REJECTED", rejected_reason: "INCORRECT_CATEGORY", category: "UTILITY", language: "pt_BR", components: [{ type: "BODY", text: "Oi, {{1}}! Desconto de 20% hoje." }] },
+  { name: "alerta_falha_automacao", status: "APPROVED", category: "UTILITY", language: "pt_BR", components: [{ type: "HEADER", format: "TEXT", text: "Falha na automação do Lavacar" }, { type: "BODY", text: "Fluxo: {{1}}\nO que aconteceu: {{2}}" }] },
+];
 
 const ORDEM: Record<string, number> = { PENDING: 0, IN_APPEAL: 0, REJECTED: 1, APPROVED: 2 };
 
 export async function listarDaConta(conta: ContaWhatsApp): Promise<ListaDaConta> {
   const cfg = getConfig();
-  const chatwootLigado = infoChatwoot().apiLigada;
-  const base = { conta, chatwootLigado };
+  const base = { conta };
   if (cfg.mock) {
-    const modelos = conta === "carol" ? MODELOS_SIMULACAO.map((t) => paraTela(t)) : [];
+    const modelos = (conta === "carol" ? MODELOS_SIMULACAO : SIMULACAO_SOFIA).map((t) => paraTela(t, conta));
     return { ...base, configurado: true, modelos, erro: "" };
   }
   const waba = wabaDe(conta);
@@ -96,14 +106,14 @@ export async function listarDaConta(conta: ContaWhatsApp): Promise<ListaDaConta>
     const { ok, json } = await meta(url);
     if (!ok) {
       console.error("[radar] Meta recusou a lista de modelos:", conta, json.error?.code, json.error?.message);
-      return { ...base, configurado: true, modelos: todos.map(paraTela), erro: erroDaMeta(json.error) };
+      return { ...base, configurado: true, modelos: todos.map((t) => paraTela(t, conta)), erro: erroDaMeta(json.error) };
     }
     todos.push(...(json.data ?? []));
     url = json.paging?.next ?? null;
   }
   const modelos = todos
     .filter((t) => String(t.language ?? "").toLowerCase().startsWith("pt"))
-    .map(paraTela)
+    .map((t) => paraTela(t, conta))
     // Em análise e recusados primeiro (é o que a equipe acompanha); dentro de cada grupo, por nome.
     .sort((a, b) => (ORDEM[a.status] ?? 3) - (ORDEM[b.status] ?? 3) || a.nome.localeCompare(b.nome));
   return { ...base, configurado: true, modelos, erro: "" };
@@ -133,20 +143,4 @@ export async function criarModelo(r: RascunhoModelo): Promise<{ nome: string; st
   }
   if (r.conta === "carol") esquecerModelos();
   return { nome, status: String(json.status ?? "PENDING"), categoria: String(json.category ?? r.categoria) };
-}
-
-/**
- * Envia um modelo aprovado ao contato da conversa: escreve "#template nome" (e " ia") numa nota privada; o n8n
- * envia, atualiza a sessão e responde na própria conversa (✅ enviado / ❌ motivo).
- */
-export async function enviarNaConversa(conta: ContaWhatsApp, conversa: number, nome: string, ia: boolean): Promise<void> {
-  if (!infoChatwoot().apiLigada) throw new ModelosError("O Radar não está ligado ao Chatwoot (CHATWOOT_TOKEN). Use o botão Copiar comando.", 503);
-  if (!Number.isInteger(conversa) || conversa <= 0) throw new ModelosError("Conversa inválida.");
-  const caixa = await caixaDaConversa(conversa);
-  if (caixa !== CONTAS[conta].caixaChatwoot) throw new ModelosError(`Esta conversa não é da caixa da ${conta === "carol" ? "Carol" : "Sofia"}.`);
-  const lista = await listarDaConta(conta);
-  const modelo = lista.modelos.find((m) => m.nome === nome);
-  if (!modelo) throw new ModelosError(`O modelo "${nome}" não existe em ${CONTAS[conta].nome}.`, 404);
-  if (modelo.status !== "APPROVED") throw new ModelosError(`O modelo "${nome}" ainda não foi aprovado pela Meta.`);
-  await notaPrivada(conversa, comandoTemplate(nome, ia));
 }

@@ -1,51 +1,47 @@
 "use client";
 
-import { AlertTriangle, Check, Copy, MessageSquarePlus, Plus, RefreshCw, Search, Send, Trash2, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { PreviaWhatsApp } from "@/components/dashboard/ModeloWhatsApp";
-import { useToast } from "@/components/toast";
-import { Badge, Button, Card, Field, Modal, Toggle, cx, inputClass } from "@/components/ui";
 import {
   CONTAS,
   LIMITES,
   RASCUNHO_VAZIO,
-  comandoTemplate,
   contaDaCaixa,
   ehProspeccao,
   nomeTecnico,
-  rascunhoComoTemplate,
   statusDoModelo,
   validarRascunho,
   type BotaoRascunho,
   type ContaWhatsApp,
   type RascunhoModelo,
 } from "@/lib/modelos-regras";
-import { EXEMPLO, analisarTemplate, dadosDoContato, type ModeloWhatsApp } from "@/lib/templates-regras";
+import { comoChamar, ehBotaoDeSaida, type ModeloWhatsApp } from "@/lib/templates-regras";
 
 /**
- * Aba "Modelos" (Dashboard App do Chatwoot, em /chatwoot/modelos; também abre direto no Radar).
- * O Chatwoot manda a conversa aberta por postMessage ("appContext"): com ela, a aba já escolhe a conta
- * (caixa 2 = Carol, 6 = Sofia) e oferece enviar o modelo para o contato.
+ * Aba "Modelos" do Chatwoot (Dashboard App, em /chatwoot/modelos): criar templates do WhatsApp da Carol e da Sofia
+ * e acompanhar a aprovação da Meta. Enviar ao cliente é na aba "📤 Enviar Template" (n8n), que já existia.
+ * Visual igual ao das outras abas (chatwoot.css). O Chatwoot manda a conversa aberta por postMessage ("appContext"):
+ * com ela, a aba abre na conta da caixa (2 = Carol, 6 = Sofia) e a prévia usa o nome do contato.
  */
 
 interface ModeloDaConta extends ModeloWhatsApp {
   id: string;
   recusa: string;
+  daAssistente: boolean;
+  semEnvio: string;
 }
 interface ListaDaConta {
   conta: ContaWhatsApp;
   configurado: boolean;
   modelos: ModeloDaConta[];
   erro: string;
-  chatwootLigado: boolean;
 }
 interface Contexto {
-  conversa: number;
   caixa: number;
   nome: string;
-  telefone: string;
 }
+type Filtro = "todos" | "APPROVED" | "PENDING" | "REJECTED";
 
 /** Só aceitamos o contexto vindo do nosso Chatwoot. */
 const ORIGEM_CHATWOOT = /^https:\/\/chat\.lavacar\.app$/;
@@ -63,22 +59,106 @@ function lerContexto(dados: unknown): Contexto | null {
   if (ev?.event !== "appContext" || !ev.data?.conversation) return null;
   const c = ev.data.conversation;
   const contato = (ev.data.contact ?? (c.meta as { sender?: Record<string, unknown> } | undefined)?.sender ?? {}) as Record<string, unknown>;
-  const conversa = Number(c.id);
-  if (!Number.isInteger(conversa) || conversa <= 0) return null;
-  return { conversa, caixa: Number(c.inbox_id), nome: String(contato.name ?? ""), telefone: String(contato.phone_number ?? "") };
+  return { caixa: Number(c.inbox_id), nome: String(contato.name ?? "") };
 }
 
-const CATEGORIAS = [
-  { value: "MARKETING" as const, label: "Marketing", hint: "Prospecção, ofertas, retomada de conversa. Custa mais por conversa." },
-  { value: "UTILITY" as const, label: "Utilidade", hint: "Aviso de algo que a pessoa já pediu ou usa (agendamento, cadastro). Sem promoção." },
-];
+const PERFIL: Record<ContaWhatsApp, { nome: string; papel: string; img: string }> = {
+  carol: { nome: "Carol", papel: "Vendas", img: "/chatwoot/carol.png" },
+  sofia: { nome: "Sofia", papel: "Suporte", img: "/chatwoot/sofia.png" },
+};
+const CATEGORIA: Record<string, string> = { MARKETING: "Marketing", UTILITY: "Utilidade", AUTHENTICATION: "Código" };
+const TOM: Record<string, string> = { green: "ok", amber: "at", red: "no", gray: "" };
+const grupoStatus = (s: string) => (s === "IN_APPEAL" ? "PENDING" : s);
+
+/** "carol_retomada_12_meses" → "Retomada 12 meses" (os da automação ficam com o nome técnico). */
+function amigavel(m: { nome: string; daAssistente: boolean }, conta: ContaWhatsApp): string {
+  if (!m.daAssistente) return m.nome;
+  const t = m.nome.slice(CONTAS[conta].prefixo.length).replace(/_/g, " ").trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : m.nome;
+}
 
 async function lerJson<T>(res: Response): Promise<T & { erro?: string }> {
   return (await res.json().catch(() => ({}))) as T & { erro?: string };
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Prévia do WhatsApp (mesmo desenho do Enviar Template). Variáveis aparecem destacadas; as que o envio não preenche
+// ficam como {{n}}.
+// ---------------------------------------------------------------------------------------------------------------
+const VAR = /\{\{\s*([\w.]+)\s*\}\}/g;
+
+function formatar(texto: string, chave: string): ReactNode {
+  return texto.split(/(\*[^*\n]+\*|_[^_\n]+_)/g).map((p, i) => {
+    if (/^\*[^*]+\*$/.test(p)) return <b key={`${chave}${i}`}>{p.slice(1, -1)}</b>;
+    if (/^_[^_]+_$/.test(p)) return <i key={`${chave}${i}`}>{p.slice(1, -1)}</i>;
+    return <Fragment key={`${chave}${i}`}>{p}</Fragment>;
+  });
+}
+
+function comVariaveis(texto: string, valores: Record<string, string>): ReactNode {
+  const out: ReactNode[] = [];
+  let ultimo = 0;
+  for (const m of texto.matchAll(VAR)) {
+    const ini = m.index ?? 0;
+    out.push(<Fragment key={`t${ini}`}>{formatar(texto.slice(ultimo, ini), `t${ini}-`)}</Fragment>);
+    const v = valores[m[1]];
+    out.push(
+      <mark key={`v${ini}`} title={v ? "Muda para cada contato" : "Preenchido pela automação"}>
+        {v ?? `{{${m[1]}}}`}
+      </mark>,
+    );
+    ultimo = ini + m[0].length;
+  }
+  out.push(<Fragment key="fim">{formatar(texto.slice(ultimo), "fim-")}</Fragment>);
+  return out;
+}
+
+function PreviaZap({ cabecalho, corpo, rodape, botoes, valores }: { cabecalho: string; corpo: string; rodape: string; botoes: string[]; valores: Record<string, string> }) {
+  if (!corpo.trim())
+    return (
+      <div className="cw-zap">
+        <div className="vazio">Escreva o texto para ver a prévia.</div>
+      </div>
+    );
+  return (
+    <div className="cw-zap">
+      <div className="cw-bolha">
+        {cabecalho && <div className="cab">{cabecalho}</div>}
+        <div>{comVariaveis(corpo, valores)}</div>
+        {rodape && <div className="rod">{rodape}</div>}
+        <div className="hora">agora</div>
+      </div>
+      {botoes.filter(Boolean).map((b, i) => (
+        <div key={`${b}${i}`} className="cw-btnzap">
+          {b}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** O que entra em cada variável na prévia: {{1}} = nome; {{2}} = cidade, só em prospecção. */
+function valoresDaPrevia(nomeTec: string, nome: string, cidade = "em Belo Horizonte"): Record<string, string> {
+  return { "1": nome ? comoChamar(nome) : "João", ...(ehProspeccao(nomeTec) ? { "2": cidade } : {}) };
+}
+
+function Aviso({ tom, ic, titulo, children }: { tom: "info" | "ok" | "at" | "no" | "cz"; ic: string; titulo: ReactNode; children?: ReactNode }) {
+  return (
+    <div className={`cw-aviso ${tom}`}>
+      <span className="ic" aria-hidden>
+        {ic}
+      </span>
+      <span>
+        <b>{titulo}</b>
+        {children && <p>{children}</p>}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+
 export function ModelosChatwoot() {
-  const toast = useToast();
   const [contexto, setContexto] = useState<Contexto | null>(null);
   const [conta, setConta] = useState<ContaWhatsApp>("carol");
   const [aba, setAba] = useState<"lista" | "novo">("lista");
@@ -87,6 +167,8 @@ export function ModelosChatwoot() {
   const [versao, setVersao] = useState(0);
   const [recarregando, setRecarregando] = useState(false);
   const [semSessao, setSemSessao] = useState(false);
+  const [criado, setCriado] = useState<{ conta: ContaWhatsApp; nome: string } | null>(null);
+  const [base, setBase] = useState<Partial<RascunhoModelo> | null>(null);
 
   // Contexto do Chatwoot (conversa aberta).
   useEffect(() => {
@@ -103,7 +185,7 @@ export function ModelosChatwoot() {
     return () => window.removeEventListener("message", onMsg);
   }, []);
 
-  // Lista da conta escolhida (de novo a cada "Atualizar" ou depois de criar um modelo).
+  // Lista da conta escolhida (de novo a cada "Atualizar" ou depois de criar um template).
   useEffect(() => {
     let vivo = true;
     fetch(`/api/modelos?conta=${conta}`, { cache: "no-store" })
@@ -112,12 +194,12 @@ export function ModelosChatwoot() {
         if (res.status === 401) return setSemSessao(true);
         const j = await lerJson<ListaDaConta>(res);
         if (!vivo) return;
-        if (!res.ok) return setErroLista({ conta, msg: j.erro || "Não foi possível ler os modelos." });
+        if (!res.ok) return setErroLista({ conta, msg: j.erro || "Não foi possível ler os templates." });
         setLista(j);
         setErroLista(null);
       })
       .catch((e: Error) => {
-        if (vivo) setErroLista({ conta, msg: e.message || "Não foi possível ler os modelos." });
+        if (vivo) setErroLista({ conta, msg: e.message || "Não foi possível ler os templates." });
       })
       .finally(() => {
         if (vivo) setRecarregando(false);
@@ -133,89 +215,93 @@ export function ModelosChatwoot() {
   const listaDaConta = lista?.conta === conta ? lista : null;
   const erro = erroLista?.conta === conta ? erroLista.msg : "";
   const carregando = recarregando || (!listaDaConta && !erro);
+  const perfil = PERFIL[conta];
+  const nomeContato = contexto && contaDaCaixa(contexto.caixa) === conta ? contexto.nome : "";
 
   if (semSessao) {
     return (
-      <main className="mx-auto max-w-md p-6 text-center">
-        <p className="text-sm text-muted">Para usar os modelos, entre no Radar (a mesma senha do Radar).</p>
-        <a className="mt-4 inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white" href="/login?next=%2Fchatwoot%2Fmodelos">
-          Entrar no Radar
-        </a>
+      <main className="cw-main">
+        <div className="cw-estado">
+          <p>Para criar templates, entre no Radar (a mesma senha do Radar).</p>
+          <a className="cw-btn prim" href="/login?next=%2Fchatwoot%2Fmodelos">
+            Entrar no Radar
+          </a>
+        </div>
       </main>
     );
   }
 
-  const contaDaConversa = contexto ? contaDaCaixa(contexto.caixa) : null;
-
   return (
-    <main className="mx-auto max-w-3xl space-y-4 p-4 sm:p-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-base font-bold text-ink">
-            <MessageSquarePlus className="size-5 text-brand" /> Modelos do WhatsApp
-          </h1>
-          <p className="text-xs text-muted">
-            {contexto ? (
-              <>
-                <UserRound className="mr-1 inline size-3.5" />
-                Conversa com <b className="text-ink">{contexto.nome || contexto.telefone || "contato"}</b>
-                {contaDaConversa ? ` · caixa da ${contaDaConversa === "carol" ? "Carol" : "Sofia"}` : " · caixa sem modelos (nem Carol, nem Sofia)"}
-              </>
-            ) : (
-              "Abra pela aba Modelos de uma conversa no Chatwoot para enviar ao contato."
-            )}
-          </p>
+    <main className="cw-main">
+      <div className="cw-topo">
+        <div className="cw-id">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="cw-av" src={perfil.img} alt="" />
+          <div>
+            <h1>Templates do WhatsApp</h1>
+            <p>
+              Número da <b>{perfil.nome}</b> ({perfil.papel.toLowerCase()}) · crie templates e acompanhe a aprovação da Meta
+            </p>
+          </div>
         </div>
-        <div className="flex rounded-xl border border-line bg-card p-0.5 text-sm" role="tablist" aria-label="Conta do WhatsApp">
+        <div className="cw-contas" role="group" aria-label="Número do WhatsApp">
           {(Object.keys(CONTAS) as ContaWhatsApp[]).map((c) => (
-            <button
-              key={c}
-              type="button"
-              role="tab"
-              aria-selected={conta === c}
-              onClick={() => setConta(c)}
-              className={cx("rounded-lg px-3 py-1.5 font-semibold transition", conta === c ? "bg-brand text-white" : "text-muted hover:text-ink")}
-            >
-              {c === "carol" ? "Carol" : "Sofia"}
+            <button key={c} type="button" className="cw-conta" aria-pressed={conta === c} onClick={() => setConta(c)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={PERFIL[c].img} alt="" />
+              <span>
+                <b>{PERFIL[c].nome}</b>
+                <small>{PERFIL[c].papel}</small>
+              </span>
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
-      <div className="flex gap-1 border-b border-line text-sm">
-        {(
-          [
-            ["lista", "Modelos"],
-            ["novo", "Novo modelo"],
-          ] as const
-        ).map(([v, rotulo]) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => setAba(v)}
-            className={cx("-mb-px border-b-2 px-3 py-2 font-semibold", aba === v ? "border-brand text-brand-700" : "border-transparent text-muted hover:text-ink")}
-          >
-            {rotulo}
-          </button>
-        ))}
+      <Aviso tom="info" ic="📤" titulo="Para mandar ao cliente, use a aba 📤 Enviar Template da conversa.">
+        Aqui você cria templates novos e acompanha a aprovação da Meta.
+      </Aviso>
+
+      <div className="cw-abas" role="tablist">
+        <button type="button" role="tab" className="cw-aba" aria-selected={aba === "lista"} onClick={() => setAba("lista")}>
+          Templates da {perfil.nome}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className="cw-aba"
+          aria-selected={aba === "novo"}
+          onClick={() => {
+            setBase(null);
+            setAba("novo");
+          }}
+        >
+          + Novo template
+        </button>
       </div>
 
       {aba === "lista" ? (
-        <ListaModelos
+        <Lista
           conta={conta}
           lista={listaDaConta}
           carregando={carregando}
           erro={erro}
-          contexto={contaDaConversa === conta ? contexto : null}
+          nomeContato={nomeContato}
+          criado={criado?.conta === conta ? criado.nome : ""}
           onAtualizar={recarregar}
-          onNovo={() => setAba("novo")}
+          onNovo={(b) => {
+            setBase(b);
+            setAba("novo");
+          }}
         />
       ) : (
-        <NovoModelo
-          key={conta}
+        <Novo
+          key={`${conta}-${JSON.stringify(base)}`}
           conta={conta}
+          base={base}
+          nomeContato={nomeContato}
           onCriado={(nome) => {
-            toast(`Modelo "${nome}" enviado para a Meta. O status aparece na lista.`, "success");
+            setCriado({ conta, nome });
             setAba("lista");
             recarregar();
           }}
@@ -225,12 +311,15 @@ export function ModelosChatwoot() {
   );
 }
 
-function ListaModelos({
+// ---------------------------------------------------------------------------------------------------------------
+
+function Lista({
   conta,
   lista,
   carregando,
   erro,
-  contexto,
+  nomeContato,
+  criado,
   onAtualizar,
   onNovo,
 }: {
@@ -238,371 +327,464 @@ function ListaModelos({
   lista: ListaDaConta | null;
   carregando: boolean;
   erro: string;
-  contexto: Contexto | null;
+  nomeContato: string;
+  criado: string;
   onAtualizar: () => void;
-  onNovo: () => void;
+  onNovo: (base: Partial<RascunhoModelo> | null) => void;
 }) {
   const [busca, setBusca] = useState("");
-  const [enviar, setEnviar] = useState<ModeloDaConta | null>(null);
-  const modelos = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return (lista?.modelos ?? []).filter((m) => !q || m.nome.includes(q) || m.corpo.toLowerCase().includes(q));
-  }, [lista, busca]);
-  const dados = contexto?.nome ? dadosDoContato(contexto.nome, "") : EXEMPLO;
+  const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [escolhido, setEscolhido] = useState("");
+  const [verAutomacao, setVerAutomacao] = useState(false);
 
-  if (lista && !lista.configurado) {
+  const todos = useMemo(() => lista?.modelos ?? [], [lista]);
+  const daAssistente = todos.filter((m) => m.daAssistente);
+  const quantos = (s: string) => daAssistente.filter((m) => grupoStatus(m.status) === s).length;
+  const q = busca.trim().toLowerCase();
+  const casa = (m: ModeloDaConta) => !q || m.nome.includes(q) || m.corpo.toLowerCase().includes(q);
+  const visiveis = daAssistente.filter((m) => casa(m) && (filtro === "todos" || grupoStatus(m.status) === filtro));
+  const automacao = todos.filter((m) => !m.daAssistente && casa(m));
+  const atual = todos.find((m) => m.nome === (escolhido || criado)) ?? visiveis[0] ?? null;
+
+  if (!lista && carregando)
     return (
-      <Card className="p-4 text-sm text-muted">
-        O Radar ainda não está ligado à Meta para a {conta === "carol" ? "Carol" : "Sofia"} (falta o token META_TOKEN no Radar). Fale com o administrador.
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-          <input className={cx(inputClass, "pl-9")} placeholder="Procurar pelo nome ou pelo texto" value={busca} onChange={(e) => setBusca(e.target.value)} />
-        </div>
-        <Button variant="outline" onClick={onAtualizar} loading={carregando} icon={<RefreshCw className="size-4" />} aria-label="Atualizar">
-          <span className="max-sm:hidden">Atualizar</span>
-        </Button>
-        <Button onClick={onNovo} icon={<Plus className="size-4" />}>
-          <span className="max-sm:hidden">Novo</span>
-        </Button>
+      <div className="cw-estado">
+        <div className="cw-giro" />
+        Carregando os templates…
       </div>
+    );
+  if (lista && !lista.configurado)
+    return (
+      <Aviso tom="at" ic="⚠️" titulo="O Radar ainda não está ligado à Meta.">
+        Falta o token da Meta (META_TOKEN) no Radar. Fale com o administrador.
+      </Aviso>
+    );
 
-      {(erro || lista?.erro) && (
-        <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {erro || lista?.erro}
-        </p>
-      )}
-
-      {!lista && carregando && <div className="skeleton h-24 rounded-2xl" />}
-      {lista && modelos.length === 0 && !carregando && <p className="py-6 text-center text-sm text-muted">Nenhum modelo{busca ? " com esse texto" : ""}.</p>}
-
-      {modelos.map((m) => {
-        const st = statusDoModelo(m.status);
-        return (
-          <Card key={m.id} className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-ink" title={m.nome}>
-                  {m.nome}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {m.categoria === "UTILITY" ? "Utilidade" : m.categoria === "MARKETING" ? "Marketing" : m.categoria}
-                  {st.explica && m.status !== "APPROVED" ? ` · ${st.explica}` : ""}
-                </p>
-              </div>
-              <Badge tone={st.tom}>{st.rotulo}</Badge>
-            </div>
-            {m.status === "REJECTED" && m.recusa && <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs text-red-800">Motivo da Meta: {m.recusa}</p>}
-            <div className="mt-3">
-              <PreviaWhatsApp modelo={m} compacta dados={dados} />
-            </div>
-            {m.status === "APPROVED" && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {contexto && lista?.chatwootLigado ? (
-                  <Button size="sm" icon={<Send className="size-3.5" />} onClick={() => setEnviar(m)}>
-                    Enviar para este contato
-                  </Button>
-                ) : null}
-                <CopiarComando nome={m.nome} />
-              </div>
-            )}
-          </Card>
-        );
-      })}
-
-      <ConfirmarEnvio conta={conta} contexto={contexto} modelo={enviar} onClose={() => setEnviar(null)} />
-    </div>
+  const kpi = (f: Filtro, tom: string, rotulo: string, n: number) => (
+    <button type="button" className={`cw-kpi ${tom}`} aria-pressed={filtro === f} onClick={() => setFiltro(filtro === f && f !== "todos" ? "todos" : f)}>
+      <b>{n}</b>
+      <span>
+        <i />
+        {rotulo}
+      </span>
+    </button>
   );
-}
 
-function CopiarComando({ nome }: { nome: string }) {
-  const [copiado, setCopiado] = useState(false);
-  const [mostrar, setMostrar] = useState(false);
-  const comando = comandoTemplate(nome, false);
   return (
     <>
-      <Button
-        size="sm"
-        variant="outline"
-        icon={copiado ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(comando);
-            setCopiado(true);
-            setTimeout(() => setCopiado(false), 2000);
-          } catch {
-            setMostrar(true);
-          }
-        }}
-        title="Cole numa nota privada da conversa"
-      >
-        {copiado ? "Copiado" : "Copiar comando"}
-      </Button>
-      {mostrar && <input readOnly className={cx(inputClass, "h-8 py-1 text-xs")} value={comando} onFocus={(e) => e.currentTarget.select()} autoFocus />}
+      {criado && (
+        <Aviso tom="ok" ic="✅" titulo={`“${criado}” foi para a análise da Meta.`}>
+          Costuma levar minutos (às vezes até 24 h). Clique em Atualizar para ver o status.
+        </Aviso>
+      )}
+      {(erro || lista?.erro) && (
+        <Aviso tom="no" ic="⚠️" titulo="Não consegui ler tudo da Meta.">
+          {erro || lista?.erro}
+        </Aviso>
+      )}
+
+      <div className="cw-kpis">
+        {kpi("todos", "", "Todos", daAssistente.length)}
+        {kpi("APPROVED", "ok", "Aprovados", quantos("APPROVED"))}
+        {kpi("PENDING", "at", "Em análise", quantos("PENDING"))}
+        {kpi("REJECTED", "no", "Recusados", quantos("REJECTED"))}
+      </div>
+
+      <div className="cw-barra">
+        <input className="cw-busca" type="search" placeholder="Procurar pelo nome ou pelo texto" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Procurar template" />
+        <button type="button" className="cw-btn" onClick={onAtualizar} disabled={carregando}>
+          <RefreshCw className={carregando ? "animate-spin" : ""} /> Atualizar
+        </button>
+        <button type="button" className="cw-btn prim" onClick={() => onNovo(null)}>
+          <Plus /> Novo template
+        </button>
+      </div>
+
+      <div className="cw-grade">
+        <section>
+          <p className="cw-rotulo">Templates da {PERFIL[conta].nome}</p>
+          <div className="cw-lista">
+            {visiveis.length === 0 && (
+              <div className="cw-vazio">
+                Nenhum template {filtro === "todos" ? "" : "nessa situação "}
+                {q ? "com esse texto" : ""}.
+              </div>
+            )}
+            {visiveis.map((m) => (
+              <ItemLista key={m.id} m={m} conta={conta} ativo={atual?.nome === m.nome} onClick={() => setEscolhido(m.nome)} />
+            ))}
+          </div>
+
+          {automacao.length > 0 && (
+            <>
+              <button type="button" className="cw-auto" aria-expanded={verAutomacao} onClick={() => setVerAutomacao((v) => !v)}>
+                <span>
+                  <b>Da automação ({automacao.length})</b> · avisos para a equipe e lembretes automáticos. Não são para mandar ao cliente.
+                </span>
+                <ChevronDown />
+              </button>
+              {verAutomacao && (
+                <div className="cw-lista" style={{ marginTop: 8 }}>
+                  {automacao.map((m) => (
+                    <ItemLista key={m.id} m={m} conta={conta} ativo={atual?.nome === m.nome} onClick={() => setEscolhido(m.nome)} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        <aside className="cw-lado" aria-label="Detalhes do template">
+          {atual ? <Detalhes m={atual} conta={conta} nomeContato={nomeContato} onRefazer={onNovo} /> : <div className="cw-vazio">Escolha um template à esquerda.</div>}
+        </aside>
+      </div>
     </>
   );
 }
 
-function ConfirmarEnvio({ conta, contexto, modelo, onClose }: { conta: ContaWhatsApp; contexto: Contexto | null; modelo: ModeloDaConta | null; onClose: () => void }) {
-  const toast = useToast();
-  const [ia, setIa] = useState(false);
-  const [enviando, setEnviando] = useState(false);
-  const quem = conta === "carol" ? "Carol" : "Sofia";
-  if (!modelo || !contexto) return null;
-  const enviar = async () => {
-    setEnviando(true);
-    try {
-      const res = await fetch("/api/modelos/enviar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conta, conversa: contexto.conversa, nome: modelo.nome, ia }),
-      });
-      const j = await lerJson<{ ok?: boolean }>(res);
-      if (!res.ok) throw new Error(j.erro || "Não foi possível enviar.");
-      toast("Pedido enviado. O resultado aparece como nota na conversa (✅ enviado ou ❌ motivo).", "success");
-      onClose();
-    } catch (e) {
-      toast((e as Error).message, "error");
-    } finally {
-      setEnviando(false);
-    }
-  };
+function ItemLista({ m, conta, ativo, onClick }: { m: ModeloDaConta; conta: ContaWhatsApp; ativo: boolean; onClick: () => void }) {
+  const st = statusDoModelo(m.status);
   return (
-    <Modal open onClose={onClose} title="Enviar modelo para o contato?">
-      <div className="space-y-4 text-sm">
-        <p className="text-muted">
-          <b className="text-ink">{modelo.nome}</b> vai para <b className="text-ink">{contexto.nome || contexto.telefone || "o contato desta conversa"}</b> pelo número da {quem}.
-        </p>
-        <PreviaWhatsApp modelo={modelo} dados={contexto.nome ? dadosDoContato(contexto.nome, "") : EXEMPLO} destacar />
-        <Toggle
-          checked={ia}
-          onChange={setIa}
-          label={`Quando o contato responder, a ${quem} (IA) continua`}
-          hint="Desligado: a conversa fica com a equipe, e você responde por aqui."
-        />
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={enviar} loading={enviando} icon={<Send className="size-4" />}>
-            Enviar agora
-          </Button>
-        </div>
+    <button type="button" className="cw-item" aria-current={ativo} onClick={onClick}>
+      <div className="l1">
+        <span className="nome">{amigavel(m, conta)}</span>
+        <span className={`cw-pill ${TOM[st.tom]}`}>{st.rotulo}</span>
       </div>
-    </Modal>
+      {m.daAssistente && <div className="tec">{m.nome}</div>}
+      <div className="resumo">{m.corpo.replace(/\s+/g, " ")}</div>
+    </button>
   );
 }
 
-function NovoModelo({ conta, onCriado }: { conta: ContaWhatsApp; onCriado: (nome: string) => void }) {
-  const toast = useToast();
-  const [r, setR] = useState<RascunhoModelo>({ ...RASCUNHO_VAZIO, conta });
+function Detalhes({ m, conta, nomeContato, onRefazer }: { m: ModeloDaConta; conta: ContaWhatsApp; nomeContato: string; onRefazer: (b: Partial<RascunhoModelo>) => void }) {
+  const status = grupoStatus(m.status);
+  const refazer = () =>
+    onRefazer({
+      nome: `${amigavel(m, conta)} v2`,
+      categoria: m.categoria === "UTILITY" ? "UTILITY" : "MARKETING",
+      cabecalho: m.cabecalho,
+      corpo: m.corpo,
+      rodape: m.rodape,
+      botoes: m.botoes.map((texto) => ({ tipo: "resposta" as const, texto })),
+    });
+
+  let aviso: ReactNode;
+  if (!m.daAssistente) {
+    aviso = (
+      <Aviso tom="cz" ic="⚙️" titulo="Usado só pela automação.">
+        Avisos para a equipe ou lembretes automáticos. Não é para mandar ao cliente.
+      </Aviso>
+    );
+  } else if (status === "APPROVED" && !m.semEnvio) {
+    aviso = (
+      <Aviso tom="ok" ic="✅" titulo="Aprovado pela Meta: pronto para enviar.">
+        Na conversa, abra a aba 📤 Enviar Template e escolha este template.
+      </Aviso>
+    );
+  } else if (status === "APPROVED") {
+    aviso = (
+      <Aviso tom="at" ic="⚠️" titulo="Aprovado, mas não dá para enviar à mão.">
+        Motivo: {m.semEnvio}.
+      </Aviso>
+    );
+  } else if (status === "PENDING") {
+    aviso = (
+      <Aviso tom="at" ic="⏳" titulo="Em análise na Meta.">
+        Costuma levar minutos (às vezes até 24 h). Clique em Atualizar para ver se mudou.
+      </Aviso>
+    );
+  } else if (status === "REJECTED") {
+    aviso = (
+      <Aviso tom="no" ic="❌" titulo={`Recusado pela Meta${m.recusa ? `: ${m.recusa}` : ""}.`}>
+        Um template não muda depois de enviado: ajuste o texto e crie outro com nome diferente.{" "}
+        <button type="button" className="cw-btn link" onClick={refazer}>
+          Corrigir e criar de novo →
+        </button>
+      </Aviso>
+    );
+  } else {
+    const st = statusDoModelo(m.status);
+    aviso = (
+      <Aviso tom="cz" ic="ℹ️" titulo={st.rotulo}>
+        {st.explica || null}
+      </Aviso>
+    );
+  }
+
+  return (
+    <>
+      <h2>{amigavel(m, conta)}</h2>
+      <div className="sub">{m.nome}</div>
+      {aviso}
+      <p className="cw-rotulo">Como o contato vê{nomeContato ? ` (${comoChamar(nomeContato)})` : ""}</p>
+      <PreviaZap cabecalho={m.cabecalho} corpo={m.corpo} rodape={m.rodape} botoes={m.botoes} valores={m.daAssistente ? valoresDaPrevia(m.nome, nomeContato) : {}} />
+      <dl className="cw-kv">
+        <dt>Categoria</dt>
+        <dd>
+          <span className={`cw-pill ${m.categoria === "MARKETING" ? "mk" : ""}`}>{CATEGORIA[m.categoria] ?? m.categoria}</span>
+        </dd>
+        <dt>Idioma</dt>
+        <dd>{m.idioma === "pt_BR" ? "Português (Brasil)" : m.idioma}</dd>
+      </dl>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+
+const CATEGORIAS = [
+  { value: "MARKETING" as const, label: "Marketing", hint: "Prospecção, ofertas, retomada de conversa. Custa mais por conversa." },
+  { value: "UTILITY" as const, label: "Utilidade", hint: "Aviso de algo que a pessoa já pediu ou usa (agendamento, cadastro). Sem promoção." },
+];
+
+function Contador({ n, max }: { n: number; max: number }) {
+  return (
+    <small className={n > max ? "no" : n > max * 0.85 ? "at" : ""}>
+      {n}/{max}
+    </small>
+  );
+}
+
+function Novo({ conta, base, nomeContato, onCriado }: { conta: ContaWhatsApp; base: Partial<RascunhoModelo> | null; nomeContato: string; onCriado: (nome: string) => void }) {
+  const [r, setR] = useState<RascunhoModelo>({ ...RASCUNHO_VAZIO, ...(base ?? {}), conta });
   const [confirmar, setConfirmar] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const mudar = <K extends keyof RascunhoModelo>(k: K, v: RascunhoModelo[K]) => setR((x) => ({ ...x, [k]: v }));
+  const [falha, setFalha] = useState("");
+  const mudar = <K extends keyof RascunhoModelo>(k: K, v: RascunhoModelo[K]) => {
+    setConfirmar(false);
+    setR((x) => ({ ...x, [k]: v }));
+  };
   const nome = nomeTecnico(r.nome, conta);
   const prospeccao = ehProspeccao(nome);
   const v = validarRascunho(r);
-  const previa = analisarTemplate(rascunhoComoTemplate(r));
-  const dados = { primeiroNome: r.exemploNome || "João", cidadeTexto: r.exemploCidade || "em Belo Horizonte" };
   const temNome = /\{\{\s*1\s*\}\}/.test(r.corpo);
   const temCidade = /\{\{\s*2\s*\}\}/.test(r.corpo);
+  const quem = PERFIL[conta].nome;
+  const opcional = <span style={{ fontWeight: 500, color: "var(--fraco)" }}> (opcional)</span>;
 
   const inserir = (variavel: string) => {
-    const el = document.getElementById("modelo-corpo") as HTMLTextAreaElement | null;
-    if (!el) return mudar("corpo", r.corpo + variavel);
-    const ini = el.selectionStart ?? r.corpo.length;
-    const fim = el.selectionEnd ?? ini;
+    const el = document.getElementById("cw-corpo") as HTMLTextAreaElement | null;
+    const ini = el?.selectionStart ?? r.corpo.length;
+    const fim = el?.selectionEnd ?? ini;
     mudar("corpo", r.corpo.slice(0, ini) + variavel + r.corpo.slice(fim));
     requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(ini + variavel.length, ini + variavel.length);
+      el?.focus();
+      el?.setSelectionRange(ini + variavel.length, ini + variavel.length);
     });
   };
   const mudarBotao = (i: number, b: Partial<BotaoRascunho>) => mudar("botoes", r.botoes.map((x, j) => (j === i ? { ...x, ...b } : x)));
 
   const criar = async () => {
     setEnviando(true);
+    setFalha("");
     try {
       const res = await fetch("/api/modelos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
       const j = await lerJson<{ nome?: string }>(res);
-      if (!res.ok) throw new Error(j.erro || "A Meta não aceitou o modelo.");
-      setConfirmar(false);
+      if (!res.ok) throw new Error(j.erro || "A Meta não aceitou o template.");
       onCriado(j.nome || nome);
     } catch (e) {
-      toast((e as Error).message, "error");
+      setFalha((e as Error).message);
+      setConfirmar(false);
     } finally {
       setEnviando(false);
     }
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <div className="space-y-4">
-        <Field label="Nome do modelo" hint={nome ? `Na Meta: ${nome}` : `Começa com ${CONTAS[conta].prefixo}`} htmlFor="modelo-nome">
-          <input id="modelo-nome" className={inputClass} value={r.nome} onChange={(e) => mudar("nome", e.target.value)} placeholder="ex.: retomada 12 meses" maxLength={120} />
-        </Field>
-        {conta === "carol" && (
-          <p className="-mt-2 text-xs text-muted">
-            Para usar no disparo do Radar, o nome precisa começar com <b>prospeccao</b> (ex.: prospeccao nova cidade). Só esses podem usar a cidade.
-          </p>
-        )}
-
+    <div className="cw-grade">
+      <section className="cw-form">
         <div>
-          <p className="mb-1.5 text-sm font-semibold text-ink">Categoria</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {CATEGORIAS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => mudar("categoria", c.value)}
-                aria-pressed={r.categoria === c.value}
-                className={cx(
-                  "rounded-xl border px-3 py-2.5 text-left transition",
-                  r.categoria === c.value ? "border-brand bg-brand-50 ring-2 ring-brand/15" : "border-line bg-card hover:border-brand-200",
+          <p className="cw-rotulo">1. Nome e tipo</p>
+          <div className="cw-sec">
+            <div>
+              <label className="cw-campo-l" htmlFor="cw-nome">
+                Nome do template
+                {nome && <span className="cw-tec">{nome}</span>}
+              </label>
+              <input id="cw-nome" className="cw-campo" value={r.nome} onChange={(e) => mudar("nome", e.target.value)} placeholder="ex.: retomada 12 meses" maxLength={120} />
+              <p className="cw-ajuda">
+                Só para a equipe achar depois: o cliente não vê.
+                {conta === "carol" && (
+                  <>
+                    {" "}
+                    Para usar no disparo do Radar, comece com <b>prospeccao</b> (ex.: prospeccao nova cidade).
+                  </>
                 )}
-              >
-                <span className="block text-sm font-bold text-ink">{c.label}</span>
-                <span className="block text-xs text-muted">{c.hint}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <Field label="Título (opcional)" hint={`${r.cabecalho.length}/${LIMITES.cabecalho}`} htmlFor="modelo-titulo">
-          <input id="modelo-titulo" className={inputClass} value={r.cabecalho} onChange={(e) => mudar("cabecalho", e.target.value)} maxLength={80} placeholder="ex.: Lavacar • Parceria para lava-jatos" />
-        </Field>
-
-        <Field label="Texto da mensagem" hint={`${r.corpo.length}/${LIMITES.corpo}`} htmlFor="modelo-corpo">
-          <textarea
-            id="modelo-corpo"
-            className={cx(inputClass, "min-h-36 resize-y leading-relaxed")}
-            value={r.corpo}
-            onChange={(e) => mudar("corpo", e.target.value)}
-            placeholder={"Oi, {{1}}! Aqui é a Carol, do Lavacar. 👋\n\n..."}
-          />
-        </Field>
-        <div className="-mt-2 flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => inserir("{{1}}")}>
-            + nome do contato
-          </Button>
-          {prospeccao && (
-            <Button size="sm" variant="outline" onClick={() => inserir("{{2}}")}>
-              + cidade
-            </Button>
-          )}
-          <span className="self-center text-xs text-muted">*negrito*, _itálico_ e emojis funcionam no texto.</span>
-        </div>
-        {(temNome || temCidade) && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {temNome && (
-              <Field label="Exemplo do nome" hint="A Meta pede um exemplo">
-                <input className={inputClass} value={r.exemploNome} onChange={(e) => mudar("exemploNome", e.target.value)} maxLength={40} />
-              </Field>
-            )}
-            {temCidade && (
-              <Field label="Exemplo da cidade">
-                <input className={inputClass} value={r.exemploCidade} onChange={(e) => mudar("exemploCidade", e.target.value)} maxLength={60} />
-              </Field>
-            )}
-          </div>
-        )}
-
-        <Field label="Rodapé (opcional)" hint={`${r.rodape.length}/${LIMITES.rodape}`} htmlFor="modelo-rodape">
-          <input id="modelo-rodape" className={inputClass} value={r.rodape} onChange={(e) => mudar("rodape", e.target.value)} maxLength={80} placeholder="ex.: Lavacar • Resposta rápida, sem compromisso" />
-        </Field>
-
-        <div>
-          <p className="mb-1.5 text-sm font-semibold text-ink">Botões (opcional, até {LIMITES.botoes})</p>
-          <div className="space-y-2">
-            {r.botoes.map((b, i) => (
-              <div key={i} className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[150px_1fr_auto]">
-                <select
-                  className={cx(inputClass, "py-2 max-sm:col-span-2")}
-                  value={b.tipo}
-                  onChange={(e) => mudarBotao(i, { tipo: e.target.value === "link" ? "link" : "resposta" })}
-                  aria-label={`Tipo do botão ${i + 1}`}
-                >
-                  <option value="resposta">Resposta rápida</option>
-                  <option value="link">Link</option>
-                </select>
-                <input className={cx(inputClass, "py-2")} value={b.texto} onChange={(e) => mudarBotao(i, { texto: e.target.value })} maxLength={40} placeholder="Texto do botão" />
-                <button type="button" className="rounded-lg p-2 text-muted hover:bg-surface hover:text-red-600" onClick={() => mudar("botoes", r.botoes.filter((_, j) => j !== i))} aria-label="Tirar botão">
-                  <Trash2 className="size-4" />
+              </p>
+            </div>
+            <div className="cw-opcoes" role="radiogroup" aria-label="Categoria">
+              {CATEGORIAS.map((c) => (
+                <button key={c.value} type="button" role="radio" className="cw-opcao" aria-checked={r.categoria === c.value} onClick={() => mudar("categoria", c.value)}>
+                  <b>{c.label}</b>
+                  <small>{c.hint}</small>
                 </button>
-                {b.tipo === "link" && (
-                  <input className={cx(inputClass, "col-span-2 py-2 sm:col-start-2")} value={b.url ?? ""} onChange={(e) => mudarBotao(i, { url: e.target.value })} placeholder="https://..." />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="cw-rotulo">2. Mensagem</p>
+          <div className="cw-sec">
+            <div>
+              <label className="cw-campo-l" htmlFor="cw-titulo">
+                <span>Título{opcional}</span>
+                <Contador n={r.cabecalho.length} max={LIMITES.cabecalho} />
+              </label>
+              <input id="cw-titulo" className="cw-campo" value={r.cabecalho} onChange={(e) => mudar("cabecalho", e.target.value)} maxLength={80} placeholder="ex.: Lavacar • Parceria para lava-jatos" />
+            </div>
+            <div>
+              <label className="cw-campo-l" htmlFor="cw-corpo">
+                Texto
+                <Contador n={r.corpo.length} max={LIMITES.corpo} />
+              </label>
+              <textarea id="cw-corpo" className="cw-campo" value={r.corpo} onChange={(e) => mudar("corpo", e.target.value)} placeholder={`Oi, {{1}}! Aqui é a ${quem}, do Lavacar. 👋\n\n...`} />
+              <div className="cw-chips">
+                <button type="button" className="cw-chip" onClick={() => inserir("{{1}}")}>
+                  + Nome do contato
+                </button>
+                {prospeccao && (
+                  <button type="button" className="cw-chip" onClick={() => inserir("{{2}}")}>
+                    + Cidade
+                  </button>
                 )}
+              </div>
+              <p className="cw-ajuda">
+                <b>*negrito*</b>, <i>_itálico_</i> e emojis funcionam. O nome do contato entra no lugar de <code>{"{{1}}"}</code>.
+              </p>
+            </div>
+            {(temNome || temCidade) && (
+              <div className={temNome && temCidade ? "cw-opcoes" : ""}>
+                {temNome && (
+                  <div>
+                    <label className="cw-campo-l" htmlFor="cw-ex-nome">
+                      Exemplo do nome <small>a Meta pede</small>
+                    </label>
+                    <input id="cw-ex-nome" className="cw-campo" value={r.exemploNome} onChange={(e) => mudar("exemploNome", e.target.value)} maxLength={40} />
+                  </div>
+                )}
+                {temCidade && (
+                  <div>
+                    <label className="cw-campo-l" htmlFor="cw-ex-cidade">
+                      Exemplo da cidade
+                    </label>
+                    <input id="cw-ex-cidade" className="cw-campo" value={r.exemploCidade} onChange={(e) => mudar("exemploCidade", e.target.value)} maxLength={60} />
+                  </div>
+                )}
+              </div>
+            )}
+            <div>
+              <label className="cw-campo-l" htmlFor="cw-rodape">
+                <span>Rodapé{opcional}</span>
+                <Contador n={r.rodape.length} max={LIMITES.rodape} />
+              </label>
+              <input id="cw-rodape" className="cw-campo" value={r.rodape} onChange={(e) => mudar("rodape", e.target.value)} maxLength={80} placeholder="ex.: Lavacar • Resposta rápida, sem compromisso" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="cw-rotulo">3. Botões (opcional, até {LIMITES.botoes})</p>
+          <div className="cw-sec">
+            {r.botoes.length === 0 && (
+              <p className="cw-ajuda" style={{ margin: 0 }}>
+                Sem botões, o cliente responde digitando.
+              </p>
+            )}
+            {r.botoes.map((b, i) => (
+              <div key={i} className="cw-botao">
+                <select className="cw-campo" value={b.tipo} onChange={(e) => mudarBotao(i, { tipo: e.target.value === "link" ? "link" : "resposta" })} aria-label={`Tipo do botão ${i + 1}`}>
+                  <option value="resposta">Resposta rápida</option>
+                  <option value="link">Abrir link</option>
+                </select>
+                <input className="cw-campo" value={b.texto} onChange={(e) => mudarBotao(i, { texto: e.target.value })} maxLength={40} placeholder="Texto do botão" aria-label={`Texto do botão ${i + 1}`} />
+                <button type="button" className="cw-x" onClick={() => mudar("botoes", r.botoes.filter((_, j) => j !== i))} aria-label="Tirar botão">
+                  <Trash2 size={16} />
+                </button>
+                {b.tipo === "link" && <input className="cw-campo url" value={b.url ?? ""} onChange={(e) => mudarBotao(i, { url: e.target.value })} placeholder="https://..." aria-label="Link" />}
               </div>
             ))}
             {r.botoes.length < LIMITES.botoes && (
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" icon={<Plus className="size-3.5" />} onClick={() => mudar("botoes", [...r.botoes, { tipo: "resposta", texto: "" }])}>
-                  Botão
-                </Button>
-                {!r.botoes.some((b) => /n[aã]o tenho interesse/i.test(b.texto)) && (
-                  <Button size="sm" variant="ghost" onClick={() => mudar("botoes", [...r.botoes, { tipo: "resposta", texto: "Não tenho interesse" }])}>
-                    + &quot;Não tenho interesse&quot;
-                  </Button>
+              <div className="cw-chips" style={{ marginTop: 0 }}>
+                <button type="button" className="cw-chip" onClick={() => mudar("botoes", [...r.botoes, { tipo: "resposta", texto: "" }])}>
+                  + Botão
+                </button>
+                {!r.botoes.some((x) => ehBotaoDeSaida(x.texto)) && (
+                  <button type="button" className="cw-chip" onClick={() => mudar("botoes", [...r.botoes, { tipo: "resposta", texto: "Não tenho interesse" }])}>
+                    + “Não tenho interesse” (sai da lista sozinho)
+                  </button>
                 )}
               </div>
             )}
           </div>
         </div>
+      </section>
 
-        {(v.erros.length > 0 || v.avisos.length > 0) && r.corpo.trim() !== "" && (
-          <div className="space-y-1.5 text-xs">
-            {v.erros.map((e) => (
-              <p key={e} className="rounded-lg bg-red-50 px-2.5 py-1.5 text-red-800">
-                {e}
-              </p>
-            ))}
-            {v.avisos.map((a) => (
-              <p key={a} className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-900">
-                {a}
-              </p>
-            ))}
+      <aside className="cw-lado" aria-label="Prévia e envio">
+        <p className="cw-rotulo">4. Confira e envie para a Meta</p>
+        <PreviaZap
+          cabecalho={r.cabecalho.trim()}
+          corpo={r.corpo}
+          rodape={r.rodape.trim()}
+          botoes={r.botoes.map((b) => b.texto.trim())}
+          valores={{ "1": r.exemploNome || (nomeContato ? comoChamar(nomeContato) : "João"), ...(prospeccao ? { "2": r.exemploCidade || "em Belo Horizonte" } : {}) }}
+        />
+        <ul className="cw-checks" aria-live="polite">
+          {r.corpo.trim() === "" && r.nome.trim() === "" ? (
+            <li className="at">Dê um nome e escreva o texto.</li>
+          ) : (
+            <>
+              {v.erros.map((e) => (
+                <li key={e} className="no">
+                  ✕ {e}
+                </li>
+              ))}
+              {v.avisos.map((a) => (
+                <li key={a} className="at">
+                  ! {a}
+                </li>
+              ))}
+              {v.ok && <li className="ok">✓ Tudo certo para mandar à Meta</li>}
+            </>
+          )}
+        </ul>
+        {falha && (
+          <div style={{ marginTop: 12 }}>
+            <Aviso tom="no" ic="❌" titulo="A Meta não aceitou.">
+              {falha}
+            </Aviso>
           </div>
         )}
-
-      </div>
-
-      <aside className="space-y-2 lg:sticky lg:top-4 lg:row-span-2 lg:self-start">
-        <p className="text-xs font-semibold text-muted">Prévia (como o contato vê)</p>
-        {r.corpo.trim() ? <PreviaWhatsApp modelo={previa} dados={dados} destacar /> : <div className="zap-fundo rounded-xl p-6 text-center text-xs text-muted">Escreva o texto para ver a prévia.</div>}
-      </aside>
-
-      <div className="flex justify-end lg:col-start-1">
-        <Button onClick={() => setConfirmar(true)} disabled={!v.ok} icon={<Send className="size-4" />}>
-          Enviar para aprovação
-        </Button>
-      </div>
-
-      <Modal open={confirmar} onClose={() => setConfirmar(false)} title="Mandar para a aprovação da Meta?">
-        <div className="space-y-3 text-sm">
-          <p className="text-muted">
-            <b className="text-ink">{nome}</b> · {r.categoria === "UTILITY" ? "Utilidade" : "Marketing"} · conta da {conta === "carol" ? "Carol" : "Sofia"}
-          </p>
-          <PreviaWhatsApp modelo={previa} dados={dados} destacar />
-          <p className="text-xs text-muted">
-            Depois de enviado, o texto não muda: para corrigir, crie outro com outro nome. A Meta costuma responder em minutos (às vezes em até 24 h), e o
-            status aparece na lista.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setConfirmar(false)}>
-              Voltar
-            </Button>
-            <Button onClick={criar} loading={enviando} icon={<Send className="size-4" />}>
-              Enviar para a Meta
-            </Button>
+        {confirmar ? (
+          <div className="cw-confirma">
+            <b>Mandar para a aprovação da Meta?</b>
+            <p>
+              <span className="cw-tec">{nome}</span> · {CATEGORIA[r.categoria]} · número da {quem}. Depois de enviado, o texto não muda (para corrigir, crie
+              outro).
+            </p>
+            <div className="acoes">
+              <button type="button" className="cw-btn" onClick={() => setConfirmar(false)} disabled={enviando}>
+                Voltar
+              </button>
+              <button type="button" className="cw-btn prim" onClick={criar} disabled={enviando}>
+                {enviando ? <span className="cw-giro" /> : <Send />} Sim, enviar
+              </button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        ) : (
+          <button type="button" className="cw-enviar" disabled={!v.ok} onClick={() => setConfirmar(true)}>
+            <span className="aviao">
+              <Send />
+            </span>
+            <span className="txt">
+              <b>Enviar para aprovação</b>
+              <small>
+                Número da {quem} · {CATEGORIA[r.categoria]}
+              </small>
+            </span>
+          </button>
+        )}
+      </aside>
     </div>
   );
 }

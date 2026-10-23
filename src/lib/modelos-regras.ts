@@ -226,7 +226,25 @@ export function motivoDaRecusa(motivo: string | undefined): string {
   return MOTIVOS[m] ?? m.toLowerCase().replace(/_/g, " ");
 }
 
-/** O comando que o n8n entende numa nota privada do Chatwoot. "ia": quando o contato responder, a IA continua. */
-export function comandoTemplate(nome: string, ia: boolean): string {
-  return `#template ${nome}${ia ? " ia" : ""}`;
+/**
+ * Templates da assistente x da automação. Nas contas da Meta também ficam os que só a automação usa: avisos para a
+ * equipe (alerta_*, dono_*), lembretes de agendamento e, na conta da Sofia, alguns carol_* de repasse. Esses não são
+ * para enviar à mão: na tela ficam numa seção fechada, sem envio (mesma regra da aba "📤 Enviar Template").
+ */
+export function ehDaAssistente(nome: string, conta: ContaWhatsApp): boolean {
+  const n = String(nome ?? "").toLowerCase();
+  return n.startsWith(CONTAS[conta].prefixo) && !/^(alerta|dono)_/.test(n);
+}
+
+/**
+ * Por que um template não pode ser enviado ao cliente pela aba "📤 Enviar Template" (vazio = pode).
+ * O envio (n8n) só preenche {{1}} = nome e, em prospecção, {{2}} = cidade; título só de texto.
+ */
+export function motivoSemEnvio(t: { nome: string; status: string; cabecalho: string; corpo: string }, conta: ContaWhatsApp): string {
+  if (!ehDaAssistente(t.nome, conta)) return "é da automação (avisos e lembretes automáticos)";
+  if (String(t.status ?? "").toUpperCase() !== "APPROVED") return "ainda não foi aprovado pela Meta";
+  const aceitas = ehProspeccao(t.nome) ? ["1", "2"] : ["1"];
+  const estranhas = [...new Set([...variaveis(t.cabecalho), ...variaveis(t.corpo)].filter((v) => !aceitas.includes(v)))];
+  if (estranhas.length) return `usa campos que só a automação preenche (${estranhas.map((v) => `{{${v}}}`).join(", ")})`;
+  return "";
 }

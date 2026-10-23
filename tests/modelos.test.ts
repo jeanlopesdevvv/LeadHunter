@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   RASCUNHO_VAZIO,
-  comandoTemplate,
   contaDaCaixa,
+  ehDaAssistente,
   motivoDaRecusa,
+  motivoSemEnvio,
   nomeTecnico,
   payloadMeta,
   statusDoModelo,
@@ -137,8 +138,24 @@ describe("textos da tela", () => {
     expect(motivoDaRecusa(undefined)).toBe("");
   });
 
-  it("comando que o n8n entende", () => {
-    expect(comandoTemplate("carol_retomada", false)).toBe("#template carol_retomada");
-    expect(comandoTemplate("sofia_aviso", true)).toBe("#template sofia_aviso ia");
+});
+
+describe("da assistente x da automação", () => {
+  it("avisos internos e templates da outra assistente nunca são da assistente", () => {
+    expect(ehDaAssistente("sofia_retomada_contato", "sofia")).toBe(true);
+    expect(ehDaAssistente("alerta_chargeback_v1", "sofia")).toBe(false);
+    expect(ehDaAssistente("alerta_retencao_carol", "sofia")).toBe(false);
+    expect(ehDaAssistente("dono_novo_agendamento", "sofia")).toBe(false);
+    expect(ehDaAssistente("carol_abertura_handoff", "sofia")).toBe(false);
+    expect(ehDaAssistente("carol_prospeccao_lavajato", "carol")).toBe(true);
+  });
+
+  it("motivo para não aparecer no Enviar Template", () => {
+    const t = (nome: string, corpo: string, status = "APPROVED") => ({ nome, status, cabecalho: "", corpo });
+    expect(motivoSemEnvio(t("sofia_retomada_contato", "Oi, {{1}}! Podemos retomar?"), "sofia")).toBe("");
+    expect(motivoSemEnvio(t("alerta_falha_automacao", "Fluxo: {{1}} O que aconteceu: {{2}}"), "sofia")).toMatch(/automação/);
+    expect(motivoSemEnvio(t("sofia_novo", "Oi, {{1}}!", "PENDING"), "sofia")).toMatch(/aprovado/);
+    expect(motivoSemEnvio(t("carol_abertura_x", "Oi {{1}}, a {{2}} te passou: {{3}}"), "carol")).toMatch(/\{\{2\}\}, \{\{3\}\}/);
+    expect(motivoSemEnvio(t("carol_prospeccao_x", "Oi, {{1}}! Lava-jatos {{2}} estão entrando."), "carol")).toBe("");
   });
 });
