@@ -26,6 +26,7 @@ import { quandoCurto } from "@/lib/periodo";
 import { normalizePhone, whatsappLink } from "@/lib/phone";
 
 import { FilaAtendente } from "./FilaAtendente";
+import { FunilAtivacao } from "./FunilAtivacao";
 import { nomeDoModelo } from "./ModeloWhatsApp";
 
 const PERIODOS: { id: Periodo; rotulo: string }[] = [
@@ -336,6 +337,9 @@ export function PainelView() {
           dica="não recebem mais mensagens"
         />
       </div>
+
+      {/* Do primeiro contato com a Carol ao primeiro agendamento do lava-jato */}
+      <FunilAtivacao />
 
       {modelo !== "todos" && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-brand-100 bg-brand-50/70 px-4 py-2.5 text-sm text-brand-800">

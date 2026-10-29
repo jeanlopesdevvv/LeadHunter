@@ -6,6 +6,7 @@ import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, nomeDeAba, registrosCo
 import { getConfig } from "./env";
 import { SheetsError } from "./erros";
 import { comoItemDaFila, type FilaAtendente, type ItemFila } from "./fila-regras";
+import { comoFunil, type FunilAtivacao } from "./funil-regras";
 import { phoneKey } from "./phone";
 import {
   buildHeaderMap,
@@ -411,6 +412,13 @@ export async function lerSaudeNumero(): Promise<unknown> {
   if (!getConfig().banco) return null;
   const r = await noBanco((sql) => sql<Registro[]>`select atendimento.carol_saude_atual() as s`);
   return r[0]?.s ?? null;
+}
+
+/** Funil de ativação de parceiros (30/10/2026): atendimento.funil_ativacao(dias). */
+export async function lerFunilAtivacao(dias: number): Promise<FunilAtivacao> {
+  if (!getConfig().banco) return { ...comoFunil({}, dias), disponivel: false };
+  const linhas = await noBanco((sql) => sql<Registro[]>`select atendimento.funil_ativacao(${dias}::int) as j`);
+  return comoFunil(linhas[0]?.j, dias);
 }
 
 /**
