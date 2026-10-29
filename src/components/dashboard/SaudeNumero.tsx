@@ -21,7 +21,7 @@ function corDa(s: SaudeNumero): { tone: "green" | "amber" | "red" | "gray"; rotu
   return { tone: "green", rotulo: "Verde", ponto: "bg-emerald-500" };
 }
 
-/** "conectado; envio limitado pela Meta" vira itens ("Conectado", "Envio limitado pela Meta"). */
+/** "conectado; sinalizado" vira itens ("Conectado", "Sinalizado"). */
 function itensDaSituacao(texto: string): { texto: string; ok: boolean }[] {
   return texto
     .split(";")

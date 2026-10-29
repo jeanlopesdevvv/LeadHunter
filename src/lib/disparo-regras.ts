@@ -452,6 +452,22 @@ function iso(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * 29/10/2026 (pedido do Jean): o Radar não mostra mais "envio limitado pela Meta" nem "nome de exibição
+ * recusado/pendente". São avisos permanentes da conta (não mudam o freio) e só poluíam o cartão.
+ */
+const SITUACAO_OCULTA = /^(envio limitado pela meta|nome de exibi[cç][aã]o (recusado|pendente|em an[aá]lise|n[aã]o aprovado))$/i;
+const AVISO_OCULTO = /nome de exibi[cç][aã]o|envio (est[aá] )?limitado/i;
+
+/** Tira da situação ("conectado; envio limitado pela Meta; ...") os itens que o Radar não mostra. */
+export function situacaoVisivel(texto: string): string {
+  return texto
+    .split(";")
+    .map((t) => t.trim())
+    .filter((t) => t && !SITUACAO_OCULTA.test(t))
+    .join("; ");
+}
+
 /** Converte o jsonb de atendimento.carol_saude_atual() (ou o texto dele). Inválido = null. */
 export function saudeDoBanco(bruto: unknown): SaudeNumero | null {
   let a = bruto;
@@ -477,11 +493,11 @@ export function saudeDoBanco(bruto: unknown): SaudeNumero | null {
     checadoEm: iso(r.checado_em),
     qualidade: (QUALIDADES as readonly string[]).includes(q) ? (q as SaudeNumero["qualidade"]) : null,
     qualidadeTexto: texto(r.qualidade_pt) ?? "sem nota da Meta",
-    situacaoTexto: texto(r.situacao_pt) ?? "",
+    situacaoTexto: situacaoVisivel(texto(r.situacao_pt) ?? ""),
     nome: texto(r.nome),
     nomeStatus: texto(r.nome_status),
     limiteMeta: texto(r.limite_meta),
-    avisos: Array.isArray(r.avisos) ? r.avisos.filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, 5) : [],
+    avisos: Array.isArray(r.avisos) ? r.avisos.filter((x): x is string => typeof x === "string" && x.trim() !== "" && !AVISO_OCULTO.test(x)).slice(0, 5) : [],
     ultimaTentativaEm: iso(r.ultima_tentativa_em),
     ultimaTentativaOk: typeof r.ultima_tentativa_ok === "boolean" ? r.ultima_tentativa_ok : null,
     ultimoErro: texto(r.ultimo_erro),
@@ -535,11 +551,11 @@ export function saudeSimulada(modo: string | undefined, limite: number, enviados
     checadoEm: new Date(agora - (freio === "sem_leitura" ? 5 * 3_600_000 : 20 * 60_000)).toISOString(),
     qualidade,
     qualidadeTexto: qualidade ? textos[qualidade] : "sem nota da Meta",
-    situacaoTexto: "conectado; envio limitado pela Meta; nome de exibição recusado",
+    situacaoTexto: situacaoVisivel("conectado; envio limitado pela Meta; nome de exibição recusado"),
     nome: "Carol do Lavacar",
     nomeStatus: "DECLINED",
     limiteMeta: null,
-    avisos: ["O nome de exibição ainda não foi aprovado; o limite de mensagens da Meta sobe depois da aprovação."],
+    avisos: [],
     ultimaTentativaEm: new Date(agora - (freio === "sem_leitura" ? 10 : 20) * 60_000).toISOString(),
     ultimaTentativaOk: freio !== "sem_leitura",
     ultimoErro: freio === "sem_leitura" ? "Error validating access token" : null,

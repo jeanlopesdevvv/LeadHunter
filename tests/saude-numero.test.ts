@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { limiteMetaTexto, motivoDaSaude, saudeDoBanco, saudeSimulada } from "@/lib/disparo-regras";
+import { limiteMetaTexto, motivoDaSaude, saudeDoBanco, saudeSimulada, situacaoVisivel } from "@/lib/disparo-regras";
 
 // Formato devolvido por atendimento.carol_saude_atual() (23/10/2026).
 const doBanco = {
@@ -33,8 +33,9 @@ describe("saúde do número da Carol", () => {
     expect(s!.freio).toBe("normal");
     expect(s!.limiteEfetivo).toBe(30);
     expect(s!.qualidade).toBe("GREEN");
-    expect(s!.situacaoTexto).toMatch(/nome de exibição recusado/);
-    expect(s!.avisos).toHaveLength(1);
+    // 29/10: "envio limitado pela Meta" e "nome de exibição recusado" não aparecem mais no Radar
+    expect(s!.situacaoTexto).toBe("conectado");
+    expect(s!.avisos).toHaveLength(0);
     expect(s!.checadoEm).toBe("2026-10-23T17:36:32.957Z");
     expect(saudeDoBanco(JSON.stringify(doBanco))?.enviadosHoje).toBe(10);
   });
@@ -71,5 +72,13 @@ describe("saúde do número da Carol", () => {
     expect(saudeSimulada("vermelha", 30, 0).limiteEfetivo).toBe(0);
     expect(saudeSimulada("sem", 30, 0).freio).toBe("sem_leitura");
     expect(saudeSimulada(undefined, 30, 0).freio).toBe("normal");
+  });
+  it("esconde os avisos permanentes da conta e mantém o resto", () => {
+    expect(situacaoVisivel("conectado; envio limitado pela Meta; nome de exibição recusado")).toBe("conectado");
+    expect(situacaoVisivel("sinalizado; envio limitado pela Meta")).toBe("sinalizado");
+    expect(situacaoVisivel("restrito; nome de exibição pendente; desconectado")).toBe("restrito; desconectado");
+    expect(situacaoVisivel("")).toBe("");
+    const s = saudeDoBanco({ ...doBanco, avisos: ["O nome de exibição ainda não foi aprovado.", "Número sinalizado pela Meta: revise as mensagens."] });
+    expect(s!.avisos).toEqual(["Número sinalizado pela Meta: revise as mensagens."]);
   });
 });
