@@ -25,6 +25,7 @@ import type { ComparacaoModelo, ContatoPainel, Painel, Periodo, Situacao } from 
 import { quandoCurto } from "@/lib/periodo";
 import { normalizePhone, whatsappLink } from "@/lib/phone";
 
+import { FilaAtendente } from "./FilaAtendente";
 import { nomeDoModelo } from "./ModeloWhatsApp";
 
 const PERIODOS: { id: Periodo; rotulo: string }[] = [
@@ -291,6 +292,9 @@ export function PainelView() {
           </span>
         </div>
       )}
+
+      {/* Quem está esperando alguém da equipe agora (Carol e Sofia) */}
+      <FilaAtendente />
 
       {/* Números principais */}
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">

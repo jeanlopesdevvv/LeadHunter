@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, nomeDeAba, registrosComoAba, telefoneDoBanco, type EdicaoLead } from "./banco-regras";
 import { getConfig } from "./env";
 import { SheetsError } from "./erros";
+import { comoItemDaFila, type FilaAtendente, type ItemFila } from "./fila-regras";
 import { phoneKey } from "./phone";
 import {
   buildHeaderMap,
@@ -410,4 +411,18 @@ export async function lerSaudeNumero(): Promise<unknown> {
   if (!getConfig().banco) return null;
   const r = await noBanco((sql) => sql<Registro[]>`select atendimento.carol_saude_atual() as s`);
   return r[0]?.s ?? null;
+}
+
+/**
+ * Fila do atendente (29/10/2026): quem está esperando alguém da equipe agora (Carol e Sofia),
+ * de atendimento.fila_atendente(). Sem banco configurado, devolve a fila como indisponível.
+ */
+export async function lerFilaAtendente(): Promise<FilaAtendente> {
+  if (!getConfig().banco) return { disponivel: false, equipeNoHorario: false, itens: [] };
+  const [linhas, hora] = await Promise.all([
+    noBanco((sql) => sql<Registro[]>`select * from atendimento.fila_atendente()`),
+    noBanco((sql) => sql<Registro[]>`select atendimento.equipe_disponivel() as d`),
+  ]);
+  const itens = linhas.map(comoItemDaFila).filter((x): x is ItemFila => x !== null);
+  return { disponivel: true, equipeNoHorario: hora[0]?.d === true, itens };
 }
