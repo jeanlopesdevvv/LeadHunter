@@ -63,7 +63,9 @@ O projeto já tem faturamento, Sheets API e Places API. Falta:
   (05:00 nas renovações de dezembro a março, quando os EUA estão fora do horário de verão).
 - Descobrir o contorno da cidade (para dividir o mapa) usa Autocomplete + Place Details, com cota grátis própria
   (5.000/mês), e não gasta as 1.000 da busca.
-- Com `BLOQUEAR_NO_LIMITE=1` (padrão) o Radar para de buscar quando as grátis acabam.
+- O Radar **sempre** para de buscar antes de passar das grátis (desde 07/11/2026 `BLOQUEAR_NO_LIMITE` não desliga mais) e deixa
+  as últimas 10 de reserva. `LIMITE_MENSAL_CONSULTAS` só aceita valores até 1.000. A busca automática ainda guarda
+  `reserva_cota` (150) do mês para a busca manual.
 - A cota grátis é por conta de faturamento: se outro sistema do mesmo projeto também usar *Text Search*,
   o contador do Radar inclui essas buscas.
 
@@ -291,7 +293,7 @@ Se algum número parecer errado, abra `https://radar.lavacar.app/api/painel?peri
 | Contador amarelo: "Contando só as buscas feitas pelo Radar…" | Passo 2.5: papel **Visualizador de monitoramento** para a conta de serviço. |
 | Disparo: "O n8n não reconheceu o endereço" | O Fluxo 1 precisa estar publicado (**Publish**) e `N8N_DISPARO_URL` tem que ser a *Production URL*. |
 | Disparo: "O n8n recusou o pedido" | Se o nó usa Header Auth, `N8N_DISPARO_TOKEN` precisa ser igual ao *Value* da credencial. |
-| "As 1.000 consultas grátis deste mês acabaram" | Espere a renovação (dia 1º, 04:00) ou, se aceitar pagar o excedente, `BLOQUEAR_NO_LIMITE=0`. |
+| "As 1.000 consultas grátis deste mês acabaram" | Espere a renovação (dia 1º, 04:00). O Radar não passa das grátis. |
 
 Trocar a senha: altere `APP_PASSWORD` no *Ambiente* do EasyPanel e clique **Implantar** (todas as sessões abertas caem).
 

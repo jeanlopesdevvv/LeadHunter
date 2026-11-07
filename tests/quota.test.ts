@@ -108,7 +108,7 @@ describe("contador de consultas (Cloud Monitoring)", () => {
     });
     const { obterUso } = await import("@/lib/usage");
     const uso = await obterUso({ agora: AGORA });
-    expect(uso).toMatchObject({ fonte: "google", usadas: 132, limite: 1000, restantes: 868, bloquear: true, aviso: "" });
+    expect(uso).toMatchObject({ fonte: "google", usadas: 132, limite: 1000, restantes: 858, bloquear: true, aviso: "" });
     expect(uso.renovaEm).toBe("2026-10-01T07:00:00.000Z");
 
     // Projeto tirado do e-mail da conta de serviço; filtro certo; um balde só por intervalo.
@@ -147,30 +147,30 @@ describe("contador de consultas (Cloud Monitoring)", () => {
     expect(uso.aviso).toContain("radar@lavacar-sistema.iam.gserviceaccount.com");
   });
 
-  it("bloqueia a busca quando as consultas grátis acabam", async () => {
-    vi.stubEnv("LIMITE_MENSAL_CONSULTAS", "3");
+  it("bloqueia a busca quando as consultas grátis acabam (com a reserva de 10)", async () => {
+    vi.stubEnv("LIMITE_MENSAL_CONSULTAS", "13");
     mockFetch(() => ({ body: { timeSeries: [serie("google.maps.places.v1.Places.SearchText", 1)] } }));
     const { reservarConsulta } = await import("@/lib/usage");
-    // 1 antiga + 1 recente = 2 usadas de 3: sobra 1
+    // 1 antiga + 1 recente = 2 usadas de 13 (10 de reserva): sobra 1
     const a = await reservarConsulta();
     expect(a.ok).toBe(true);
     // A primeira ainda está em andamento: a segunda já não cabe.
     const b = await reservarConsulta();
     expect(b.ok).toBe(false);
-    if (!b.ok) expect(b.mensagem).toMatch(/As 3 consultas grátis deste mês acabaram\. Elas voltam em \d\d\/\d\d às \d\d:\d\d/);
+    if (!b.ok) expect(b.mensagem).toMatch(/As 13 consultas grátis deste mês acabaram\. Elas voltam em \d\d\/\d\d às \d\d:\d\d/);
     if (a.ok) a.concluir(false); // falhou: devolve a vaga
     const c = await reservarConsulta();
     expect(c.ok).toBe(true);
   });
 
-  it("com BLOQUEAR_NO_LIMITE=0 deixa passar", async () => {
-    vi.stubEnv("LIMITE_MENSAL_CONSULTAS", "1");
+  it("nunca passa das grátis: BLOQUEAR_NO_LIMITE=0 e limite acima de 1.000 não valem mais", async () => {
+    vi.stubEnv("LIMITE_MENSAL_CONSULTAS", "5000");
     vi.stubEnv("BLOQUEAR_NO_LIMITE", "0");
-    mockFetch(() => ({ body: { timeSeries: [serie("google.maps.places.v1.Places.SearchText", 5)] } }));
+    mockFetch(() => ({ body: { timeSeries: [serie("google.maps.places.v1.Places.SearchText", 495)] } }));
     const { reservarConsulta } = await import("@/lib/usage");
-    const r = await reservarConsulta();
-    expect(r.ok).toBe(true);
-    expect(r.uso.restantes).toBe(0);
+    const r = await reservarConsulta(); // 495 + 495 = 990 usadas de 1.000, com 10 de reserva: acabou
+    expect(r.ok).toBe(false);
+    expect(r.uso).toMatchObject({ limite: 1000, usadas: 990, restantes: 0, bloquear: true });
   });
 });
 

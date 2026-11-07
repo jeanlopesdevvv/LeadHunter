@@ -17,7 +17,12 @@ export type { FonteUso, Uso };
  *
  * Só as buscas (SearchText) contam. Descobrir a área da cidade usa outro serviço
  * (Autocomplete + Place Details), com cota grátis separada.
+ *
+ * 07/11/2026: nunca passa das grátis. As buscas param sempre no limite (não dá mais para desligar) e
+ * as últimas MARGEM_SEGURANCA consultas ficam de reserva: o número do Google chega com alguns minutos de atraso
+ * e a cota grátis é da conta de faturamento inteira (outro sistema na mesma conta também gasta).
  */
+export const MARGEM_SEGURANCA = 10;
 
 const JANELA_RECENTE_MS = 35 * 60_000;
 const CACHE_MS = 60_000;
@@ -170,7 +175,7 @@ export async function obterUso(opts: { forcar?: boolean; agora?: number } = {}):
     ...base,
     fonte,
     usadas,
-    restantes: Math.max(0, cfg.limiteMensal - usadas),
+    restantes: Math.max(0, cfg.limiteMensal - MARGEM_SEGURANCA - usadas),
     atualizadoEm: new Date(atualizadoEm).toISOString(),
     aviso,
   });
@@ -199,7 +204,7 @@ export async function reservarConsulta(): Promise<
 > {
   const uso = await obterUso();
   const r = registro();
-  if (uso.bloquear && uso.usadas + r.pendentes >= uso.limite) {
+  if (uso.usadas + r.pendentes >= uso.limite - MARGEM_SEGURANCA) {
     return { ok: false, uso, mensagem: mensagemCotaEsgotada(uso) };
   }
   r.pendentes++;

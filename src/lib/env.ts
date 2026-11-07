@@ -7,6 +7,9 @@ import { lerSenhaBanco } from "./banco-regras";
  * Nada de segredo vai para o navegador.
  */
 
+/** Consultas grátis por mês do Text Search Enterprise (Google Maps Platform, conferido em 07/11/2026). */
+export const LIMITE_GRATIS_GOOGLE = 1000;
+
 export const DEFAULT_SHEET_ID = "180iMVX1oA3oJ0IVBlsnGkFPq_2p4pEtNMZ8zhSUlP1g";
 
 function str(name: string, fallback = ""): string {
@@ -106,10 +109,11 @@ export function getConfig() {
       .map((t) => t.trim())
       .filter((t) => t && t.toLowerCase() !== "nenhuma"),
     maxRequestsPerSearch: int("MAX_REQUESTS_PER_SEARCH", 200),
-    // Consultas grátis por mês do Google (Text Search Enterprise = 1.000).
-    limiteMensal: int("LIMITE_MENSAL_CONSULTAS", 1000),
-    // Parar as buscas quando as consultas grátis do mês acabarem ("0" = deixar passar e pagar o excedente).
-    bloquearNoLimite: str("BLOQUEAR_NO_LIMITE", "1") !== "0",
+    // Consultas grátis por mês do Google (Text Search Enterprise = 1.000). Nunca acima de 1.000 (07/11/2026: o Jean pediu
+    // para nunca passar das grátis); dá para pôr um número menor, nunca maior.
+    limiteMensal: Math.min(int("LIMITE_MENSAL_CONSULTAS", LIMITE_GRATIS_GOOGLE), LIMITE_GRATIS_GOOGLE),
+    // Sempre para quando as grátis acabam (BLOQUEAR_NO_LIMITE não desliga mais isso, desde 07/11/2026).
+    bloquearNoLimite: true,
     // Projeto do Google Cloud onde a chave do Places foi criada (padrão: o da conta de serviço).
     googleProjectId: str("GOOGLE_CLOUD_PROJECT"),
     // Disparo da Carol pelo n8n (nó Webhook "Disparo pelo Radar" no Fluxo 1).

@@ -172,7 +172,7 @@ export function SettingsView({ status, uso, onRecarregar }: { status: StatusResp
                   <b className="text-ink tabular-nums">{u.restantes.toLocaleString("pt-BR")}</b> de {u.limite.toLocaleString("pt-BR")} disponíveis.
                   Renovam {formatarRenovacao(u.renovaEm)}.
                 </p>
-                {u.bloquear && <p>Quando acabam, as buscas pausam até a renovação, sem cobrança.</p>}
+                <p>Quando acabam, as buscas param até a renovação: nunca passa das grátis, sem cobrança. As últimas 10 ficam de reserva.</p>
               </Item>
             )}
 

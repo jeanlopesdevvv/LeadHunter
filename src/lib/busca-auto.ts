@@ -54,7 +54,7 @@ export async function iniciarBuscaAuto(origem: "rotina" | "manual"): Promise<Ini
   const precisa = origem === "manual" ? Math.max(quantoPrecisa(estado), estado.limite || 50) : quantoPrecisa(estado);
   if (precisa <= 0) return { iniciada: false, motivo: "fila_cheia", texto: MOTIVO_FIM_TEXTO.fila_cheia, precisava: 0, podeGastar: 0 };
   const uso = await obterUso();
-  const podeGastar = consultasPermitidas(estado, uso.bloquear ? uso.restantes : null);
+  const podeGastar = consultasPermitidas(estado, uso.restantes);
   if (podeGastar <= 0) {
     const motivo: MotivoFimBusca = estado.consultasHoje >= estado.config.maxConsultasDia ? "limite" : "cota";
     return { iniciada: false, motivo, texto: MOTIVO_FIM_TEXTO[motivo], precisava: precisa, podeGastar: 0 };
