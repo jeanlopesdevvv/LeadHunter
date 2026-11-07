@@ -38,6 +38,9 @@
   /* Barras neutras do funil (Desempenho). */
   --color-bar: #081021;
   --color-bar-2: #22324f;
+  /* Gráfico de envios (Disparo automático): dois degraus do ciano, conferidos com o validador de paleta (ordinal, fundo #ffffff). */
+  --color-grafico-envio: #22bedb;
+  --color-grafico-resposta: #027a90;
 
   --radius-xl: 0.75rem;
   --radius-2xl: 1rem;
@@ -123,6 +126,9 @@
   --color-skeleton: #1c2940;
   --color-bar: #b4c2d6;
   --color-bar-2: #71859f;
+  /* Gráfico de envios no escuro: degraus próprios, conferidos contra o fundo #121c2f. */
+  --color-grafico-envio: #1b6d80;
+  --color-grafico-resposta: #5fd3ea;
 
   /* Azul-noite dos botões escuros, avisos e barra de envio: um degrau acima do fundo. */
   --color-navy: #1f2d47;

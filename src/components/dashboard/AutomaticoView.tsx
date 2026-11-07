@@ -17,8 +17,9 @@ import {
   Store,
   ThumbsDown,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { useCountUp } from "@/components/motion";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, Stat, Toggle, cx } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
@@ -28,6 +29,7 @@ import { quandoCurto } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
 import { nomeDoModelo } from "./ModeloWhatsApp";
+import { GraficoEnvios } from "./GraficoEnvios";
 import { CartaoSaude } from "./SaudeNumero";
 
 /**
@@ -54,45 +56,24 @@ const TOM: Record<string, { selo: string; ponto: string }> = {
   pausado: { selo: "bg-slate-100 text-slate-700 ring-slate-200", ponto: "bg-slate-400" },
 };
 
+/** Porcentagem que sobe contando ao abrir e ao mudar o período. */
+function Porcento({ parte, total }: { parte: number; total: number }) {
+  const t = taxa(parte, total);
+  const [alvo, setAlvo] = useState(0);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setAlvo(Math.round((t ?? 0) * 10)));
+    return () => cancelAnimationFrame(r);
+  }, [t]);
+  const v = useCountUp(alvo, 900);
+  return <>{t === null ? "—" : `${(v / 10).toLocaleString("pt-BR")}%`}</>;
+}
+
 function Titulo({ icone, children, extra }: { icone: ReactNode; children: ReactNode; extra?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-4">
       <span className="text-brand-600">{icone}</span>
       <p className="text-base font-bold text-ink">{children}</p>
       {extra && <div className="ml-auto flex items-center gap-2">{extra}</div>}
-    </div>
-  );
-}
-
-/** Barras por dia: enviados (claro) e quantos responderam (escuro). */
-function GraficoDias({ dias }: { dias: PainelAutomatico["porDia"] }) {
-  const max = Math.max(1, ...dias.map((d) => d.enviados));
-  return (
-    <div>
-      <div className="flex h-36 items-end gap-1 sm:gap-1.5" role="img" aria-label="Enviados e respostas por dia">
-        {dias.map((d, i) => (
-          <div key={d.dia} className="group relative flex h-full flex-1 flex-col justify-end" style={{ "--i": i } as CSSProperties}>
-            <div className="relative w-full overflow-hidden rounded-t-md bg-brand-100" style={{ height: `${(d.enviados / max) * 100}%`, minHeight: d.enviados ? 3 : 0 }}>
-              <div className="absolute inset-x-0 bottom-0 bg-brand-600" style={{ height: d.enviados ? `${(d.responderam / d.enviados) * 100}%` : 0 }} />
-            </div>
-            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 hidden -translate-x-1/2 rounded-md bg-navy px-2 py-1 text-[11px] whitespace-nowrap text-white shadow group-hover:block">
-              {dataCurta(d.dia)}: {n(d.enviados)} enviados{d.segundos ? ` (${n(d.segundos)} de 2º contato)` : ""} · {n(d.responderam)} responderam
-              {d.saidas ? ` · ${n(d.saidas)} saíram` : ""}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-1.5 flex gap-1 sm:gap-1.5">
-        {dias.map((d, i) => (
-          <span key={d.dia} className="min-w-0 flex-1 overflow-visible text-center text-[10px] whitespace-nowrap text-muted tabular-nums">
-            {i % (dias.length > 14 ? 4 : dias.length > 7 ? 2 : 1) === 0 ? dataCurta(d.dia) : ""}
-          </span>
-        ))}
-      </div>
-      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand-100" /> enviados</span>
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand-600" /> responderam em até 7 dias</span>
-      </p>
     </div>
   );
 }
@@ -215,8 +196,15 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
             </span>
             <p className="mt-2 text-sm text-ink">{est.detalhe}</p>
             <p className="mt-2 text-xs text-muted tabular-nums">
-              Hoje: <b className="text-ink">{n(p.situacao.enviadosHoje)}</b> enviados de <b className="text-ink">{n(p.situacao.limite)}</b>
-              {p.situacao.limite !== p.situacao.limiteConfigurado && <> (limite configurado {n(p.situacao.limiteConfigurado)})</>}
+              Hoje: <b className="text-ink">{n(p.situacao.enviadosHoje)}</b> enviados
+              {p.situacao.rotinaLiberada || !p.disparo.ligado ? (
+                <>
+                  {" "}de <b className="text-ink">{n(p.situacao.limite)}</b>
+                  {p.situacao.limite !== p.situacao.limiteConfigurado && <> (limite configurado {n(p.situacao.limiteConfigurado)})</>}
+                </>
+              ) : (
+                <> · limite de <b className="text-ink">{n(p.situacao.limiteConfigurado)}</b> por dia quando começar</>
+              )}
               {p.disparo.ligado && restamHoje > 0 && est.estado !== "freio" && <> · faltam {n(restamHoje)}</>}
               {p.hoje.radar > 0 && <> · {n(p.hoje.radar)} pelo Radar</>}
             </p>
@@ -266,14 +254,14 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Enviados" value={per.enviados} hint={`${n(p.hoje.enviados)} hoje`} icon={<Send className="size-4" />} />
-        <Stat label="Responderam" value={pct(per.responderam, per.enviados)} hint={`${n(per.responderam)} em até 7 dias`} tone="brand" icon={<MessageCircle className="size-4" />} />
-        <Stat label="Pediram para sair" value={pct(per.saidas, per.enviados)} hint={`${n(per.saidas)} em até 7 dias`} icon={<ThumbsDown className="size-4" />} />
+        <Stat label="Responderam" value={<Porcento parte={per.responderam} total={per.enviados} />} hint={`${n(per.responderam)} em até 7 dias`} tone="brand" icon={<MessageCircle className="size-4" />} />
+        <Stat label="Pediram para sair" value={<Porcento parte={per.saidas} total={per.enviados} />} hint={`${n(per.saidas)} em até 7 dias`} icon={<ThumbsDown className="size-4" />} />
         <Stat label="Receberam o link" value={per.link} hint={pct(per.link, per.enviados) + " dos enviados"} icon={<Link2 className="size-4" />} />
         <Stat label="Criaram conta" value={per.conta} hint={pct(per.conta, per.enviados) + " dos enviados"} tone="green" icon={<Store className="size-4" />} />
       </div>
 
-      <Card className="p-5">
-        <GraficoDias dias={p.porDia} />
+      <Card className="p-5 sm:p-6">
+        <GraficoEnvios key={p.dias} dias={p.porDia} />
         {(per.semWhatsapp > 0 || per.barradas > 0 || per.erros > 0) && (
           <p className="mt-3 text-xs text-muted">
             Não chegaram: <b className="text-ink">{n(per.erros)}</b> ({n(per.semWhatsapp)} sem WhatsApp, {n(per.barradas)} barradas pela Meta pelo limite de marketing por pessoa).
