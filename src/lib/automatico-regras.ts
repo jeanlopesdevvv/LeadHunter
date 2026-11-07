@@ -76,6 +76,8 @@ export interface PainelAutomatico {
     ultimas: RodadaBusca[];
   };
   limite: number;
+  /** Freio por saídas: acima desta % de "não quero receber" num dia, o disparo pausa. */
+  freioSaidasPct: number;
   situacao: {
     limite: number;
     limiteConfigurado: number;
@@ -187,6 +189,7 @@ export function comoPainelAutomatico(v: unknown): PainelAutomatico {
       }),
     },
     limite: n(cfg.limite),
+    freioSaidasPct: n(obj(cfg.freios).saidas_pct, 8),
     situacao: {
       limite: n(sit.limite),
       limiteConfigurado: n(sit.limite_configurado),

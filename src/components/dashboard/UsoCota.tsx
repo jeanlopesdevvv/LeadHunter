@@ -19,7 +19,7 @@ function Barra({ uso, escura }: { uso: Uso; escura?: boolean }) {
   const pct = uso.limite ? Math.min(100, (uso.usadas / uso.limite) * 100) : 100;
   return (
     <div className={cx("h-2 overflow-hidden rounded-full", escura ? "bg-white/10" : "bg-surface")}>
-      <div className={cx("h-full rounded-full transition-all duration-700 ease-out", tom(uso).barra)} style={{ width: `${pct}%` }} />
+      <div className={cx("barra-cresce h-full rounded-full transition-all duration-700 ease-out", tom(uso).barra)} style={{ width: `${pct}%` }} />
     </div>
   );
 }

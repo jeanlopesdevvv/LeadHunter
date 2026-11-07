@@ -134,11 +134,12 @@ export function Shell({
               onClick={() => onView(id)}
               aria-current={view === id ? "page" : undefined}
               className={cx(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors",
+                "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors duration-200",
                 view === id ? "bg-white/[0.08] text-white" : "text-white/55 hover:bg-white/[0.04] hover:text-white",
               )}
             >
-              <Icon className={cx("size-[18px]", view === id ? "text-brand" : "")} />
+              {view === id && <span className="animate-pop-in absolute top-1/2 -left-1 h-5 w-1 -translate-y-1/2 rounded-full bg-brand" aria-hidden />}
+              <Icon className={cx("size-[18px] transition-transform duration-200 group-hover:scale-110", view === id ? "text-brand" : "")} />
               {label}
               {badge(id)}
             </button>
@@ -217,7 +218,7 @@ export function Shell({
       </header>
 
       <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-32 sm:px-6 lg:px-10 lg:pt-10">
-        <div key={view} className="view-in">
+        <div key={view} className={cx("view-in", view !== "resultados" && "cascata")}>
           {children}
         </div>
       </main>

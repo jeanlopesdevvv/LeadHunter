@@ -707,7 +707,7 @@ function PainelConsultas({
         </span>
       </p>
       <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/10">
-        <div className={cx("h-full rounded-full transition-all duration-700 ease-out", barra)} style={{ width: `${Math.min(100, fracao * 100)}%` }} />
+        <div className={cx("barra-cresce h-full rounded-full transition-all duration-700 ease-out", barra)} style={{ width: `${Math.min(100, fracao * 100)}%` }} />
       </div>
 
       <div className="mt-4 space-y-2.5 text-sm">

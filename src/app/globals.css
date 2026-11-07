@@ -354,6 +354,78 @@ input[type="checkbox"].check:focus-visible {
   animation-delay: calc(min(var(--i, 0), 14) * 55ms);
 }
 
+/*
+ * Animações de entrada (07/11/2026, pedido do Jean: "animações robustas").
+ * Todas param com prefers-reduced-motion (regra no fim do arquivo). Nenhuma deixa transform depois de terminar
+ * (fill "backwards"/"both" com estado final neutro), para não desalinhar barras fixas e modais.
+ */
+@keyframes cresce-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes anel-pulso {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes borda-viva {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+@keyframes sobe-numero {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/*
+ * Troca de tela em cascata: os blocos de cada tela entram subindo, um depois do outro. Não vale na tela
+ * Oportunidades, que tem a barra fixa de envio (transform no pai desalinharia a barra durante a entrada).
+ */
+.cascata > * > * {
+  animation: enter 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.cascata > * > *:nth-child(2) { animation-delay: 60ms; }
+.cascata > * > *:nth-child(3) { animation-delay: 120ms; }
+.cascata > * > *:nth-child(4) { animation-delay: 180ms; }
+.cascata > * > *:nth-child(5) { animation-delay: 240ms; }
+.cascata > * > *:nth-child(6) { animation-delay: 300ms; }
+.cascata > * > *:nth-child(7) { animation-delay: 360ms; }
+.cascata > * > *:nth-child(n + 8) { animation-delay: 420ms; }
+
+/* Entra subindo, um depois do outro: style={{ "--i": n }}. */
+.entrar {
+  animation: enter 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: calc(min(var(--i, 0), 16) * 70ms);
+}
+/* Barra de progresso/meta que cresce da esquerda ao aparecer. */
+.barra-cresce {
+  transform-origin: left center;
+  animation: cresce-x 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(min(var(--i, 0), 16) * 60ms + 120ms);
+}
+/* Ponto de status "ao vivo": anel que pulsa na cor do texto do elemento. */
+.anel-pulso {
+  animation: anel-pulso 1.8s ease-out infinite;
+}
+/* Borda em degradê ciano que corre devagar (cartão em destaque). Use com p-px e um filho com o fundo do cartão. */
+.borda-viva {
+  background: linear-gradient(90deg, rgb(3 171 201 / 0.15), rgb(34 190 219 / 0.75), rgb(3 171 201 / 0.15), rgb(34 190 219 / 0.75), rgb(3 171 201 / 0.15));
+  background-size: 200% 100%;
+  animation: borda-viva 6s linear infinite;
+}
+/* Linha fina colorida no topo de um cartão, crescendo ao aparecer. */
+.linha-topo {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  transform-origin: left center;
+  animation: cresce-x 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(min(var(--i, 0), 16) * 70ms + 200ms);
+}
+.sobe-numero {
+  animation: sobe-numero 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
 /* Faixa brilhante que corre sobre barras de progresso em andamento. */
 .shine {
   background-image: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.55) 50%, transparent 80%);

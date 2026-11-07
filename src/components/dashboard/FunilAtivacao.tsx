@@ -27,7 +27,7 @@ function Etapa({ rotulo, valor, base, anterior, i }: { rotulo: string; valor: nu
         </span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-brand-600 transition-[width] duration-500" style={{ width: `${largura}%` }} />
+        <div className="barra-cresce h-full rounded-full bg-brand-600 transition-[width] duration-500" style={{ width: `${largura}%` }} />
       </div>
     </li>
   );

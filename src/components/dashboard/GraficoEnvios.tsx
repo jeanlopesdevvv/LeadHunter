@@ -166,7 +166,7 @@ export function GraficoEnvios({ dias }: { dias: DiaEnvios[] }) {
                     </li>
                     {(d.saidas > 0 || d.erros > 0) && (
                       <li className="pt-0.5 text-muted">
-                        {d.saidas > 0 && <>{n(d.saidas)} saíram</>}
+                        {d.saidas > 0 && <>{n(d.saidas)} pediram para parar</>}
                         {d.saidas > 0 && d.erros > 0 && " · "}
                         {d.erros > 0 && <>{n(d.erros)} não chegaram</>}
                       </li>

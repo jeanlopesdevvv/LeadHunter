@@ -152,7 +152,7 @@ function CompararModelos({ modelos, atual, onEscolher }: { modelos: ComparacaoMo
                     )}
                   </span>
                   <span className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-surface">
-                    <span className="h-full bg-brand transition-[width] duration-700" style={{ width: `${resp}%` }} />
+                    <span className="barra-cresce h-full bg-brand transition-[width] duration-700" style={{ width: `${resp}%` }} />
                   </span>
                 </span>
                 <span className="grid grid-cols-4 gap-2 sm:contents">

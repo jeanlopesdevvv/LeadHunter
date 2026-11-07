@@ -8,10 +8,11 @@ function prefereMenosMovimento(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Número que "sobe contando" até o valor novo. */
+/** Número que "sobe contando" até o valor novo. 07/11/2026: ao aparecer, conta a partir do zero. */
 export function useCountUp(valor: number, duracao = 700): number {
-  const [mostrado, setMostrado] = useState(valor);
-  const atual = useRef(valor);
+  // Começa em 0 (igual no servidor e no navegador); com "reduzir movimento" vai direto ao valor no 1º quadro.
+  const [mostrado, setMostrado] = useState(0);
+  const atual = useRef(0);
   useEffect(() => {
     const inicio = atual.current;
     if (inicio === valor || prefereMenosMovimento()) {
@@ -36,7 +37,7 @@ export function useCountUp(valor: number, duracao = 700): number {
 }
 
 export function AnimatedNumber({ value, className }: { value: number; className?: string }) {
-  const v = useCountUp(value);
+  const v = useCountUp(value, value > 200 ? 1000 : 750);
   return <span className={cx("tabular-nums", className)}>{v.toLocaleString("pt-BR")}</span>;
 }
 

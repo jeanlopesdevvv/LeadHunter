@@ -42,7 +42,7 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center font-semibold whitespace-nowrap transition-colors duration-150",
+        "inline-flex shrink-0 items-center justify-center font-semibold whitespace-nowrap transition-[color,background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.97]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
         VARIANTS[variant],
@@ -58,7 +58,7 @@ export function Button({
 
 export function Card({ className, children, style }: { className?: string; children: ReactNode; style?: CSSProperties }) {
   return (
-    <div className={cx("rounded-2xl border border-line bg-card shadow-card", className)} style={style}>
+    <div className={cx("rounded-2xl border border-line bg-card shadow-card transition-shadow duration-300", className)} style={style}>
       {children}
     </div>
   );
@@ -94,11 +94,11 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={cx(
-          "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors",
+          "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors duration-300",
           checked ? "bg-brand" : "bg-slate-300",
         )}
       >
-        <span className={cx("absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform", checked && "translate-x-5")} />
+        <span className={cx("absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]", checked && "translate-x-5")} />
       </button>
       <span className="leading-tight">
         <span className="block text-sm font-semibold text-ink">{label}</span>
@@ -191,10 +191,25 @@ export function Modal({
   );
 }
 
-export function Stat({ label, value, hint, tone = "ink", icon }: { label: string; value: ReactNode; hint?: string; tone?: "ink" | "brand" | "green" | "amber"; icon?: ReactNode }) {
+export function Stat({
+  label,
+  value,
+  hint,
+  tone = "ink",
+  icon,
+  i,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  tone?: "ink" | "brand" | "green" | "amber";
+  icon?: ReactNode;
+  /** Posição numa fileira: entra em cascata (07/11/2026). */
+  i?: number;
+}) {
   const color = { ink: "text-ink", brand: "text-brand-700", green: "text-emerald-600", amber: "text-amber-600" }[tone];
   return (
-    <Card className="lift p-4 sm:p-5">
+    <Card className="lift entrar p-4 sm:p-5" style={{ "--i": i ?? 0 } as CSSProperties}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-muted">{label}</span>
         {icon && <span className="text-muted/70">{icon}</span>}

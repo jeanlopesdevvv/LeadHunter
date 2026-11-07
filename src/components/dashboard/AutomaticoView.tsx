@@ -17,11 +17,11 @@ import {
   Store,
   ThumbsDown,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { useCountUp } from "@/components/motion";
+import { AnimatedNumber, useCountUp } from "@/components/motion";
 import { useToast } from "@/components/toast";
-import { Badge, Button, Card, Modal, Stat, Toggle, cx } from "@/components/ui";
+import { Badge, Button, Card, Modal, Toggle, cx } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
 import { estadoDoDisparo, MOTIVO_BUSCA, taxa, type ChaveLigar, type PainelAutomatico } from "@/lib/automatico-regras";
 import type { StatusDisparo } from "@/lib/disparo-regras";
@@ -47,14 +47,59 @@ const dataCurta = (iso: string) => (iso.length >= 10 ? `${iso.slice(8, 10)}/${is
 const DIAS = [7, 14, 30] as const;
 type Dias = (typeof DIAS)[number];
 
-const TOM: Record<string, { selo: string; ponto: string }> = {
-  ligado: { selo: "bg-emerald-50 text-emerald-700 ring-emerald-200", ponto: "bg-emerald-500" },
-  sem_rodada: { selo: "bg-emerald-50 text-emerald-700 ring-emerald-200", ponto: "bg-emerald-400" },
-  aguardando: { selo: "bg-brand-50 text-brand-700 ring-brand-200", ponto: "bg-brand" },
-  metade: { selo: "bg-amber-50 text-amber-800 ring-amber-200", ponto: "bg-amber-500" },
-  freio: { selo: "bg-red-50 text-red-700 ring-red-200", ponto: "bg-red-500" },
-  pausado: { selo: "bg-slate-100 text-slate-700 ring-slate-200", ponto: "bg-slate-400" },
+const TOM: Record<string, { selo: string; ponto: string; vivo: boolean }> = {
+  ligado: { selo: "bg-emerald-50 text-emerald-700 ring-emerald-200", ponto: "bg-emerald-500 text-emerald-500", vivo: true },
+  sem_rodada: { selo: "bg-emerald-50 text-emerald-700 ring-emerald-200", ponto: "bg-emerald-400 text-emerald-400", vivo: true },
+  aguardando: { selo: "bg-brand-50 text-brand-700 ring-brand-200", ponto: "bg-brand text-brand", vivo: true },
+  metade: { selo: "bg-amber-50 text-amber-800 ring-amber-200", ponto: "bg-amber-500 text-amber-500", vivo: true },
+  freio: { selo: "bg-red-50 text-red-700 ring-red-200", ponto: "bg-red-500 text-red-500", vivo: false },
+  pausado: { selo: "bg-slate-100 text-slate-700 ring-slate-200", ponto: "bg-slate-400 text-slate-400", vivo: false },
 };
+
+/** "Jean (plano de 07/11: ...)" → "Jean"; "Radar (pausar)" → "Radar". */
+const quem = (por: string) => por.replace(/\s*\(.*$/, "").trim() || "alguém da equipe";
+
+const CORES = {
+  brand: { linha: "bg-brand", icone: "bg-brand-50 text-brand-700", valor: "text-brand-700" },
+  verde: { linha: "bg-emerald-500", icone: "bg-emerald-50 text-emerald-700", valor: "text-emerald-600" },
+  ambar: { linha: "bg-amber-400", icone: "bg-amber-50 text-amber-700", valor: "text-strong" },
+  neutro: { linha: "bg-slate-400", icone: "bg-slate-100 text-slate-600", valor: "text-strong" },
+} as const;
+
+/** Cartão de número com explicação curta (07/11/2026: o Jean não entendeu "Pediram para sair"). */
+function Indicador({
+  i,
+  rotulo,
+  valor,
+  detalhe,
+  explica,
+  icone,
+  cor,
+}: {
+  i: number;
+  rotulo: string;
+  valor: ReactNode;
+  detalhe: ReactNode;
+  explica: string;
+  icone: ReactNode;
+  cor: keyof typeof CORES;
+}) {
+  const c = CORES[cor];
+  return (
+    <Card className="lift entrar group relative overflow-hidden p-4 sm:p-5" style={{ "--i": i } as CSSProperties}>
+      <span className={cx("linha-topo", c.linha)} aria-hidden />
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-xs font-semibold text-muted sm:text-[13px]">{rotulo}</span>
+        <span className={cx("grid size-8 shrink-0 place-items-center rounded-lg transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110", c.icone)}>
+          {icone}
+        </span>
+      </div>
+      <div className={cx("mt-1 text-[28px] leading-tight font-extrabold tracking-tight", c.valor)}>{valor}</div>
+      <p className="mt-0.5 text-xs text-ink">{detalhe}</p>
+      <p className="mt-2 border-t border-line pt-2 text-[11px] leading-snug text-muted">{explica}</p>
+    </Card>
+  );
+}
 
 /** Porcentagem que sobe contando ao abrir e ao mudar o período. */
 function Porcento({ parte, total }: { parte: number; total: number }) {
@@ -167,7 +212,7 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
 
   const est = estadoDoDisparo(p);
   const tom = TOM[est.estado] ?? TOM.ligado;
-  const ultimaMudanca = p.mudancas.find((m) => m.chave === "disparo_automatico");
+  const ultimaMudanca = p.mudancas.find((m) => m.chave === "disparo_automatico" && /pausado|continuado/.test(m.texto));
   const per = p.periodo;
   const restamHoje = Math.max(0, p.situacao.limite - p.situacao.enviadosHoje);
   const cidadesBusca = p.busca.cidades;
@@ -186,12 +231,13 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
         </Button>
       </div>
 
-      {/* Situação + pausar/continuar */}
-      <Card className="overflow-hidden">
+      {/* Situação + pausar/continuar (borda ciano correndo enquanto está ligado) */}
+      <div className={cx("entrar rounded-2xl", tom.vivo ? "borda-viva p-px" : "")} style={{ "--i": 0 } as CSSProperties}>
+      <Card className={cx("overflow-hidden", tom.vivo && "border-transparent")}>
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
           <div className="min-w-0 flex-1">
             <span className={cx("inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-bold ring-1 ring-inset", tom.selo)}>
-              <span className={cx("size-2 rounded-full", tom.ponto, (est.estado === "ligado" || est.estado === "metade") && "animate-pulse")} />
+              <span className={cx("size-2 rounded-full", tom.ponto, tom.vivo && "anel-pulso")} />
               {est.titulo}
             </span>
             <p className="mt-2 text-sm text-ink">{est.detalhe}</p>
@@ -210,7 +256,7 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
             </p>
             {ultimaMudanca && (
               <p className="mt-1 text-[11px] text-muted">
-                Última mudança: {ultimaMudanca.texto.toLowerCase()} {quandoCurto(ultimaMudanca.em)} ({ultimaMudanca.por || "sem nome"})
+                {/pausado/.test(ultimaMudanca.texto) ? "Pausado" : "Continuado"} {quandoCurto(ultimaMudanca.em)}, por {quem(ultimaMudanca.por)}.
               </p>
             )}
           </div>
@@ -234,9 +280,10 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
           </ul>
         )}
       </Card>
+      </div>
 
       {/* Números do período */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="entrar flex flex-wrap items-center justify-between gap-2" style={{ "--i": 1 } as CSSProperties}>
         <p className="text-sm font-bold text-ink">Como está indo</p>
         <div className="flex gap-1" role="group" aria-label="Período">
           {DIAS.map((d) => (
@@ -252,31 +299,72 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
           ))}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Enviados" value={per.enviados} hint={`${n(p.hoje.enviados)} hoje`} icon={<Send className="size-4" />} />
-        <Stat label="Responderam" value={<Porcento parte={per.responderam} total={per.enviados} />} hint={`${n(per.responderam)} em até 7 dias`} tone="brand" icon={<MessageCircle className="size-4" />} />
-        <Stat label="Pediram para sair" value={<Porcento parte={per.saidas} total={per.enviados} />} hint={`${n(per.saidas)} em até 7 dias`} icon={<ThumbsDown className="size-4" />} />
-        <Stat label="Receberam o link" value={per.link} hint={pct(per.link, per.enviados) + " dos enviados"} icon={<Link2 className="size-4" />} />
-        <Stat label="Criaram conta" value={per.conta} hint={pct(per.conta, per.enviados) + " dos enviados"} tone="green" icon={<Store className="size-4" />} />
+      <div key={`kpi-${p.dias}`} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Indicador
+          i={2}
+          cor="neutro"
+          rotulo="Mensagens enviadas"
+          valor={<AnimatedNumber value={per.enviados} />}
+          detalhe={<>nos últimos {p.dias} dias · <b>{n(p.hoje.enviados)}</b> hoje</>}
+          explica="1ª mensagem e 2º contato da Carol, pela rotina e pelo Radar."
+          icone={<Send className="size-4" />}
+        />
+        <Indicador
+          i={3}
+          cor="brand"
+          rotulo="Responderam"
+          valor={<Porcento parte={per.responderam} total={per.enviados} />}
+          detalhe={<><b>{n(per.responderam)}</b> de {n(per.enviados)} pessoas</>}
+          explica="Escreveram ou tocaram num botão em até 7 dias depois da mensagem."
+          icone={<MessageCircle className="size-4" />}
+        />
+        <Indicador
+          i={4}
+          cor="ambar"
+          rotulo="Não querem receber"
+          valor={<Porcento parte={per.saidas} total={per.enviados} />}
+          detalhe={<><b>{n(per.saidas)}</b> de {n(per.enviados)} pediram para parar</>}
+          explica={`Tocaram em “Não tenho interesse” ou pediram para sair da lista: não recebem mais nada. Se passar de ${n(p.freioSaidasPct)}% num dia, o disparo pausa sozinho.`}
+          icone={<ThumbsDown className="size-4" />}
+        />
+        <Indicador
+          i={5}
+          cor="brand"
+          rotulo="Receberam o link de cadastro"
+          valor={<AnimatedNumber value={per.link} />}
+          detalhe={<>{pct(per.link, per.enviados)} de quem recebeu a mensagem</>}
+          explica="Conversaram com a Carol até ela mandar o link para criar a conta de parceiro."
+          icone={<Link2 className="size-4" />}
+        />
+        <Indicador
+          i={6}
+          cor="verde"
+          rotulo="Criaram a conta"
+          valor={<AnimatedNumber value={per.conta} />}
+          detalhe={<>{pct(per.conta, per.link)} de quem recebeu o link</>}
+          explica="Criaram a conta de parceiro no Lavacar depois da mensagem."
+          icone={<Store className="size-4" />}
+        />
       </div>
 
-      <Card className="p-5 sm:p-6">
+      <Card className="entrar p-5 sm:p-6" style={{ "--i": 7 } as CSSProperties}>
         <GraficoEnvios key={p.dias} dias={p.porDia} />
         {(per.semWhatsapp > 0 || per.barradas > 0 || per.erros > 0) && (
           <p className="mt-3 text-xs text-muted">
-            Não chegaram: <b className="text-ink">{n(per.erros)}</b> ({n(per.semWhatsapp)} sem WhatsApp, {n(per.barradas)} barradas pela Meta pelo limite de marketing por pessoa).
+            Não chegaram <b className="text-ink">{n(per.erros)}</b> {per.erros === 1 ? "mensagem" : "mensagens"}: {n(per.semWhatsapp)} para números sem WhatsApp e{" "}
+            {n(per.barradas)} que a Meta segurou porque a pessoa já tinha recebido muitas mensagens de empresas.
           </p>
         )}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Fila e 2º contato */}
-        <Card className="overflow-hidden">
+        <Card className="entrar overflow-hidden" style={{ "--i": 8 } as CSSProperties}>
           <Titulo icone={<MapPin className="size-4" />}>Fila do disparo</Titulo>
           <div className="space-y-4 p-5">
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
               <p className="text-sm text-muted">
-                <b className="text-3xl font-extrabold text-strong tabular-nums">{n(p.fila.novos)}</b> leads novos
+                <AnimatedNumber value={p.fila.novos} className="text-3xl font-extrabold text-strong" /> leads novos
               </p>
               {p.fila.diasDeFila !== null && (
                 <p className={cx("text-sm", p.fila.diasDeFila < 2 ? "font-semibold text-amber-700" : "text-muted")}>
@@ -284,15 +372,31 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
                 </p>
               )}
             </div>
+            {p.fila.diasDeFila !== null && (
+              <div>
+                <div className="h-2 overflow-hidden rounded-full bg-surface">
+                  <div
+                    className={cx("barra-cresce h-full rounded-full", p.fila.diasDeFila < 2 ? "bg-amber-400" : "bg-brand")}
+                    style={{ width: `${Math.min(100, (p.fila.diasDeFila / Math.max(1, p.busca.filaDias)) * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-muted">
+                  Meta: {n(p.busca.filaDias)} dias de fila. {p.busca.ligado ? "Abaixo disso, a busca automática procura lava-jatos novos sozinha." : "A busca automática está desligada."}
+                </p>
+              </div>
+            )}
             {p.fila.porCidade.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {p.fila.porCidade.map((c) => (
-                  <Badge key={c.cidade} tone="gray">{c.cidade} · {n(c.n)}</Badge>
+                {p.fila.porCidade.map((c, i) => (
+                  <span key={c.cidade} className="entrar" style={{ "--i": i + 9 } as CSSProperties}>
+                    <Badge tone="gray">{c.cidade} · {n(c.n)}</Badge>
+                  </span>
                 ))}
               </div>
             )}
             <p className="text-xs text-muted">
-              Ficam fora da fila: {n(p.fila.optout)} que pediram para sair, {n(p.fila.semWhatsapp)} sem WhatsApp e {n(p.fila.removidos)} removidos (fixo, fora do perfil ou sem nome).
+              Não entram na fila: {n(p.fila.optout)} que pediram para não receber, {n(p.fila.semWhatsapp)} sem WhatsApp e {n(p.fila.removidos)} removidos
+              (telefone fixo, não é lava-jato ou sem nome).
             </p>
 
             <div className="rounded-xl border border-line p-4">
@@ -304,11 +408,11 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
               />
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-lg bg-surface px-2 py-2">
-                  <p className="text-lg font-extrabold text-strong tabular-nums">{n(p.fila.segundoProntos)}</p>
+                  <AnimatedNumber value={p.fila.segundoProntos} className="block text-lg font-extrabold text-strong" />
                   <p className="text-[11px] text-muted">prontos agora</p>
                 </div>
                 <div className="rounded-lg bg-surface px-2 py-2">
-                  <p className="text-lg font-extrabold text-strong tabular-nums">{n(p.fila.segundo7Dias)}</p>
+                  <AnimatedNumber value={p.fila.segundo7Dias} className="block text-lg font-extrabold text-strong" />
                   <p className="text-[11px] text-muted">nos próximos 7 dias</p>
                 </div>
                 <div className="rounded-lg bg-surface px-2 py-2">
@@ -317,14 +421,14 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
                 </div>
               </div>
               {!sc.ligado && (
-                <p className="mt-2 text-[11px] text-muted">Desligado: ninguém recebe o 2º contato. Quem pediu para sair, respondeu ou não recebeu a 1ª nunca entra.</p>
+                <p className="mt-2 text-[11px] text-muted">Desligado: ninguém recebe o 2º contato.</p>
               )}
             </div>
           </div>
         </Card>
 
         {/* Saúde do número */}
-        <div className="space-y-5">
+        <div className="entrar space-y-5" style={{ "--i": 9 } as CSSProperties}>
           <CartaoSaude s={saude} />
           {p.freiosLog.length > 0 && (
             <Card className="overflow-hidden">
@@ -344,8 +448,8 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
 
       {/* Mensagens */}
       {p.modelos.length > 0 && (
-        <Card className="overflow-hidden">
-          <Titulo icone={<Repeat2 className="size-4" />}>Mensagens nos últimos {p.dias} dias</Titulo>
+        <Card className="entrar overflow-hidden" style={{ "--i": 10 } as CSSProperties}>
+          <Titulo icone={<Repeat2 className="size-4" />}>Resultado de cada mensagem nos últimos {p.dias} dias</Titulo>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px] text-sm">
               <thead>
@@ -353,14 +457,14 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
                   <th className="px-5 py-2 font-semibold">Mensagem</th>
                   <th className="px-3 py-2 text-right font-semibold">Enviadas</th>
                   <th className="px-3 py-2 text-right font-semibold">Responderam</th>
-                  <th className="px-3 py-2 text-right font-semibold">Saíram</th>
+                  <th className="px-3 py-2 text-right font-semibold">Não querem</th>
                   <th className="px-3 py-2 text-right font-semibold">Link</th>
                   <th className="px-5 py-2 text-right font-semibold">Conta</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {p.modelos.map((m) => (
-                  <tr key={`${m.modelo}-${m.segundo}`}>
+                  <tr key={`${m.modelo}-${m.segundo}`} className="transition-colors hover:bg-surface">
                     <td className="px-5 py-2.5 text-ink">
                       {nomeDoModelo(m.modelo)} {m.segundo && <Badge tone="brand">2º contato</Badge>}
                     </td>
@@ -374,12 +478,15 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
               </tbody>
             </table>
           </div>
-          <p className="border-t border-line px-5 py-2.5 text-[11px] text-muted">Respondeu = escreveu ou tocou num botão em até 7 dias. Link = recebeu o link dos planos. Conta = criou a conta de parceiro depois.</p>
+          <p className="border-t border-line px-5 py-2.5 text-[11px] text-muted">
+            Responderam: escreveram ou tocaram num botão em até 7 dias. Não querem: pediram para parar de receber. Link: receberam o link de
+            cadastro. Conta: criaram a conta de parceiro.
+          </p>
         </Card>
       )}
 
       {/* Busca automática */}
-      <Card className="overflow-hidden">
+      <Card className="entrar overflow-hidden" style={{ "--i": 11 } as CSSProperties}>
         <Titulo
           icone={<Search className="size-4" />}
           extra={
@@ -415,8 +522,8 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
           )}
           {p.busca.ultimas.length > 0 ? (
             <ul className="divide-y divide-line rounded-xl border border-line">
-              {p.busca.ultimas.slice(0, 6).map((r) => (
-                <li key={r.inicio} className="px-4 py-2.5 text-sm">
+              {p.busca.ultimas.slice(0, 6).map((r, i) => (
+                <li key={r.inicio} className="entrar px-4 py-2.5 text-sm transition-colors hover:bg-surface" style={{ "--i": i + 12 } as CSSProperties}>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="font-semibold text-ink">{quandoCurto(r.inicio)}</span>
                     <Badge tone={r.origem === "manual" ? "navy" : "gray"}>{r.origem === "manual" ? "Buscar agora" : "automática"}</Badge>
@@ -443,13 +550,13 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
 
       {/* Mudanças */}
       {p.mudancas.length > 0 && (
-        <Card className="overflow-hidden">
+        <Card className="entrar overflow-hidden" style={{ "--i": 12 } as CSSProperties}>
           <Titulo icone={<History className="size-4" />}>Últimas mudanças</Titulo>
           <ul className="divide-y divide-line">
             {p.mudancas.map((m) => (
-              <li key={`${m.chave}-${m.em}`} className="flex flex-wrap items-baseline gap-x-2 px-5 py-2.5 text-sm">
+              <li key={`${m.chave}-${m.em}`} className="flex flex-wrap items-baseline gap-x-2 px-5 py-2.5 text-sm transition-colors hover:bg-surface">
                 <span className="text-ink">{m.texto}</span>
-                <span className="text-xs text-muted">{quandoCurto(m.em)} · {m.por || "sem nome"}</span>
+                <span className="text-xs text-muted">{quandoCurto(m.em)} · {quem(m.por)}</span>
               </li>
             ))}
           </ul>
