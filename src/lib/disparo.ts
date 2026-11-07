@@ -18,7 +18,7 @@ import {
   saudeDoBanco,
   saudeSimulada,
 } from "./disparo-regras";
-import { lerLimiteDiario, lerSaudeNumero, type LimiteDiarioBanco } from "./banco";
+import { disparoAutomaticoLigado, lerLimiteDiario, lerSaudeNumero, type LimiteDiarioBanco } from "./banco";
 import { telefonesBloqueados } from "./bloqueio";
 import { getConfig } from "./env";
 import { dataN8n, mockSheet } from "./mock";
@@ -448,6 +448,8 @@ export function encerrarDisparo(): Promise<StatusDisparo> {
  * com ele) e `radar_parar`. Para quando o disparo foi pausado/cancelado no Radar ou quando o
  * contato não está mais "pendente" na planilha. Se a planilha não responder, deixa seguir
  * (o n8n já tinha lido ela como pendente).
+ * 07/11/2026: o 2º contato (`segundo: true`, quem não respondeu em 30 dias) vem com status "enviado" e passa;
+ * a rotina (`origem: "rotina"`) para na hora quando o disparo automático é pausado na tela Disparo automático.
  */
 export async function consultarTrava(
   contato: Record<string, unknown>,
@@ -479,11 +481,13 @@ export async function consultarTrava(
   else if (d?.interrompido) motivo = d.interrompido.como === "cancelado" ? "disparo cancelado no Radar" : "disparo pausado no Radar";
   else if (key && telefonesBloqueados().has(key)) motivo = "número bloqueado";
   else if (motivoSaude) motivo = motivoSaude;
+  else if (contato.origem === "rotina" && (await automaticoLigado(agora)) === false) motivo = "disparo automático pausado no Radar";
   else if (key) {
     try {
       const linhas = await lerLinhas(2_000);
       const doTelefone = linhas.filter((l) => l.key === key);
-      if (doTelefone.length && !doTelefone.some(paraON8n)) {
+      const segundo = contato.segundo === true || contato.segundo === "true";
+      if (doTelefone.length && !doTelefone.some((l) => paraON8n(l) || (segundo && l.situacao === "enviado" && !l.optout))) {
         const l = doTelefone[0];
         motivo = l.optout ? "pediu para não receber (optout)" : `status "${l.status || "vazio"}" na planilha`;
       }
@@ -501,6 +505,24 @@ export async function consultarTrava(
     t.enviandoAgora = { key, em: agora };
   }
   return { ...contato, radar_parar: parar, radar_motivo: motivo };
+}
+
+/** Disparo automático ligado? Lido do banco no máximo a cada 15 s; falha = null (não para por isso). */
+const cacheLigado = { em: 0, valor: null as boolean | null };
+async function automaticoLigado(agora: number): Promise<boolean | null> {
+  if (agora - cacheLigado.em < 15_000) return cacheLigado.valor;
+  try {
+    cacheLigado.valor = await disparoAutomaticoLigado();
+  } catch {
+    cacheLigado.valor = null;
+  }
+  cacheLigado.em = agora;
+  return cacheLigado.valor;
+}
+
+/** A tela Disparo automático acabou de pausar/continuar: a trava passa a valer na próxima mensagem. */
+export function esquecerAutomaticoLigado() {
+  cacheLigado.em = 0;
 }
 
 export function registrarChaveErrada(agora = Date.now()) {

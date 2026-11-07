@@ -14,6 +14,7 @@ import { confete } from "@/components/motion";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
 import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
 
+import { AutomaticoView } from "./AutomaticoView";
 import { DisparoView } from "./DisparoView";
 import { HistoryView } from "./HistoryView";
 import { LeadsView } from "./LeadsView";
@@ -67,7 +68,7 @@ function primeirosElegiveis(lista: Lead[], max: number, incluirFixos: boolean): 
   return ids;
 }
 
-const VIEWS: View[] = ["buscar", "resultados", "disparo", "leads", "painel", "historico", "config"];
+const VIEWS: View[] = ["buscar", "resultados", "disparo", "automatico", "leads", "painel", "historico", "config"];
 
 export function Dashboard() {
   const toast = useToast();
@@ -634,6 +635,7 @@ export function Dashboard() {
         />
       )}
       {view === "disparo" && <DisparoView preSelecao={preSelecaoDisparo} onPreSelecaoVista={preSelecaoVista} />}
+      {view === "automatico" && <AutomaticoView uso={uso} />}
       {view === "leads" && <LeadsView />}
       {view === "painel" && <PainelView />}
       {view === "historico" && (

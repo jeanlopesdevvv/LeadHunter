@@ -109,6 +109,27 @@ describe("trava do n8n", () => {
     expect((await consultarTrava({ telefone: B }, "e2")).radar_parar).toBe(false);
   });
 
+  it("2º contato (segundo: true) passa com status enviado; sem a marca, ou com optout, para", async () => {
+    montar([
+      [A, "Lava A", "Empresa", "BH", "enviado", "01/10/2026, 10:00:00", ""],
+      [B, "Lava B", "Empresa", "BH", "enviado", "01/10/2026, 10:00:00", "02/10/2026, 10:00:00"],
+    ]);
+    const { consultarTrava } = await import("@/lib/disparo");
+    expect((await consultarTrava({ telefone: A, segundo: true }, "e1")).radar_parar).toBe(false);
+    expect((await consultarTrava({ telefone: A }, "e2")).radar_parar).toBe(true);
+    expect((await consultarTrava({ telefone: B, segundo: true }, "e3")).radar_motivo).toMatch(/optout/);
+  });
+
+  it("disparo automático pausado: a rotina para na hora; o disparo pelo Radar segue", async () => {
+    montar([[A, "Lava A", "Empresa", "BH", "pendente", "", ""]]);
+    vi.doMock("@/lib/banco", async (original) => ({ ...(await original<typeof import("@/lib/banco")>()), disparoAutomaticoLigado: async () => false }));
+    const { consultarTrava } = await import("@/lib/disparo");
+    const r = await consultarTrava({ telefone: A, origem: "rotina" }, "e1");
+    expect(r).toMatchObject({ radar_parar: true, radar_motivo: "disparo automático pausado no Radar" });
+    expect((await consultarTrava({ telefone: A, origem: "radar" }, "e2")).radar_parar).toBe(false);
+    vi.doUnmock("@/lib/banco");
+  });
+
   it("a rota exige a chave da trava", async () => {
     montar([[A, "Lava A", "Empresa", "BH", "pendente", "", ""]]);
     const { POST } = await import("@/app/api/n8n/trava/route");

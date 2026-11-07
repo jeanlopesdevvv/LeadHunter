@@ -3,9 +3,9 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 /**
  * Tudo exige a senha, exceto a tela de login, a rota que faz o login, o healthcheck a trava
- * que o n8n consulta antes de cada mensagem e o aviso de erro de envio (esses conferem a própria chave).
+ * que o n8n consulta antes de cada mensagem, o aviso de erro de envio e a busca automática (esses conferem a própria chave).
  */
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health", "/api/n8n/trava", "/api/n8n/erro"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health", "/api/n8n/trava", "/api/n8n/erro", "/api/n8n/busca-auto"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -155,3 +155,60 @@ export function mockSheet(): MockSheet {
   }
   return g.__lhMockSheet;
 }
+
+/** Tela "Disparo automático" na simulação: números falsos (os botões mudam só na memória). */
+const simAuto = { disparo: true, busca: true, segundo: false };
+export function mockLigarAutomatico(chave: string, ligado: boolean) {
+  if (chave === "disparo_automatico") simAuto.disparo = ligado;
+  else if (chave === "busca_auto") simAuto.busca = ligado;
+  else if (chave === "disparo_segundo_contato") simAuto.segundo = ligado;
+}
+export function mockPainelAutomatico(dias: number): unknown {
+  const sorte = rng(42);
+  const hoje = Date.now();
+  const porDia = Array.from({ length: dias }, (_, i) => {
+    const d = new Date(hoje - (dias - 1 - i) * 86_400_000);
+    const iso = d.toISOString().slice(0, 10);
+    const util = d.getUTCDay() >= 1 && d.getUTCDay() <= 5;
+    const enviados = util ? 80 + Math.round(sorte() * 20) : 0;
+    return { dia: iso, enviados, segundos: Math.round(enviados * 0.25), responderam: Math.round(enviados * (0.25 + sorte() * 0.15)), saidas: Math.round(enviados * 0.05), erros: Math.round(enviados * 0.1) };
+  });
+  const soma = (k: keyof (typeof porDia)[number]) => porDia.reduce((a, d) => a + Number(d[k]), 0);
+  return {
+    agora: new Date().toISOString(),
+    dias,
+    config: {
+      disparo: { ligado: simAuto.disparo, inicio: "2026-11-16", rotacao: ["carol_prospeccao_lavajato", "carol_prospeccao_beneficio"], vizinho: "carol_prospeccao_vizinho", ordem_cidades: ["Contagem", "Betim", "Belo Horizonte"] },
+      segundo_contato: { ligado: simAuto.segundo, dias: 30, peso: 0.3, modelo: "carol_prospeccao_retorno" },
+      busca: { ligado: simAuto.busca, termos: ["lava jato", "lava rápido", "estética automotiva"], cidades: ["Contagem", "Betim", "Belo Horizonte", "Ibirité", "Sarzedo", "Ribeirão das Neves"], fila_dias: 3, max_consultas_dia: 40, reserva_cota: 150 },
+      limite: 100,
+    },
+    situacao: { limite: 100, limite_configurado: 100, enviados_hoje: porDia[porDia.length - 1].enviados, freio: "normal", motivo: "", rotina_liberada: true, freios: [], saidas_hoje: 2, barradas_hoje: 0 },
+    envios: {
+      dias: porDia,
+      modelos: [
+        { modelo: "carol_prospeccao_lavajato", segundo: false, enviados: Math.round(soma("enviados") * 0.4), responderam: 120, saidas: 18, link: 22, conta: 4, erros: 30 },
+        { modelo: "carol_prospeccao_beneficio", segundo: false, enviados: Math.round(soma("enviados") * 0.3), responderam: 96, saidas: 10, link: 19, conta: 3, erros: 21 },
+        { modelo: "carol_prospeccao_retorno", segundo: true, enviados: soma("segundos"), responderam: 41, saidas: 9, link: 7, conta: 1, erros: 5 },
+      ],
+      periodo: { enviados: soma("enviados"), responderam: soma("responderam"), saidas: soma("saidas"), link: 48, conta: 8, erros: soma("erros"), sem_whatsapp: Math.round(soma("erros") * 0.8), barradas: 6 },
+      hoje: { enviados: porDia[porDia.length - 1].enviados, segundos: porDia[porDia.length - 1].segundos, responderam: 11, saidas: 2, erros: 4, rotina: porDia[porDia.length - 1].enviados, radar: 0 },
+    },
+    fila: { novos: 214, segundos_na_fila: 22, segundo_prontos: 22, segundo_7dias: 61, segundo_proximo: new Date(hoje + 86_400_000).toISOString().slice(0, 10),
+      por_cidade: [{ cidade: "Contagem", n: 71 }, { cidade: "Betim", n: 58 }, { cidade: "Belo Horizonte", n: 49 }, { cidade: "Ibirité", n: 36 }],
+      dias_de_fila: 2.4, pendentes_fora: { removidos: 47, sem_whatsapp: 2, optout: 20 } },
+    busca: {
+      ultimas: [
+        { inicio: new Date(hoje - 3 * 3600_000).toISOString(), fim: new Date(hoje - 3 * 3600_000 + 140_000).toISOString(), origem: "rotina", precisava: 86, consultas: 14, vistos: 252, novos: 91, adicionados: 88, motivo_fim: "alvo",
+          cidades: { Ibirité: { consultas: 9, novos: 60, adicionados: 58 }, Sarzedo: { consultas: 5, novos: 31, adicionados: 30 } } },
+        { inicio: new Date(hoje - 27 * 3600_000).toISOString(), fim: new Date(hoje - 27 * 3600_000 + 90_000).toISOString(), origem: "manual", precisava: 100, consultas: 21, vistos: 360, novos: 104, adicionados: 100, motivo_fim: "alvo", cidades: { Contagem: { consultas: 21, novos: 104, adicionados: 100 } } },
+      ],
+      consultas_mes: 35, adicionados_mes: 188, cidades_feitas: ["Contagem", "Betim", "Belo Horizonte", "Ibirité"],
+    },
+    freios_log: [{ dia: new Date(hoje - 5 * 86_400_000).toISOString().slice(0, 10), motivo: "saidas", nivel: "pausa", detalhe: "9 pediram para sair hoje, de 100 disparos (9%, acima de 8%); disparo parado até amanhã" }],
+    mudancas: [
+      { chave: "disparo_segundo_contato", antes: { ligado: false }, depois: { ligado: true }, por: "Radar (continuar)", em: new Date(hoje - 2 * 86_400_000).toISOString() },
+      { chave: "carol_limite_diario", antes: { valor: 80 }, depois: { valor: 100 }, por: "Jean", em: new Date(hoje - 9 * 86_400_000).toISOString() },
+    ],
+  };
+}

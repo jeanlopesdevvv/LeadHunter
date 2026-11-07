@@ -218,6 +218,18 @@ Como funciona:
 - Sem a trava instalada, Pausar/Cancelar ainda mudam a planilha, mas o n8n segue a lista que já leu: pare a execução
   no n8n (*Executions → Stop*).
 
+### Disparo automático e busca automática de leads (07/11/2026)
+
+- Tela **Disparo automático** (menu): situação do dia, números por dia e por mensagem, fila, 2º contato, saúde do número,
+  freios, busca automática e últimas mudanças. Botões: **Pausar/Continuar disparos**, ligar/desligar o **2º contato** e a
+  **busca automática**, e **Buscar agora**. Tudo pelo banco (`atendimento.disparo_painel`, `atendimento.disparo_ligar`).
+- Pausar vale na hora: a rotina do Fluxo 1 (v7.1) manda `origem: "rotina"` para a trava, e a trava para quando o disparo
+  automático está desligado. O 2º contato chega na trava com `segundo: true` e status "enviado" (passa).
+- Busca automática: o n8n chama `POST /api/n8n/busca-auto?chave=…` (mesma chave da trava) de segunda a sexta antes da
+  1ª rodada (fluxo "Radar - Busca automática de leads"). O Radar só busca se a fila tiver menos de `fila_dias` dias de
+  disparo, cidade por cidade (configuração `busca_auto` em `atendimento.config`), sem repetir o que buscou nos últimos
+  `refazer_dias`, e respeita `max_consultas_dia` e a `reserva_cota` do mês (sobra para a busca manual).
+
 ### Atendimento (Chatwoot)
 
 - `CHATWOOT_URL`: tela que o botão **Atendimento** abre (padrão: a visão "Carol - IA cuidando",

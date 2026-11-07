@@ -4,6 +4,7 @@ import postgres from "postgres";
 
 import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, avaliacoesDoGoogle, nomeDeAba, notaDoGoogle, registrosComoAba, telefoneDoBanco, type EdicaoLead } from "./banco-regras";
 import { getConfig } from "./env";
+import { mockLigarAutomatico, mockPainelAutomatico } from "./mock";
 import { SheetsError } from "./erros";
 import { comoItemDaFila, type FilaAtendente, type ItemFila } from "./fila-regras";
 import { comoFunil, type FunilAtivacao } from "./funil-regras";
@@ -442,4 +443,61 @@ export async function lerFilaAtendente(): Promise<FilaAtendente> {
   ]);
   const itens = linhas.map(comoItemDaFila).filter((x): x is ItemFila => x !== null);
   return { disponivel: true, equipeNoHorario: hora[0]?.d === true, itens };
+}
+
+// ---------------------------------------------------------------------------
+// Disparo automático (07/11/2026): painel, pausar/continuar e a busca automática de leads.
+// Tudo por funções do banco (security definer): o Radar não mexe direto nas tabelas novas.
+
+/** Painel da tela "Disparo automático" (atendimento.disparo_painel). null sem banco configurado. */
+export async function lerPainelAutomatico(dias: number): Promise<unknown> {
+  if (getConfig().mock) return mockPainelAutomatico(dias);
+  if (!getConfig().banco) return null;
+  const r = await noBanco((sql) => sql<Registro[]>`select atendimento.disparo_painel(${dias}::int) as j`);
+  return r[0]?.j ?? null;
+}
+
+/** Liga ou pausa: disparo automático, busca automática ou 2º contato. Devolve a configuração nova. */
+export async function ligarAutomatico(chave: "disparo_automatico" | "busca_auto" | "disparo_segundo_contato", ligado: boolean, por: string): Promise<unknown> {
+  if (getConfig().mock) return mockLigarAutomatico(chave, ligado);
+  const r = await noBanco((sql) => sql<Registro[]>`select atendimento.disparo_ligar(${chave}, ${ligado}, ${por}) as v`, false);
+  return r[0]?.v ?? null;
+}
+
+/** O disparo automático está ligado? null = não deu para ler (a trava não para por isso). */
+export async function disparoAutomaticoLigado(): Promise<boolean | null> {
+  if (!getConfig().banco) return null;
+  const r = await noBanco((sql) => sql<Registro[]>`select (valor->>'ligado')::boolean as l from atendimento.config where chave = 'disparo_automatico'`);
+  const l = r[0]?.l;
+  return typeof l === "boolean" ? l : null;
+}
+
+export async function buscaAutoEstado(): Promise<unknown> {
+  const r = await noBanco((sql) => sql<Registro[]>`select atendimento.busca_auto_estado() as j`);
+  return r[0]?.j ?? null;
+}
+
+/** Começa uma rodada da busca automática; null = já tem outra rodando. */
+export async function buscaAutoIniciar(origem: string, precisava: number): Promise<number | null> {
+  const r = await noBanco((sql) => sql<Registro[]>`select atendimento.busca_auto_iniciar(${origem}, ${precisava}::int) as id`, false);
+  const id = r[0]?.id;
+  return id === null || id === undefined ? null : Number(id);
+}
+
+export async function buscaAutoFeita(log: number, termo: string, cidade: string, area: string, consultas: number, vistos: number, novos: number, cheia: boolean) {
+  await noBanco(
+    (sql) => sql`select atendimento.busca_auto_feita(${log}::bigint, ${termo}, ${cidade}, ${area}, ${consultas}::int, ${vistos}::int, ${novos}::int, ${cheia}::boolean)`,
+    false,
+  );
+}
+
+export async function buscaAutoTerminar(
+  log: number,
+  r: { consultas: number; vistos: number; novos: number; adicionados: number; motivo: string },
+  detalhe: Record<string, unknown>,
+) {
+  await noBanco(
+    (sql) => sql`select atendimento.busca_auto_terminar(${log}::bigint, ${r.consultas}::int, ${r.vistos}::int, ${r.novos}::int, ${r.adicionados}::int, ${r.motivo}, ${sql.json(detalhe as never)}::jsonb)`,
+    false,
+  );
 }
