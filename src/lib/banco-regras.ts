@@ -133,3 +133,13 @@ export function validarEdicao(body: unknown): { ok: true; edicao: EdicaoLead } |
 export function agoraBrasilia(d = new Date()): string {
   return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
+
+/** Nota do Google (1,0 a 5,0, uma casa) ou null; a coluna é numeric(2,1). */
+export function notaDoGoogle(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 5 ? Math.round(v * 10) / 10 : null;
+}
+
+/** Número de avaliações do Google (inteiro, 0 ou mais) ou null. */
+export function avaliacoesDoGoogle(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.min(Math.round(v), 2_000_000_000) : null;
+}

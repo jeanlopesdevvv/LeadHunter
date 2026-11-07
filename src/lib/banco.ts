@@ -2,7 +2,7 @@ import "server-only";
 
 import postgres from "postgres";
 
-import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, nomeDeAba, registrosComoAba, telefoneDoBanco, type EdicaoLead } from "./banco-regras";
+import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, avaliacoesDoGoogle, nomeDeAba, notaDoGoogle, registrosComoAba, telefoneDoBanco, type EdicaoLead } from "./banco-regras";
 import { getConfig } from "./env";
 import { SheetsError } from "./erros";
 import { comoItemDaFila, type FilaAtendente, type ItemFila } from "./fila-regras";
@@ -202,7 +202,12 @@ export async function existentes(extras: string[]) {
 export async function appendLeads(leads: LeadForSheet[], statusInicial: string, extras: string[]): Promise<SendResult> {
   const existing = await existentes(extras); // relido na hora de gravar
   const { toAppend, ignorados } = planSend(leads, existing);
-  const linhas: { telefone: string; nome: string; tipo: string; cidade: string; status: string }[] = [];
+  // 07/11/2026 (plano de disparos): nota, avaliações, categoria, bairro e place_id do Google também vão para o banco;
+  // a fila do disparo (atendimento.disparo_fila) usa nota e avaliações para decidir quem recebe primeiro.
+  const linhas: {
+    telefone: string; nome: string; tipo: string; cidade: string; status: string;
+    nota: number | null; avaliacoes: number | null; categoria: string | null; bairro: string | null; place_id: string | null;
+  }[] = [];
   const porTelefone = new Map<string, LeadForSheet>();
   for (const l of toAppend) {
     const telefone = telefoneDoBanco(l.telefone);
@@ -211,7 +216,11 @@ export async function appendLeads(leads: LeadForSheet[], statusInicial: string, 
       continue;
     }
     porTelefone.set(telefone, l);
-    linhas.push({ telefone, nome: l.nome ?? "", tipo: l.tipo ?? "", cidade: l.cidade ?? "", status: statusInicial });
+    linhas.push({
+      telefone, nome: l.nome ?? "", tipo: l.tipo ?? "", cidade: l.cidade ?? "", status: statusInicial,
+      nota: notaDoGoogle(l.nota), avaliacoes: avaliacoesDoGoogle(l.avaliacoes),
+      categoria: l.categoria?.trim() || null, bairro: l.bairro?.trim() || null, place_id: l.placeId?.trim() || null,
+    });
   }
   let gravados = new Set<string>();
   if (linhas.length) {

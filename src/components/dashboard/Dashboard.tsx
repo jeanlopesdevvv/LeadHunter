@@ -53,7 +53,8 @@ const FORM_INICIAL: SearchForm = {
   alvo: 50,
   limite: null,
   ignorarFechados: false,
-  incluirFixos: true,
+  // 07/11/2026 (plano de disparos): fixo desligado por padrão. Nos disparos até 06/11, 20 de 27 fixos não tinham WhatsApp.
+  incluirFixos: false,
 };
 
 /** Marca os primeiros `max` que podem ir para a planilha (celular ou fixo permitido, fora da planilha). */

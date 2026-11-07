@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { CABECALHO_LEADS, comoTexto, lerSenhaBanco, registrosComoAba, situacaoDoLead, telefoneDoBanco, validarEdicao } from "@/lib/banco-regras";
+import { CABECALHO_LEADS, avaliacoesDoGoogle, comoTexto, lerSenhaBanco, notaDoGoogle, registrosComoAba, situacaoDoLead, telefoneDoBanco, validarEdicao } from "@/lib/banco-regras";
 
 describe("regras da lista de leads no banco", () => {
   it("converte registros em aba com o mesmo cabeçalho da planilha", () => {
@@ -21,6 +21,18 @@ describe("regras da lista de leads no banco", () => {
     expect(telefoneDoBanco("(31) 98299-9779")).toBe("5531982999779");
     expect(telefoneDoBanco("+55 31 3376-1558")).toBe("553133761558");
     expect(telefoneDoBanco("abc")).toBe("");
+  });
+
+  it("nota e avaliações do Google vão para o banco só quando são números válidos", () => {
+    expect(notaDoGoogle(4.66)).toBe(4.7);
+    expect(notaDoGoogle(5)).toBe(5);
+    expect(notaDoGoogle(null)).toBeNull();
+    expect(notaDoGoogle(7)).toBeNull();
+    expect(notaDoGoogle("4,5")).toBeNull();
+    expect(avaliacoesDoGoogle(123.4)).toBe(123);
+    expect(avaliacoesDoGoogle(0)).toBe(0);
+    expect(avaliacoesDoGoogle(-1)).toBeNull();
+    expect(avaliacoesDoGoogle(undefined)).toBeNull();
   });
 
   it("acha a senha do banco com o nome que foi posto no painel", () => {
