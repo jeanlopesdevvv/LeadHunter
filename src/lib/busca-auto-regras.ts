@@ -5,9 +5,14 @@
  *
  * Como decide:
  * - precisa = limite do dia × "fila_dias" − novos que já estão na fila (atendimento.disparo_fila). Fila cheia: não busca.
- * - Vai cidade por cidade (ordem da configuração busca_auto), termo por termo. Cada busca é "termo em cidade"
- *   (até 3 páginas de 20). Se o Google devolve cerca de 60 (cheia), divide o mapa da cidade em 4 e busca cada pedaço,
- *   até 3 vezes (64 pedaços), como a busca da tela "Nova prospecção".
+ * - Vai cidade por cidade (ordem da configuração busca_auto: Belo Horizonte primeiro, depois a Grande BH, das mais
+ *   perto para as mais longe). Cada busca é "termo em cidade" (até 3 páginas de 20). Se o Google devolve cerca de 60
+ *   (cheia), divide o mapa da cidade em 4 e busca cada pedaço, até 3 vezes (64 pedaços).
+ * - 07/11/2026 (pedido do Jean: "da melhor forma possível, priorizando BH"): dentro de cada cidade a busca vai por
+ *   camadas (todos os termos na cidade inteira, depois os 4 pedaços, depois os 16...), cobrindo a cidade toda antes de
+ *   ir fundo num canto só. Um pedaço só é dividido de novo se ainda rendeu leads novos (3 ou mais): onde quase tudo já
+ *   está na lista, dividir só gastaria consulta. Categoria do Google que não é lavagem (estacionamento, oficina,
+ *   autopeças...) fica de fora, a não ser que o nome diga que lava carro.
  * - O que já foi buscado nos últimos "refazer_dias" não é repetido (atendimento.busca_auto_feitas).
  * - Entra na lista só celular, estabelecimento aberto, de MG, com nome de verdade, fora do perfil fica de fora
  *   (lavanderia de roupa, estofados...) e quem já está na lista, conversou com a Carol/Sofia ou pediu para sair também.
@@ -34,6 +39,8 @@ export interface FeitaBuscaAuto {
   cidade: string;
   area: string;
   cheia: boolean;
+  /** Leads novos que essa busca rendeu (decide se vale dividir de novo). */
+  novos?: number;
 }
 
 export interface EstadoBuscaAuto {
@@ -81,7 +88,7 @@ export function comoEstadoBusca(v: unknown): EstadoBuscaAuto {
     ? e.feitas
         .map((f) => f as Record<string, unknown>)
         .filter((f) => typeof f.termo === "string" && typeof f.cidade === "string")
-        .map((f) => ({ termo: String(f.termo), cidade: String(f.cidade), area: String(f.area ?? ""), cheia: f.cheia === true }))
+        .map((f) => ({ termo: String(f.termo), cidade: String(f.cidade), area: String(f.area ?? ""), cheia: f.cheia === true, novos: Number(f.novos ?? 99) || 0 }))
     : [];
   return {
     config: comoConfigBusca(e.config),
@@ -121,12 +128,20 @@ export function foraDoPerfil(nome: string): boolean {
 export type MotivoDescarte = "sem_celular" | "fechado" | "outro_estado" | "fora_do_perfil" | "sem_nome" | "ja_na_lista" | "repetido";
 
 /** O lead serve para a fila do disparo? (null = serve) */
+/** Categoria do Google que não é lavagem de carro, quando o nome também não diz que lava (ex.: "Estacionamento Central"). */
+export function categoriaFora(categoria: string, nome: string): boolean {
+  const c = semAcento(categoria || "");
+  if (!c) return false;
+  const fora = /(estacionamento|autope|pecas|concession|pneu|borrachar|funilar|mecanic|oficina|locadora|seguro|despachante|vidrac|som automotivo|insulfilm|auto ?escola|guincho|posto de (gasolina|combust)|loja de)/.test(c);
+  return fora && !/(lava|jato|wash|estetica|polimento|higieniz|detail|limpeza|lavagem)/.test(semAcento(nome));
+}
+
 export function motivoDescarte(l: Lead, uf: string, existentes: Set<string>, vistos: Set<string>): MotivoDescarte | null {
   if (l.telefoneTipo !== "celular" || !l.telefoneKey) return "sem_celular";
   if (l.situacaoNegocio && l.situacaoNegocio !== "OPERATIONAL") return "fechado";
   if (l.uf && uf && l.uf.toUpperCase() !== uf) return "outro_estado";
   if (!/[A-Za-zÀ-ÿ]{2,}/.test(l.nome) || l.nome === "(sem nome)") return "sem_nome";
-  if (foraDoPerfil(l.nome)) return "fora_do_perfil";
+  if (foraDoPerfil(l.nome) || categoriaFora(l.categoria, l.nome)) return "fora_do_perfil";
   if (existentes.has(l.telefoneKey)) return "ja_na_lista";
   if (vistos.has(l.telefoneKey)) return "repetido";
   return null;
@@ -139,6 +154,10 @@ export interface UnidadeBusca {
   area: string;
   nivel: number;
 }
+
+/** Um pedaço cheio só é dividido de novo se ainda rendeu pelo menos isso de leads novos (a cidade inteira sempre divide). */
+export const MIN_NOVOS_PARA_DIVIDIR = 3;
+export const vaiDividir = (nivel: number, cheia: boolean, novos: number) => cheia && (nivel === 0 || novos >= MIN_NOVOS_PARA_DIVIDIR);
 
 export const chaveUnidade = (u: { termo: string; cidade: string; area: string }) => `${u.cidade.toLowerCase()}|${u.termo.toLowerCase()}|${u.area}`;
 
@@ -207,6 +226,16 @@ export async function executarBuscaAuto(
   const feitas = new Map(e.feitas.map((f) => [chaveUnidade(f), f]));
   const fila: UnidadeBusca[] = [];
   for (const cidade of cfg.cidades) for (const termo of cfg.termos) fila.push({ termo, cidade, area: "", nivel: 0 });
+  // Ordem: cidade (da configuração) → camada (cidade inteira, 4 pedaços, 16...) → termo → pedaço.
+  const posCidade = new Map(cfg.cidades.map((c, i) => [c, i]));
+  const posTermo = new Map(cfg.termos.map((t, i) => [t, i]));
+  const ordem = (a: UnidadeBusca, b: UnidadeBusca) =>
+    (posCidade.get(a.cidade) ?? 999) - (posCidade.get(b.cidade) ?? 999) || a.nivel - b.nivel ||
+    (posTermo.get(a.termo) ?? 999) - (posTermo.get(b.termo) ?? 999) || (a.area < b.area ? -1 : a.area > b.area ? 1 : 0);
+  const enfileirar = (us: UnidadeBusca[]) => {
+    fila.push(...us);
+    fila.sort(ordem);
+  };
   const contornos = new Map<string, Rect | null>();
   const contorno = async (cidade: string) => {
     if (!contornos.has(cidade)) {
@@ -230,7 +259,7 @@ export async function executarBuscaAuto(
     const u = fila.shift()!;
     const ja = feitas.get(chaveUnidade(u));
     if (ja) {
-      if (ja.cheia && (await contorno(u.cidade))) fila.unshift(...filhas(u));
+      if (vaiDividir(u.nivel, ja.cheia, ja.novos ?? 99) && (await contorno(u.cidade))) enfileirar(filhas(u));
       continue;
     }
     const rect = retanguloDaArea(await contorno(u.cidade), u.area);
@@ -285,8 +314,8 @@ export async function executarBuscaAuto(
     // Só guarda a busca que foi até o fim (uma parada no meio, por limite ou cota, é refeita na próxima rodada).
     if (consultas && (!token || consultas >= PAGINAS_POR_CONSULTA)) {
       await dep.feita(u, { consultas, vistos: vistosU, novos: novosU.length, cheia });
-      feitas.set(chaveUnidade(u), { ...u, cheia });
-      if (cheia && (await contorno(u.cidade))) fila.unshift(...filhas(u));
+      feitas.set(chaveUnidade(u), { ...u, cheia, novos: novosU.length });
+      if (vaiDividir(u.nivel, cheia, novosU.length) && (await contorno(u.cidade))) enfileirar(filhas(u));
     }
     if (fatal) break;
   }

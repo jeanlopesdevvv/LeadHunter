@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  categoriaFora,
   chaveUnidade,
   comoEstadoBusca,
   consultasPermitidas,
@@ -142,6 +143,44 @@ describe("busca automática: rodada", () => {
     const t = deps({ "lava jato em Contagem": 60, area: 5, "lava jato em Betim": 5 });
     await executarBuscaAuto(estado(), 1000, 40, t.d);
     expect(t.feitas).toEqual(["contagem|lava jato|:3:cheia", "contagem|lava jato|1:1:", "contagem|lava jato|2:1:", "contagem|lava jato|3:1:", "contagem|lava jato|4:1:", "betim|lava jato|:1:"]);
+  });
+
+  it("BH primeiro e por camadas: todos os termos na cidade inteira, depois os pedaços, só então a próxima cidade", async () => {
+    const t = deps({ "lava jato em Belo Horizonte": 60, "lava rápido em Belo Horizonte": 60, area: 5, "lava jato em Contagem": 5, "lava rápido em Contagem": 5 });
+    await executarBuscaAuto(estado({}, { cidades: ["Belo Horizonte", "Contagem"], termos: ["lava jato", "lava rápido"] }), 1000, 100, t.d);
+    expect(t.feitas).toEqual([
+      "belo horizonte|lava jato|:3:cheia", "belo horizonte|lava rápido|:3:cheia",
+      "belo horizonte|lava jato|1:1:", "belo horizonte|lava jato|2:1:", "belo horizonte|lava jato|3:1:", "belo horizonte|lava jato|4:1:",
+      "belo horizonte|lava rápido|1:1:", "belo horizonte|lava rápido|2:1:", "belo horizonte|lava rápido|3:1:", "belo horizonte|lava rápido|4:1:",
+      "contagem|lava jato|:1:", "contagem|lava rápido|:1:",
+    ]);
+  });
+
+  it("pedaço cheio que quase não rende leads novos não é dividido de novo", async () => {
+    const conhecidos = new Set<string>();
+    const t = deps({}, {
+      pagina: async (p) => {
+        // cidade inteira: 60 lugares novos; cada pedaço: 60 lugares que já estão na lista
+        const ls = Array.from({ length: 20 }, () => lead({ cidade: p.cidade }));
+        if (p.rect) ls.forEach((l) => conhecidos.add(l.telefoneKey));
+        const pag = p.pageToken ? Number(p.pageToken) : 0;
+        return { leads: ls, nextPageToken: pag < 2 ? String(pag + 1) : null, bruto: 20 };
+      },
+      existentes: async () => conhecidos,
+    });
+    const r = await executarBuscaAuto(estado({}, { cidades: ["Belo Horizonte"] }), 1000, 100, t.d);
+    expect(t.feitas.filter((f) => f.startsWith("belo horizonte|lava jato|") && f.split("|")[2].includes("."))).toEqual([]);
+    expect(r.consultas).toBe(3 + 4 * 3); // cidade inteira + 4 pedaços, sem os 16
+    expect(r.motivo).toBe("esgotado");
+  });
+
+  it("categoria do Google que não é lavagem fica de fora, a não ser que o nome diga que lava", () => {
+    expect(categoriaFora("Estacionamento", "Estacionamento Central")).toBe(true);
+    expect(categoriaFora("Estacionamento", "Estacionamento e Lava Jato do Zé")).toBe(false);
+    expect(categoriaFora("Oficina mecânica", "Auto Center Silva")).toBe(true);
+    expect(categoriaFora("Lava-rápido", "Brilho Car")).toBe(false);
+    expect(categoriaFora("", "Qualquer")).toBe(false);
+    expect(motivoDescarte(lead({ categoria: "Loja de autopeças", nome: "Peças do João" }), "MG", new Set(), new Set())).toBe("fora_do_perfil");
   });
 
   it("respeita o máximo de consultas e não guarda a busca que parou no meio", async () => {
