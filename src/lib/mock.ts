@@ -180,7 +180,7 @@ export function mockPainelAutomatico(dias: number): unknown {
     config: {
       disparo: { ligado: simAuto.disparo, inicio: "2026-11-16", rotacao: ["carol_prospeccao_lavajato", "carol_prospeccao_beneficio"], vizinho: "carol_prospeccao_vizinho", ordem_cidades: ["Contagem", "Betim", "Belo Horizonte"] },
       segundo_contato: { ligado: simAuto.segundo, dias: 30, peso: 0.3, modelo: "carol_prospeccao_retorno" },
-      busca: { ligado: simAuto.busca, termos: ["lava jato", "lava rápido", "estética automotiva"], cidades: ["Contagem", "Betim", "Belo Horizonte", "Ibirité", "Sarzedo", "Ribeirão das Neves"], fila_dias: 3, max_consultas_dia: 40, reserva_cota: 150 },
+      busca: { ligado: simAuto.busca, termos: ["lava jato", "lava rápido", "estética automotiva", "lavagem automotiva"], cidades: ["Belo Horizonte", "Contagem", "Betim", "Nova Lima", "Sabará", "Santa Luzia"], fila_dias: 3, max_consultas_dia: 40, reserva_cota: 150 },
       limite: 100,
     },
     situacao: { limite: 100, limite_configurado: 100, enviados_hoje: porDia[porDia.length - 1].enviados, freio: "normal", motivo: "", rotina_liberada: true, freios: [], saidas_hoje: 2, barradas_hoje: 0 },
@@ -203,7 +203,8 @@ export function mockPainelAutomatico(dias: number): unknown {
           cidades: { Ibirité: { consultas: 9, novos: 60, adicionados: 58 }, Sarzedo: { consultas: 5, novos: 31, adicionados: 30 } } },
         { inicio: new Date(hoje - 27 * 3600_000).toISOString(), fim: new Date(hoje - 27 * 3600_000 + 90_000).toISOString(), origem: "manual", precisava: 100, consultas: 21, vistos: 360, novos: 104, adicionados: 100, motivo_fim: "alvo", cidades: { Contagem: { consultas: 21, novos: 104, adicionados: 100 } } },
       ],
-      consultas_mes: 35, adicionados_mes: 188, cidades_feitas: ["Contagem", "Betim", "Belo Horizonte", "Ibirité"],
+      consultas_mes: 35, adicionados_mes: 188, cidades_feitas: ["Belo Horizonte", "Contagem"],
+      cidades_busca: [{ cidade: "Belo Horizonte", termos: 4, buscas: 20, novos: 131 }, { cidade: "Contagem", termos: 1, buscas: 2, novos: 27 }],
     },
     freios_log: [{ dia: new Date(hoje - 5 * 86_400_000).toISOString().slice(0, 10), motivo: "saidas", nivel: "pausa", detalhe: "9 pediram para sair hoje, de 100 disparos (9%, acima de 8%); disparo parado até amanhã" }],
     mudancas: [

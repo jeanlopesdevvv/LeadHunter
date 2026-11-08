@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { comoPainelAutomatico, descreverMudanca, estadoDoDisparo, hojeEmBrasilia, taxa } from "@/lib/automatico-regras";
+import { cidadesDaBusca, comoPainelAutomatico, descreverMudanca, estadoDoDisparo, hojeEmBrasilia, taxa } from "@/lib/automatico-regras";
 
 const doBanco = {
   agora: "2026-11-17T13:00:00Z",
@@ -49,6 +49,19 @@ describe("painel do disparo automático", () => {
     expect(v.disponivel).toBe(false);
     expect(v.porDia).toEqual([]);
     expect(comoPainelAutomatico("{x").disponivel).toBe(false);
+  });
+
+  it("andamento da busca por cidade (feita, em parte, falta)", () => {
+    const p = comoPainelAutomatico({
+      ...doBanco,
+      config: { ...doBanco.config, busca: { ...doBanco.config.busca, termos: ["lava jato", "lava rápido"], cidades: ["Belo Horizonte", "Contagem", "Betim"] } },
+      busca: { ...doBanco.busca, cidades_busca: [{ cidade: "Contagem", termos: 1, buscas: 2, novos: 27 }, { cidade: "Belo Horizonte", termos: 2, buscas: 9, novos: 80 }] },
+    });
+    expect(cidadesDaBusca(p).map((c) => [c.cidade, c.situacao, c.termos, c.novos])).toEqual([
+      ["Belo Horizonte", "feita", 2, 80],
+      ["Contagem", "parcial", 1, 27],
+      ["Betim", "falta", 0, 0],
+    ]);
   });
 
   it("mudanças", () => {

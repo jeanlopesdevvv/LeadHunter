@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Check,
   CalendarClock,
   CirclePause,
   CirclePlay,
@@ -23,7 +24,7 @@ import { AnimatedNumber, useCountUp } from "@/components/motion";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, Toggle, cx } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
-import { estadoDoDisparo, MOTIVO_BUSCA, taxa, type ChaveLigar, type PainelAutomatico } from "@/lib/automatico-regras";
+import { cidadesDaBusca, estadoDoDisparo, MOTIVO_BUSCA, taxa, type ChaveLigar, type PainelAutomatico } from "@/lib/automatico-regras";
 import type { StatusDisparo } from "@/lib/disparo-regras";
 import { quandoCurto } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
@@ -215,8 +216,7 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
   const ultimaMudanca = p.mudancas.find((m) => m.chave === "disparo_automatico" && /pausado|continuado/.test(m.texto));
   const per = p.periodo;
   const restamHoje = Math.max(0, p.situacao.limite - p.situacao.enviadosHoje);
-  const cidadesBusca = p.busca.cidades;
-  const feitas = new Set(p.busca.cidadesFeitas.map((c) => c.toLowerCase()));
+  const cidadesBusca = cidadesDaBusca(p);
   const sc = p.segundoContato;
 
   return (
@@ -510,14 +510,31 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
           </div>
           {cidadesBusca.length > 0 && (
             <div>
-              <p className="mb-1.5 text-xs font-semibold text-muted">Cidades, na ordem ({p.busca.termos.join(", ")})</p>
+              <p className="mb-1.5 text-xs font-semibold text-muted">Cidades, na ordem em que a busca segue</p>
               <div className="flex flex-wrap gap-1.5">
-                {cidadesBusca.map((c) => (
-                  <Badge key={c} tone={feitas.has(c.toLowerCase()) ? "brand" : "gray"} title={feitas.has(c.toLowerCase()) ? "Já buscada (não repete por 90 dias)" : "Ainda não buscada"}>
-                    {c}
-                  </Badge>
+                {cidadesBusca.map((c, i) => (
+                  <span key={c.cidade} className="entrar" style={{ "--i": Math.min(i, 10) + 12 } as CSSProperties}>
+                    <Badge
+                      tone={c.situacao === "feita" ? "brand" : c.situacao === "parcial" ? "amber" : "gray"}
+                      title={
+                        c.situacao === "falta"
+                          ? "Ainda não buscada"
+                          : `${c.termos} de ${c.total} termos buscados na cidade inteira · ${c.novos} leads novos (não repete por 90 dias)`
+                      }
+                    >
+                      {c.situacao === "feita" && <Check className="size-3" />}
+                      {c.cidade}
+                      {c.situacao === "parcial" && <span className="font-normal opacity-80">· {c.termos}/{c.total}</span>}
+                      {c.novos > 0 && <span className="font-normal opacity-80">· +{n(c.novos)}</span>}
+                    </Badge>
+                  </span>
                 ))}
               </div>
+              <p className="mt-1.5 text-[11px] text-muted">
+                <Check className="inline size-3" /> já buscada com todos os termos ({p.busca.termos.join(", ")}) · em amarelo, buscada em parte (ex.: 1/4
+                termos) · cinza, ainda não. +N = leads novos que a cidade rendeu. A busca termina uma cidade (inteira e em pedaços do mapa) antes de ir
+                para a próxima, e não repete uma busca por 90 dias.
+              </p>
             </div>
           )}
           {p.busca.ultimas.length > 0 ? (

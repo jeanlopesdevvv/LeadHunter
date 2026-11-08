@@ -73,6 +73,8 @@ export interface PainelAutomatico {
     consultasMes: number;
     adicionadosMes: number;
     cidadesFeitas: string[];
+    /** Andamento por cidade: termos já buscados na cidade inteira, buscas feitas e leads novos (últimos refazer_dias). */
+    andamento: { cidade: string; termos: number; buscas: number; novos: number }[];
     ultimas: RodadaBusca[];
   };
   limite: number;
@@ -168,6 +170,7 @@ export function comoPainelAutomatico(v: unknown): PainelAutomatico {
       consultasMes: n(busca.consultas_mes),
       adicionadosMes: n(busca.adicionados_mes),
       cidadesFeitas: strs(busca.cidades_feitas),
+      andamento: arr(busca.cidades_busca).map((x) => ({ cidade: s(obj(x).cidade), termos: n(obj(x).termos), buscas: n(obj(x).buscas), novos: n(obj(x).novos) })),
       ultimas: arr(busca.ultimas).map((x) => {
         const r = obj(x);
         const cid = obj(r.cidades);
@@ -264,6 +267,23 @@ export function descreverMudanca(chave: string, antes: unknown, depois: unknown)
   }
   if (antes === null || antes === undefined) return `${nome}: criado`;
   return JSON.stringify(a) === JSON.stringify(d) ? "" : `${nome}: configuração alterada`;
+}
+
+export type SituacaoCidade = "feita" | "parcial" | "falta";
+
+/**
+ * Como está a busca automática em cada cidade da configuração, na ordem: "feita" = todos os termos já buscados na cidade
+ * inteira; "parcial" = só alguns; "falta" = ainda não buscada (07/11/2026: o Jean perguntou por que Contagem ficava em destaque).
+ */
+export function cidadesDaBusca(p: PainelAutomatico): { cidade: string; situacao: SituacaoCidade; termos: number; total: number; novos: number }[] {
+  const total = Math.max(1, p.busca.termos.length);
+  const porCidade = new Map(p.busca.andamento.map((a) => [a.cidade.toLowerCase(), a]));
+  return p.busca.cidades.map((cidade) => {
+    const a = porCidade.get(cidade.toLowerCase());
+    const termos = Math.min(total, a?.termos ?? 0);
+    const situacao: SituacaoCidade = termos >= total ? "feita" : termos > 0 || (a?.buscas ?? 0) > 0 ? "parcial" : "falta";
+    return { cidade, situacao, termos, total, novos: a?.novos ?? 0 };
+  });
 }
 
 export type EstadoDisparo = "ligado" | "pausado" | "aguardando" | "freio" | "metade" | "sem_rodada";
