@@ -163,6 +163,24 @@ export function mockLigarAutomatico(chave: string, ligado: boolean) {
   else if (chave === "busca_auto") simAuto.busca = ligado;
   else if (chave === "disparo_segundo_contato") simAuto.segundo = ligado;
 }
+/** Funil "Do link à conta" de exemplo (simulação). */
+export function mockFunilConvites(dias: number): unknown {
+  const agora = Date.now();
+  const iso = (h: number) => new Date(agora - h * 3600e3).toISOString();
+  return {
+    desde: iso(24 * 9), dias,
+    etapas: { enviados: 18, abriram: 13, formulario: 12, comecaram: 9, enviaram: 5, conta: 4 },
+    faltou: [{ campo: "document", n: 4 }, { campo: "address", n: 2 }, { campo: "legalName", n: 1 }],
+    erros: [{ em: iso(30), mensagem: "E-mail já cadastrado. Faça login ou use outro e-mail." }],
+    ultimos: [
+      { nome: "Lava Jato Central", enviado_em: iso(2), aberturas: 2, etapa: "comecou", ultimo_passo: iso(1.5) },
+      { nome: "Estética Automotiva Prime", enviado_em: iso(5), aberturas: 1, etapa: "conta", ultimo_passo: iso(4) },
+      { nome: "Lava Rápido do Zé", enviado_em: iso(26), aberturas: 0, etapa: "enviado", ultimo_passo: iso(26) },
+      { nome: "Auto Spa BH", enviado_em: iso(50), aberturas: 3, etapa: "enviou", ultimo_passo: iso(49) },
+    ],
+  };
+}
+
 export function mockPainelAutomatico(dias: number): unknown {
   const sorte = rng(42);
   const hoje = Date.now();

@@ -30,6 +30,7 @@ import { quandoCurto } from "@/lib/periodo";
 import type { Uso } from "@/lib/types";
 
 import { nomeDoModelo } from "./ModeloWhatsApp";
+import { FunilConvites } from "./FunilConvites";
 import { GraficoEnvios } from "./GraficoEnvios";
 import { CartaoSaude } from "./SaudeNumero";
 
@@ -356,6 +357,8 @@ export function AutomaticoView({ uso }: { uso: Uso | null }) {
           </p>
         )}
       </Card>
+
+      <FunilConvites dias={p.dias} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Fila e 2º contato */}

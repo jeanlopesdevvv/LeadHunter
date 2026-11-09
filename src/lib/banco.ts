@@ -4,7 +4,7 @@ import postgres from "postgres";
 
 import { CABECALHOS_ABAS, CABECALHO_LEADS, agoraBrasilia, avaliacoesDoGoogle, nomeDeAba, notaDoGoogle, registrosComoAba, telefoneDoBanco, type EdicaoLead } from "./banco-regras";
 import { getConfig } from "./env";
-import { mockLigarAutomatico, mockPainelAutomatico } from "./mock";
+import { mockLigarAutomatico, mockFunilConvites, mockPainelAutomatico } from "./mock";
 import { SheetsError } from "./erros";
 import { comoItemDaFila, type FilaAtendente, type ItemFila } from "./fila-regras";
 import { comoFunil, type FunilAtivacao } from "./funil-regras";
@@ -455,6 +455,18 @@ export async function lerPainelAutomatico(dias: number): Promise<unknown> {
   if (!getConfig().banco) return null;
   const r = await noBanco((sql) => sql<Registro[]>`select atendimento.disparo_painel(${dias}::int) as j`);
   return r[0]?.j ?? null;
+}
+
+/** Funil "Do link à conta" (convites da Carol, 09/11/2026). null = banco sem a função ainda (a tela esconde o cartão). */
+export async function lerFunilConvites(dias: number): Promise<unknown> {
+  if (getConfig().mock) return mockFunilConvites(dias);
+  if (!getConfig().banco) return null;
+  try {
+    const r = await noBanco((sql) => sql<Registro[]>`select atendimento.convite_funil(${dias}::int) as j`, false);
+    return r[0]?.j ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Liga ou pausa: disparo automático, busca automática ou 2º contato. Devolve a configuração nova. */
