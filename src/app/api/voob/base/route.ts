@@ -1,5 +1,6 @@
 import { readJson } from "@/lib/http";
 import { inserir, lista } from "@/lib/voob/banco";
+import { empresaAtual } from "@/lib/voob/empresa-atual";
 import { erroVoob } from "@/lib/voob/http";
 import { quemFez } from "@/lib/voob/pessoas";
 import { ORDEM_STATUS } from "@/lib/voob/regras";
@@ -20,7 +21,8 @@ export async function GET(request: Request) {
   const busca = (p.get("busca") ?? "").trim().slice(0, 60);
   const limite = Math.min(500, Math.max(1, Number.parseInt(p.get("limite") ?? "300", 10) || 300));
   try {
-    return Response.json(await lista({ status: status.length ? status : undefined, busca: busca || undefined, limite }));
+    const emp = await empresaAtual();
+    return Response.json(await lista(emp.id, { status: status.length ? status : undefined, busca: busca || undefined, limite }));
   } catch (e) {
     return erroVoob(e);
   }
@@ -29,7 +31,7 @@ export async function GET(request: Request) {
 const texto = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined);
 const numero = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** Põe empresas achadas no Google na base. Corpo: { leads: EntradaBase[] } (até 500). Quem já é da Voob não entra. */
+/** Põe empresas achadas no Google na base. Corpo: { leads: EntradaBase[] } (até 500). Quem já é contato da empresa não entra. */
 export async function POST(request: Request) {
   const body = await readJson<{ leads?: unknown }>(request);
   if (!Array.isArray(body?.leads) || !body.leads.length) return Response.json({ erro: "Nenhuma empresa para pôr na base." }, { status: 400 });
@@ -62,7 +64,8 @@ export async function POST(request: Request) {
   }
   if (!leads.length) return Response.json({ erro: "Nenhuma empresa com telefone e nome." }, { status: 400 });
   try {
-    return Response.json(await inserir(leads, await quemFez()));
+    const emp = await empresaAtual();
+    return Response.json(await inserir(emp.id, leads, await quemFez()));
   } catch (e) {
     return erroVoob(e);
   }

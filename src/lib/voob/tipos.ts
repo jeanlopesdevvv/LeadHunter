@@ -47,6 +47,57 @@ export interface EmpresaConfig {
   perfil: PerfilBusca;
   atualizado_por: string | null;
   updated_at: string;
+  // 13/11/2026 (white label, migração 20261113100000). Opcionais: o banco de antes não manda.
+  cor?: string;
+  logo?: string | null;
+  publico?: string;
+  /** Quem responde quem respondeu à 1ª mensagem: a IA da Voob, a equipe pelo CRM ou outro sistema (ex.: ManyChat). */
+  responde?: QuemResponde;
+  responde_sistema?: string | null;
+  /** A conta da empresa no Voob CRM. */
+  site_id?: string | null;
+  conta?: string | null;
+  /** Teste no próprio número ligado. */
+  teste?: TesteEmpresa | null;
+  criado_por?: string | null;
+}
+
+export type QuemResponde = "ia" | "crm" | "outro";
+
+export interface TesteEmpresa {
+  chave: string;
+  final: string;
+  desde: string;
+  quem: string;
+}
+
+/** Uma conta do Voob CRM (para escolher ao criar uma empresa). */
+export interface ContaCrm {
+  id: string;
+  nome: string;
+  /** Já tem WhatsApp oficial. */
+  oficial: boolean;
+  /** O WhatsApp oficial está liberado para essa conta (dá para conectar pelo Radar). */
+  modulo_oficial: boolean;
+  /** Já é a conta de uma empresa do Radar (nome dela). */
+  empresa: string | null;
+}
+
+/** Um modelo (template) do número da empresa, como está na cópia do Voob CRM. */
+export interface ModeloConta {
+  id: string;
+  nome: string;
+  titulo: string;
+  /** APPROVED, PENDING, REJECTED, PAUSED, DISABLED... */
+  status: string;
+  categoria: string | null;
+  motivo: string | null;
+  arquivado: boolean;
+  criado_em: string;
+  /** O texto com os campos ({{nome}}, {{nome_do_negocio}}...). */
+  corpo: string | null;
+  botoes: string[];
+  campos: { param: string; tipo?: string; rotulo?: string; exemplo?: string }[];
 }
 
 export interface PerfilBusca {
@@ -56,7 +107,11 @@ export interface PerfilBusca {
   bairros?: string[];
   so_sem_site?: boolean;
   com_desatualizado?: boolean;
+  /** Filtro de site da campanha (13/11/2026): só quem não tem site, também site desatualizado, ou tanto faz. */
+  site?: FiltroSite;
 }
+
+export type FiltroSite = "sem_site" | "desatualizado" | "tanto_faz";
 
 export interface NumeroProspeccao {
   id: string;
@@ -92,6 +147,7 @@ export interface SituacaoModelo {
   motivo: string | null;
   nome: string | null;
   categoria: string | null;
+  titulo?: string | null;
 }
 
 export interface Prontidao {
@@ -124,6 +180,8 @@ export interface ConfigVoob {
   /** Na base, para quem a 1ª mensagem serve (hoje: sem site ou só rede social). */
   base_pronta: number;
   prontidao: Prontidao[];
+  /** Os modelos do número da empresa (migração 20261113100000). */
+  modelos_conta?: ModeloConta[];
   /** Só na simulação (MOCK_MODE=1). */
   simulacao?: boolean;
 }

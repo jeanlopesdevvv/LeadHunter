@@ -1,14 +1,14 @@
 import "server-only";
 
 import { getConfig } from "@/lib/env";
-import type { Pessoa } from "@/lib/session";
 
-import { enderecoDoCrm, LoginError, pessoaDaConta } from "./pessoas";
+import { tokensDaResposta } from "./crm-sessao-regras";
+import { enderecoDoCrm, LoginError, pessoaDaConta, type Entrada } from "./pessoas";
 
 /** Troca o código da volta do Google pela conta do Voob CRM (PKCE) e confere se ela usa o Radar. */
-export async function trocarCodigoDoGoogle(codigo: string, verificador: string): Promise<Pessoa> {
+export async function trocarCodigoDoGoogle(codigo: string, verificador: string): Promise<Entrada> {
   const cfg = getConfig();
-  if (cfg.mock) return { id: "00000000-0000-4000-8000-00000000000a", nome: "Jean" };
+  if (cfg.mock) return { pessoa: { id: "00000000-0000-4000-8000-00000000000a", nome: "Jean", equipe: true }, tokens: null };
   const base = enderecoDoCrm(cfg.voobCrmDbUrl, cfg.voobCrmUrl);
   if (!base || !cfg.voobCrmAnonKey) throw new LoginError("Entrar com o Google ainda não foi configurado no servidor.", 503);
   let res: Response;
@@ -30,5 +30,5 @@ export async function trocarCodigoDoGoogle(codigo: string, verificador: string):
   }
   const id = typeof dados?.user?.id === "string" ? dados.user.id : "";
   const email = typeof dados?.user?.email === "string" ? dados.user.email : "";
-  return pessoaDaConta(id, email);
+  return { pessoa: await pessoaDaConta(id, email), tokens: tokensDaResposta(dados) };
 }

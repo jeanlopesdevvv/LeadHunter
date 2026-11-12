@@ -1,6 +1,8 @@
+import { createHash, createHmac } from "node:crypto";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPersonToken, createSessionToken, lerSessao, passwordMatches, senhaDoApp, senhaUnicaLiberada, verifySessionToken } from "@/lib/session";
+import { createPersonToken, createSessionToken, lerSessao, passwordMatches, senhaDoApp, senhaUnicaLiberada, sessaoDaEquipe, verifySessionToken } from "@/lib/session";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -32,9 +34,26 @@ describe("sessão por pessoa (12/11/2026)", () => {
   it("guarda quem entrou; a sessão da senha da equipe continua valendo e não tem pessoa", () => {
     vi.stubEnv("APP_PASSWORD", "Lavacar#Radar2026");
     const t = createPersonToken(jean);
-    expect(lerSessao(t)).toEqual({ ok: true, pessoa: jean });
+    expect(lerSessao(t)).toEqual({ ok: true, pessoa: { ...jean, equipe: true } });
     expect(verifySessionToken(t)).toBe(true);
     expect(lerSessao(createSessionToken())).toEqual({ ok: true, pessoa: null });
+  });
+
+  it("13/11/2026: guarda se é da equipe; cliente não é; sessão antiga (sem o campo) conta como equipe", () => {
+    vi.stubEnv("APP_PASSWORD", "Lavacar#Radar2026");
+    const cliente = lerSessao(createPersonToken({ ...jean, equipe: false }));
+    expect(cliente.pessoa?.equipe).toBe(false);
+    expect(sessaoDaEquipe(cliente)).toBe(false);
+    expect(sessaoDaEquipe(lerSessao(createSessionToken()))).toBe(true);
+    expect(sessaoDaEquipe({ ok: false, pessoa: null })).toBe(false);
+    // Token de antes (sem "e"), assinado como o session.ts assina: continua valendo e conta como equipe.
+    const exp = String(Date.now() + 3_600_000);
+    const dados = Buffer.from(JSON.stringify({ u: jean.id, n: jean.nome }), "utf8").toString("base64url");
+    const segredo = createHash("sha256").update("leadhunter:v3::Lavacar#Radar2026").digest("hex");
+    const payload = `p1.${exp}.${dados}`;
+    const antigo = lerSessao(`${payload}.${createHmac("sha256", segredo).update(payload).digest("base64url")}`);
+    expect(antigo).toEqual({ ok: true, pessoa: { ...jean, equipe: true } });
+    expect(lerSessao(`${payload}.x`).ok).toBe(false);
   });
 
   it("não aceita token mexido, de outra senha, vencido ou malformado", () => {

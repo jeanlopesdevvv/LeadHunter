@@ -6,6 +6,7 @@ import { getConfig } from "@/lib/env";
 import { lerSessao, passwordMatches, SESSION_COOKIE, type Pessoa } from "@/lib/session";
 
 import { VoobError, pessoaDoRadar } from "./banco";
+import { tokensDaResposta, type TokensCrm } from "./crm-sessao-regras";
 
 /**
  * Entrar no Radar com a conta do Voob CRM (12/11/2026). O Radar não guarda senha de ninguém: manda o e-mail e a senha
@@ -46,13 +47,23 @@ export function motivoDaRecusa(status: number, codigo: string): [string, number]
 
 const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0]?.slice(0, 40) || "Equipe";
 
-export async function entrarComConta(email: string, senha: string): Promise<Pessoa> {
+/** Quem entrou e o login do Voob CRM (para o Radar agir em nome da pessoa: conectar número, modelos). */
+export interface Entrada {
+  pessoa: Pessoa;
+  tokens: TokensCrm | null;
+}
+
+export async function entrarComConta(email: string, senha: string): Promise<Entrada> {
   const cfg = getConfig();
   if (cfg.mock) {
-    // Simulação: qualquer e-mail com a senha do app entra, com o nome tirado do e-mail.
+    // Simulação: qualquer e-mail com a senha do app entra, com o nome tirado do e-mail. "cliente" no e-mail = cliente.
     if (!passwordMatches(senha)) throw new LoginError("E-mail ou senha incorretos.");
     const nome = email.split("@")[0].replace(/[^a-zA-ZÀ-ÿ]+/g, " ").trim();
-    return { id: "00000000-0000-4000-8000-00000000000a", nome: primeiroNome(nome.charAt(0).toUpperCase() + nome.slice(1)) };
+    const cliente = /cliente/i.test(email);
+    return {
+      pessoa: { id: cliente ? "00000000-0000-4000-8000-00000000000c" : "00000000-0000-4000-8000-00000000000a", nome: primeiroNome(nome.charAt(0).toUpperCase() + nome.slice(1)), equipe: !cliente },
+      tokens: null,
+    };
   }
   const base = enderecoDoCrm(cfg.voobCrmDbUrl, cfg.voobCrmUrl);
   if (!base || !cfg.voobCrmAnonKey) throw new LoginError("Entrar com a conta do Voob CRM ainda não foi configurado no servidor.", 503);
@@ -72,20 +83,21 @@ export async function entrarComConta(email: string, senha: string): Promise<Pess
   const dados = (await res.json().catch(() => null)) as { user?: { id?: unknown }; error_code?: unknown } | null;
   if (!res.ok) throw new LoginError(...motivoDaRecusa(res.status, typeof dados?.error_code === "string" ? dados.error_code : ""));
   const id = typeof dados?.user?.id === "string" ? dados.user.id : "";
-  return pessoaDaConta(id, email);
+  return { pessoa: await pessoaDaConta(id, email), tokens: tokensDaResposta(dados) };
 }
 
 /** A conta (id do Voob CRM) que acabou de entrar pode usar o Radar? Vale para o e-mail e senha e para o Google. */
 export async function pessoaDaConta(id: string, email: string): Promise<Pessoa> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new LoginError("O Voob CRM não respondeu ao login. Tente de novo em instantes.", 502);
-  let p: { pode: boolean; nome: string | null };
+  let p: { pode: boolean; nome: string | null; equipe?: boolean };
   try {
     p = await pessoaDoRadar(id);
   } catch (e) {
     throw new LoginError(e instanceof VoobError ? e.message : "Não deu para conferir o seu acesso agora.", e instanceof VoobError ? e.status : 502);
   }
-  if (!p.pode) throw new LoginError("A sua conta do Voob CRM não tem acesso ao Radar. Fale com o Jean.", 403);
-  return { id, nome: primeiroNome(p.nome ?? (email.split("@")[0] || "Equipe")) };
+  if (!p.pode) throw new LoginError("A sua conta do Voob CRM ainda não tem acesso ao Radar. Fale com a Voob.", 403);
+  // Banco sem a parte das empresas (antes de 13/11) não manda "equipe": quem entrava era só a equipe.
+  return { id, nome: primeiroNome(p.nome ?? (email.split("@")[0] || "Equipe")), equipe: p.equipe !== false };
 }
 
 /** Quem está usando o Radar agora (pelo cookie da sessão). Senha da equipe = ninguém em particular. */

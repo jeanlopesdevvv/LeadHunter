@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { COOKIE_EMPRESA, escolherEmpresa, idsDisponiveis, rotaPermitida } from "@/lib/empresas";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
+import { COOKIE_EMPRESA, crmNoRadar, lavacarNoRadar, motorDaEscolha, rotaPermitida, rotaSoDaEquipe } from "@/lib/empresas";
+import { lerSessao, sessaoDaEquipe, SESSION_COOKIE } from "@/lib/session";
 
 /**
  * Tudo exige a senha, exceto a tela de login, a rota que faz o login, o healthcheck a trava
@@ -22,12 +22,19 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next();
 
-  const ok = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
-  if (ok) {
-    // 12/11/2026: com outra empresa escolhida no seletor, as rotas do motor do Lavacar ficam fechadas.
-    const empresa = escolherEmpresa(request.cookies.get(COOKIE_EMPRESA)?.value, idsDisponiveis(process.env.RADAR_EMPRESAS));
-    if (!rotaPermitida(empresa, pathname)) {
-      return NextResponse.json({ erro: `Esta ação é do Lavacar. Você está na ${empresa.nome}: troque a empresa no menu.` }, { status: 409 });
+  const sessao = lerSessao(request.cookies.get(SESSION_COOKIE)?.value);
+  if (sessao.ok) {
+    // 13/11/2026 (white label): o Lavacar e as rotas dele são só da equipe da Voob; cliente usa só as empresas dele.
+    const equipe = sessaoDaEquipe(sessao);
+    if (!equipe && rotaSoDaEquipe(pathname)) {
+      return NextResponse.json({ erro: "Esta parte do Radar é só da equipe da Voob." }, { status: 403 });
+    }
+    // 12/11/2026: com outra empresa escolhida no seletor, as rotas do motor do Lavacar ficam fechadas (e o contrário).
+    const env = process.env.RADAR_EMPRESAS;
+    const motor = motorDaEscolha(request.cookies.get(COOKIE_EMPRESA)?.value, { equipe, lavacar: lavacarNoRadar(env), crm: crmNoRadar(env) });
+    if (!rotaPermitida({ motor }, pathname)) {
+      const texto = motor === "lavacar" ? "Esta ação é de uma empresa do Voob CRM. Troque a empresa no menu." : "Esta ação é do Lavacar. Troque a empresa no menu.";
+      return NextResponse.json({ erro: texto }, { status: 409 });
     }
     return NextResponse.next();
   }

@@ -44,6 +44,11 @@ export interface Pessoa {
   id: string;
   /** Primeiro nome (aparece no menu e no histórico do que foi feito). */
   nome: string;
+  /**
+   * Da equipe da Voob (13/11/2026, white label): vê todas as empresas, o Lavacar e pode criar empresa. Cliente (false) vê só
+   * as empresas da conta dele. Sessões antigas (sem o campo) eram todas da equipe: contam como equipe.
+   */
+  equipe?: boolean;
 }
 
 /** Sessão por pessoa vale menos dias: quem sai da equipe perde o acesso sozinho. */
@@ -57,7 +62,7 @@ function assinaturaConfere(payload: string, sig: string): boolean {
 
 export function createPersonToken(pessoa: Pessoa, now = Date.now()): string {
   const exp = String(now + SESSION_DAYS_PESSOA * 24 * 60 * 60 * 1000);
-  const dados = Buffer.from(JSON.stringify({ u: pessoa.id, n: pessoa.nome.slice(0, 40) }), "utf8").toString("base64url");
+  const dados = Buffer.from(JSON.stringify({ u: pessoa.id, n: pessoa.nome.slice(0, 40), e: pessoa.equipe === false ? 0 : 1 }), "utf8").toString("base64url");
   const payload = `p1.${exp}.${dados}`;
   return `${payload}.${sign(payload)}`;
 }
@@ -72,9 +77,9 @@ export function lerSessao(token: string | undefined, now = Date.now()): { ok: bo
     if (partes.length !== 4 || !exp || !dados || !sig || !/^\d+$/.test(exp) || Number(exp) < now) return nao;
     if (!assinaturaConfere(`p1.${exp}.${dados}`, sig)) return nao;
     try {
-      const d = JSON.parse(Buffer.from(dados, "base64url").toString("utf8")) as { u?: unknown; n?: unknown };
+      const d = JSON.parse(Buffer.from(dados, "base64url").toString("utf8")) as { u?: unknown; n?: unknown; e?: unknown };
       if (typeof d.u !== "string" || typeof d.n !== "string" || !d.u || !d.n) return nao;
-      return { ok: true, pessoa: { id: d.u, nome: d.n } };
+      return { ok: true, pessoa: { id: d.u, nome: d.n, equipe: d.e !== 0 } };
     } catch {
       return nao;
     }
@@ -86,6 +91,11 @@ export function lerSessao(token: string | undefined, now = Date.now()): { ok: bo
 
 export function verifySessionToken(token: string | undefined, now = Date.now()): boolean {
   return lerSessao(token, now).ok;
+}
+
+/** A sessão é da equipe da Voob? Senha da equipe = sim; conta do Voob CRM = o que o banco disse ao entrar. */
+export function sessaoDaEquipe(s: { ok: boolean; pessoa: Pessoa | null }): boolean {
+  return s.ok && (s.pessoa ? s.pessoa.equipe !== false : true);
 }
 
 /** A senha única da equipe ainda vale? (RADAR_SENHA_UNICA=0 desliga, depois que todos entrarem com a própria conta.) */

@@ -14,6 +14,7 @@ import {
   CIDADE_PADRAO,
   PAGINAS_POR_BUSCA,
   SEGMENTOS,
+  situacoesDoFiltro,
   SERVE_PARA_ABERTURA,
   precisaRaioX,
   publicoDaBusca,
@@ -126,7 +127,13 @@ export function VoobBusca({
     onEstado({ resultados: [], feitas: 0, total: tarefas.length, rodando: true, aviso: "" });
     // Guarda o público escolhido (a próxima vez já abre assim). Sem o Voob CRM, só não guarda.
     if (cfg) {
-      void api("/api/voob/config", { mudancas: { perfil: { cidade, segmentos, termos_extras: extras, bairros, so_sem_site: soSemSite, com_desatualizado: comDesatualizado } } }).catch(() => {});
+      const site = !soSemSite ? "tanto_faz" : comDesatualizado ? "desatualizado" : "sem_site";
+      void api("/api/voob/config", {
+        mudancas: {
+          perfil: { ...perfil, cidade, segmentos, termos_extras: extras, bairros, so_sem_site: soSemSite, com_desatualizado: comDesatualizado, site },
+          situacoes_site: situacoesDoFiltro(site),
+        },
+      }).catch(() => {});
     }
     const vistos = new Set<string>();
     let parou = false;
@@ -227,7 +234,7 @@ export function VoobBusca({
     <div className="space-y-5">
       <Titulo
         titulo="Nova prospecção"
-        texto="Escolha quem procurar. O Radar busca no Google, separa quem não tem site e já tira quem é cliente, lead ou já conversou com a Voob."
+        texto={`Escolha quem procurar. O Radar busca no Google e já tira quem é cliente, lead ou já conversou com a ${cfg?.empresa.nome ?? "empresa"}.`}
       />
 
       {/* O público */}
@@ -325,7 +332,7 @@ export function VoobBusca({
                 <p className={cx("text-xs", semCota ? "font-semibold text-red-600" : "text-muted")}>
                   {semCota
                     ? `Passa das ${n(uso.restantes)} consultas grátis que restam no mês. Tire termos ou bairros.`
-                    : `Restam ${n(uso.restantes)} consultas grátis no mês (a cota é uma só para o Lavacar e a Voob).`}
+                    : `Restam ${n(uso.restantes)} consultas grátis no mês (a cota é uma só para todas as empresas do Radar).`}
                 </p>
               )}
             </div>
@@ -352,7 +359,7 @@ export function VoobBusca({
                 {estado.rodando ? "Buscando…" : "Busca concluída"} {n(estado.feitas)} de {n(estado.total)}
               </span>
               <span className="text-xs text-muted tabular-nums">
-                {n(estado.resultados.length)} achadas · {n(semSite)} sem site · {n(jaDaVoob)} já da Voob · <b className="text-ink">{n(paraChamar.length)} para chamar</b>
+                {n(estado.resultados.length)} achadas · {n(semSite)} sem site · {n(jaDaVoob)} já são contatos · <b className="text-ink">{n(paraChamar.length)} para chamar</b>
               </span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface">

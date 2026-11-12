@@ -8,9 +8,9 @@ import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Toggle, cx, inputClass } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
 import { limiteMetaTexto } from "@/lib/disparo-regras";
-import { avisoDoLimiteVoob, HORARIOS_ROTINA, itensDaSituacaoVoob, quantoPrecisa, SEGMENTOS_PADRAO, textoQualidade, validarLimiteVoob } from "@/lib/voob/busca-auto-regras";
-import { BAIRROS_BH, CIDADE_PADRAO, SEGMENTOS, textoDias } from "@/lib/voob/regras";
-import type { ConfigBuscaAuto, ConfigVoob, EstadoBuscaAuto, SaudeVoob } from "@/lib/voob/tipos";
+import { avisoDoLimiteVoob, HORARIOS_ROTINA, itensDaSituacaoVoob, quantoPrecisa, segmentosDoPerfil, textoQualidade, validarLimiteVoob } from "@/lib/voob/busca-auto-regras";
+import { BAIRROS_BH, CIDADE_PADRAO, filtroDoPerfil, ROTULO_FILTRO_SITE, SEGMENTOS, textoDias } from "@/lib/voob/regras";
+import type { ConfigBuscaAuto, ConfigVoob, EstadoBuscaAuto, PerfilBusca, SaudeVoob } from "@/lib/voob/tipos";
 
 import { n, quando } from "./comum";
 
@@ -185,7 +185,7 @@ function corDa(s: SaudeVoob): { tone: "green" | "amber" | "red" | "gray"; rotulo
 }
 
 function textoDoFreio(s: SaudeVoob): string {
-  if (s.freio === "sem_numero") return "A leitura começa quando o número da prospecção estiver conectado. O Voob CRM lê a Meta de hora em hora.";
+  if (s.freio === "sem_numero") return "A leitura começa quando o número estiver escolhido. O Voob CRM lê a Meta de hora em hora.";
   if (s.freio === "pausado") return "Disparo pausado até a Meta liberar o número. Ele não volta sozinho: depois que a qualidade melhorar, ligue de novo.";
   if (s.freio === "metade") return `Limite de hoje reduzido de ${n(s.limite_configurado)} para ${n(s.limite_efetivo)} mensagens. Volta ao normal quando a qualidade voltar ao verde.`;
   if (s.freio === "sem_leitura") return `Sem leitura recente da Meta: vale o limite normal (${n(s.limite_configurado)} por dia).`;
@@ -331,9 +331,10 @@ const MOTIVO: Record<string, string> = {
   erro: "erro",
 };
 
-function nomesDosSegmentos(ids: string[] | undefined) {
-  const lista = ids?.length ? ids : SEGMENTOS_PADRAO;
-  return SEGMENTOS.filter((s) => lista.includes(s.id)).map((s) => s.nome);
+/** O que a busca procura, numa linha (os públicos e os ramos escritos à mão). */
+function oQueProcura(p: PerfilBusca | undefined): string {
+  const nomes = [...SEGMENTOS.filter((s) => segmentosDoPerfil(p).includes(s.id)).map((s) => s.nome), ...(p?.termos_extras ?? [])];
+  return nomes.length ? nomes.join(", ") : "nada escolhido ainda (Primeiros passos, passo 5)";
 }
 
 export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { resumo: ResumoBusca | null; i: number; onResumo: (r: ResumoBusca) => void; onIr: (v: View) => void; onBaseMudou: () => void }) {
@@ -444,8 +445,7 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
               )}
             </p>
             <p className="mt-1.5 text-xs text-muted">
-              Procura: {nomesDosSegmentos(e.perfil?.segmentos).join(", ")}
-              {e.perfil?.termos_extras?.length ? ` e ${e.perfil.termos_extras.join(", ")}` : ""} · {cidade.replace(/,\s*[A-Za-z]{2}$/, "")} inteira e depois {bairros.length ? `${n(bairros.length)} bairros` : "sem bairros"} · {e.perfil?.com_desatualizado ? "sem site, só rede social e site desatualizado (Raio-X)" : "só quem não tem site ou só tem rede social"}.{" "}
+              Procura: {oQueProcura(e.perfil)} · {cidade.replace(/,\s*[A-Za-z]{2}$/, "")} inteira{bairros.length ? ` e depois ${n(bairros.length)} bairros` : ""} · {ROTULO_FILTRO_SITE[filtroDoPerfil(e.perfil)].titulo.toLowerCase()}.{" "}
               <button type="button" className="font-semibold text-brand-700 underline" onClick={() => onIr("buscar")}>
                 Mudar em Nova prospecção
               </button>
@@ -501,8 +501,8 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
             </label>
           </div>
           <p className="text-xs text-muted">
-            Cota do Google: <b className="text-ink tabular-nums">{resumo.cotaRestante === null ? "—" : n(resumo.cotaRestante)}</b> de {n(resumo.cotaLimite)} livres no mês (a mesma do
-            Lavacar) · hoje a busca automática já usou <b className="text-ink tabular-nums">{n(e.consultas_hoje)}</b> · agora dá para gastar até {n(resumo.podeGastar)}.
+            Cota do Google: <b className="text-ink tabular-nums">{resumo.cotaRestante === null ? "—" : n(resumo.cotaRestante)}</b> de {n(resumo.cotaLimite)} livres no mês (uma só para todas
+            as empresas do Radar) · hoje a busca automática já usou <b className="text-ink tabular-nums">{n(e.consultas_hoje)}</b> · agora dá para gastar até {n(resumo.podeGastar)}.
           </p>
         </div>
       </div>

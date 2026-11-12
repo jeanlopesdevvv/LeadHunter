@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { bloqueado, ipDe, limparFalhas, registrarFalha } from "@/lib/rate-limit";
 import { createPersonToken, SESSION_COOKIE, SESSION_DAYS_PESSOA } from "@/lib/session";
+import { COOKIE_CRM, fecharTokens } from "@/lib/voob/crm-sessao-regras";
 import { trocarCodigoDoGoogle } from "@/lib/voob/google";
 import { COOKIE_GOOGLE, erroDaVolta, lerCookieDoPkce, origemDoPedido, type ErroGoogle } from "@/lib/voob/google-regras";
 import { LoginError } from "@/lib/voob/pessoas";
@@ -28,16 +29,20 @@ export async function GET(request: NextRequest) {
   if (!pkce) return erro("google_expirou");
   if (!/^[A-Za-z0-9._~-]{6,200}$/.test(codigo)) return erro("google_falhou");
   try {
-    const pessoa = await trocarCodigoDoGoogle(codigo, pkce.verificador);
+    const { pessoa, tokens } = await trocarCodigoDoGoogle(codigo, pkce.verificador);
     limparFalhas(ip);
     const res = sair(pkce.proximo);
-    res.cookies.set(SESSION_COOKIE, createPersonToken(pessoa), {
+    const opcoes = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       path: "/",
       maxAge: SESSION_DAYS_PESSOA * 24 * 60 * 60,
-    });
+    };
+    res.cookies.set(SESSION_COOKIE, createPersonToken(pessoa), opcoes);
+    // 13/11/2026: o login do Voob CRM fica guardado (criptografado) para conectar número e mexer em modelos.
+    if (tokens) res.cookies.set(COOKIE_CRM, fecharTokens(tokens), opcoes);
+    else res.cookies.set(COOKIE_CRM, "", { ...opcoes, maxAge: 0 });
     return res;
   } catch (e) {
     registrarFalha(ip);

@@ -42,7 +42,7 @@ const VoobApp = dynamic(() => import("@/components/voob/VoobApp").then((m) => m.
  * 12/11/2026: o Radar tem várias empresas. Cada uma abre com o motor dela: o Lavacar com o painel de sempre
  * (banco "atendimento", n8n, Carol), a Voob com as telas do Voob CRM.
  */
-export function DashboardCliente({ empresa, empresas, pessoa }: { empresa: Empresa; empresas: Empresa[]; pessoa?: string | null }) {
-  if (empresa.motor === "voob-crm") return <VoobApp empresa={empresa} empresas={empresas} pessoa={pessoa} />;
+export function DashboardCliente({ empresa, empresas, pessoa, equipe = true }: { empresa: Empresa; empresas: Empresa[]; pessoa?: string | null; equipe?: boolean }) {
+  if (empresa.motor === "voob-crm") return <VoobApp empresa={empresa} empresas={empresas} pessoa={pessoa} equipe={equipe} />;
   return <Dashboard empresa={empresa} empresas={empresas} pessoa={pessoa} />;
 }

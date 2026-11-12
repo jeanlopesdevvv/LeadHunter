@@ -14,15 +14,17 @@ import { VoobBase } from "./VoobBase";
 import { VoobBusca, type EstadoBusca } from "./VoobBusca";
 import { VoobComecar } from "./VoobComecar";
 import { VoobDisparo } from "./VoobDisparo";
+import { ModelosEmpresa } from "./ModelosEmpresa";
 import { VoobPainel } from "./VoobPainel";
 
 /**
- * Radar · Voob (12/11/2026, Entrega 3): a prospecção da Voob com o motor do Voob CRM.
- * Buscar no Google → pôr na base → o CRM chama 20 por dia pelo WhatsApp oficial → a Renata atende quem responde.
- * Esta tela só fala com /api/voob/* (o proxy fecha o resto quando a Voob está escolhida).
+ * As telas de toda empresa do motor do Voob CRM (12/11/2026 a Voob; 13/11/2026, white label: qualquer empresa, sem nada
+ * diferente entre elas). Buscar no Google → pôr na base → o CRM chama N por dia pelo WhatsApp oficial da empresa → quem
+ * responde vai para o atendimento escolhido (IA da Voob, equipe pelo CRM ou outro sistema).
+ * Esta tela só fala com /api/voob/* (o proxy fecha o resto quando uma empresa do Voob CRM está escolhida).
  */
 
-const TELAS: View[] = ["comecar", "buscar", "leads", "disparo", "painel"];
+const TELAS: View[] = ["comecar", "buscar", "leads", "disparo", "modelos", "painel"];
 const CHAVE_TELA = "radar-voob-tela";
 
 function telaGuardada(): View {
@@ -34,7 +36,7 @@ function telaGuardada(): View {
   }
 }
 
-export function VoobApp({ empresa, empresas, pessoa }: { empresa: Empresa; empresas: Empresa[]; pessoa?: string | null }) {
+export function VoobApp({ empresa, empresas, pessoa, equipe = true }: { empresa: Empresa; empresas: Empresa[]; pessoa?: string | null; equipe?: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [view, setView] = useState<View>(telaGuardada);
@@ -91,13 +93,15 @@ export function VoobApp({ empresa, empresas, pessoa }: { empresa: Empresa; empre
       uso={uso}
       pessoa={pessoa}
       onSair={sair}
+      podeCriar={equipe}
     >
-      {view === "comecar" && <VoobComecar empresa={empresa} cfg={cfg} erro={erroCfg} onIr={irPara} onRecarregar={carregar} />}
+      {view === "comecar" && <VoobComecar empresa={empresa} cfg={cfg} erro={erroCfg} onIr={irPara} onRecarregar={carregar} onCfg={setCfg} />}
       {view === "buscar" && (
         <VoobBusca cfg={cfg} uso={uso} onUso={setUso} estado={busca} onEstado={setBusca} onResultados={mudarResultados} onBaseMudou={carregar} onIr={irPara} />
       )}
       {view === "leads" && <VoobBase cfg={cfg} erroCfg={erroCfg} onMudou={carregar} onIr={irPara} />}
       {view === "disparo" && <VoobDisparo cfg={cfg} erro={erroCfg} onCfg={setCfg} onRecarregar={carregar} onIr={irPara} />}
+      {view === "modelos" && <ModelosEmpresa cfg={cfg} onIr={irPara} onCfg={setCfg} />}
       {view === "painel" && <VoobPainel cfg={cfg} erroCfg={erroCfg} onIr={irPara} />}
     </Shell>
   );

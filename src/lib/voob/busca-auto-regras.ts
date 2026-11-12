@@ -48,10 +48,19 @@ export const chaveVoob = (u: { termo: string; lugar: string }) => `${u.termo.toL
 
 const ehBH = (cidade: string) => /belo horizonte/i.test(cidade);
 
+/**
+ * Os públicos escolhidos. A Voob, de antes de 13/11 (sem o campo), usa os do começo; empresa nova (lista vazia) só busca o
+ * que for escolhido nos Primeiros passos.
+ */
+export function segmentosDoPerfil(p: PerfilBusca | null | undefined): string[] {
+  if (p?.segmentos === undefined && !p?.termos_extras?.length) return SEGMENTOS_PADRAO;
+  return p?.segmentos ?? [];
+}
+
 /** O que buscar, na ordem: cada termo na cidade inteira; depois, termo por termo, bairro por bairro. */
 export function unidadesDaBusca(perfil: PerfilBusca | null | undefined): UnidadeVoob[] {
   const p = perfil ?? {};
-  const termos = termosDosSegmentos(p.segmentos?.length ? p.segmentos : SEGMENTOS_PADRAO, p.termos_extras ?? []);
+  const termos = termosDosSegmentos(segmentosDoPerfil(p), p.termos_extras ?? []);
   const cidade = (p.cidade ?? "").trim() || CIDADE_PADRAO;
   const bairros = p.bairros?.length ? p.bairros : ehBH(cidade) ? BAIRROS_BH : [];
   const lista: UnidadeVoob[] = termos.map((termo) => ({ termo, lugar: cidade, camada: 0 }));
@@ -134,6 +143,8 @@ export async function executarBuscaVoob(
   const r: ResultadoBuscaVoob = { precisava: precisa, consultas: 0, vistos: 0, novos: 0, adicionados: 0, motivo: "esgotado", lugares: {}, descartes: {} };
   const perfil = e.perfil ?? {};
   const comDesatualizado = perfil.com_desatualizado === true;
+  // 13/11/2026: campanha que não liga para site ("tanto faz") põe quem tem site também, sem Raio-X.
+  const tantoFaz = perfil.site === "tanto_faz" || perfil.so_sem_site === false;
   const uf = ufDaCidade((perfil.cidade ?? "").trim() || CIDADE_PADRAO);
   const feitas = new Map<string, FeitaBuscaVoob>(e.feitas.map((f) => [chaveVoob(f), f]));
   const unidades = unidadesDaBusca(perfil);
@@ -185,7 +196,8 @@ export async function executarBuscaVoob(
         vistos.add(l.telefoneKey);
         const site = situacaoDoSite(l.site);
         if (site === "com_site") {
-          if (comDesatualizado) paraRaio.push(l);
+          if (tantoFaz) candidatos.push(resultadoDaBusca(l, "novo"));
+          else if (comDesatualizado) paraRaio.push(l);
           else conta("tem_site");
           continue;
         }

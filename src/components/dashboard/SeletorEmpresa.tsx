@@ -1,27 +1,21 @@
 "use client";
 
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { cx } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import type { Empresa } from "@/lib/empresas";
+import { CriarEmpresa } from "@/components/voob/CriarEmpresa";
+import { SeloMarca } from "@/components/voob/marca";
 
 /**
  * Seletor de empresa (12/11/2026): "empresa 1, Lavacar; empresa 2, Voob, com o nome e a corzinha da Voob" (Pedro).
  * Trocar grava a escolha no servidor (cookie) e recarrega a tela já com as cores e as telas da empresa.
  */
 
-export function SeloEmpresa({ empresa, className }: { empresa: Pick<Empresa, "sigla" | "cor" | "nome">; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cx("grid shrink-0 place-items-center rounded-lg text-[11px] font-extrabold tracking-wide text-white ring-1 ring-white/15", className)}
-      style={{ backgroundColor: empresa.cor }}
-    >
-      {empresa.sigla}
-    </span>
-  );
+export function SeloEmpresa({ empresa, className }: { empresa: Pick<Empresa, "sigla" | "cor" | "nome" | "logo">; className?: string }) {
+  return <SeloMarca empresa={empresa} className={className} />;
 }
 
 function rotuloSituacao(e: Empresa): string {
@@ -33,14 +27,18 @@ export function SeletorEmpresa({
   empresas,
   compacto = false,
   onErro,
+  podeCriar = false,
 }: {
   empresa: Empresa;
   empresas: Empresa[];
   /** Topo do celular: só o selo e o nome. */
   compacto?: boolean;
   onErro?: (mensagem: string) => void;
+  /** 13/11/2026: "Criar empresa" no fim da lista (só a equipe da Voob). */
+  podeCriar?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [criando, setCriando] = useState(false);
   const [trocando, setTrocando] = useState<string | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
   const idLista = useId();
@@ -74,7 +72,7 @@ export function SeletorEmpresa({
     }
   };
 
-  if (empresas.length < 2) {
+  if (empresas.length < 2 && !podeCriar) {
     return compacto ? null : (
       <div className="flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3 py-2.5 ring-1 ring-white/10">
         <SeloEmpresa empresa={empresa} className="size-9" />
@@ -154,8 +152,27 @@ export function SeletorEmpresa({
               </button>
             );
           })}
+          {podeCriar && (
+            <button
+              type="button"
+              onClick={() => {
+                setAberto(false);
+                setCriando(true);
+              }}
+              className="mt-1 flex w-full items-center gap-3 rounded-xl border-t border-line px-2.5 py-2.5 text-left transition hover:bg-strong/[0.04]"
+            >
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100">
+                <Plus className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-strong">Criar empresa</span>
+                <span className="block truncate text-xs text-muted">Nome, cor, logo e a conta do Voob CRM</span>
+              </span>
+            </button>
+          )}
         </div>
       )}
+      {podeCriar && <CriarEmpresa aberto={criando} onFechar={() => setCriando(false)} />}
     </div>
   );
 }

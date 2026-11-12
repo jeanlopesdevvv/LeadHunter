@@ -596,6 +596,8 @@ export function Dashboard({ empresa, empresas, pessoa }: { empresa: Empresa; emp
       uso={uso}
       pessoa={pessoa}
       onSair={sair}
+      // O Lavacar só abre para a equipe da Voob: pode criar empresa daqui também.
+      podeCriar
     >
       {view === "buscar" && (
         <SearchView

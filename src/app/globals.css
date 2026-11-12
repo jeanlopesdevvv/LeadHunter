@@ -183,7 +183,8 @@
   --brand-rgb: 3 171 201;
   --brand-400-rgb: 34 190 219;
 }
-[data-empresa="voob"] {
+[data-empresa="voob"],
+[data-motor="voob-crm"] {
   --brand-rgb: 78 154 26;
   --brand-400-rgb: 111 189 48;
 
@@ -220,7 +221,8 @@
   --shadow-brand: 0 10px 30px -10px rgb(78 154 26 / 0.55);
 }
 [data-theme="dark"][data-empresa="voob"],
-[data-theme="dark"] [data-empresa="voob"] {
+[data-theme="dark"] [data-empresa="voob"],
+[data-theme="dark"][data-motor="voob-crm"] {
   --color-surface: #0d0f0d;
   --color-card: #151815;
   --color-line: #262b25;
@@ -346,7 +348,8 @@ body {
     linear-gradient(160deg, #0f1c36 0%, #081021 100%);
 }
 
-[data-empresa="voob"] .cartao-noite {
+[data-empresa="voob"] .cartao-noite,
+[data-motor="voob-crm"] .cartao-noite {
   background:
     radial-gradient(420px 260px at 105% -10%, rgb(var(--brand-rgb) / 0.42), transparent 62%),
     radial-gradient(360px 240px at -20% 120%, rgb(189 237 84 / 0.12), transparent 60%),

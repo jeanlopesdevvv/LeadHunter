@@ -81,10 +81,10 @@ describe("Radar · Voob: do Google para a base", () => {
   });
   it("nomes na tela", () => {
     expect(rotuloConferida("base:na_fila").rotulo).toBe("Na base · Na fila de hoje");
-    expect(rotuloConferida("ja_conversa").rotulo).toBe("Já conversou com a Voob");
-    expect(resumoInsercao({ repetido: 2, novo: 5, ja_no_crm: 1 })).toBe("5 entraram na base, 2 já estavam na base, 1 já são leads da Voob");
+    expect(rotuloConferida("ja_conversa").rotulo).toBe("Já conversou");
+    expect(resumoInsercao({ repetido: 2, novo: 5, ja_no_crm: 1 })).toBe("5 entraram na base, 2 já estavam na base, 1 já são leads no CRM");
     expect(resumoInsercao({})).toBe("nada mudou");
-    expect(motivoLegivel("ja_e_lead")).toBe("Já é lead no CRM da Voob");
+    expect(motivoLegivel("ja_e_lead")).toBe("Já é lead no CRM");
     expect(motivoLegivel("(#131049) This message was not delivered")).toMatch(/Meta segurou/);
     expect(motivoLegivel("algo_novo")).toBe("algo novo");
     expect(textoDias([5, 4, 3, 2, 1])).toBe("de segunda a sexta");
@@ -123,35 +123,71 @@ describe("Radar · Voob: simulação do motor (mesmas regras do banco)", () => {
     delete process.env.VOOB_MOCK_CENARIO;
   });
   it("hoje: sem número, não liga, e diz o que falta", () => {
-    const c = sim.config();
+    const c = sim.config("voob");
     expect(c.numero).toBeNull();
     expect(c.prontidao.find((p) => p.id === "numero")?.ok).toBe(false);
-    expect(() => sim.ligar(true)).toThrow(/Falta escolher o número/);
-    expect(() => sim.definir({ xyz: 1 })).toThrow(/Campo desconhecido/);
+    expect(() => sim.ligar("voob", true)).toThrow(/Falta escolher o número/);
+    expect(() => sim.definir("voob", { xyz: 1 })).toThrow(/Campo desconhecido/);
   });
   it("base: novo entra, repetido não, fixo não", () => {
-    const r = sim.inserir([
+    const r = sim.inserir("voob", [
       { telefone: "5531977771111", negocio: "Nova", site_situacao: "sem_site" },
       { telefone: "5531977771111", negocio: "Repetida", site_situacao: "sem_site" },
       { telefone: "553133331111", negocio: "Fixo", site_situacao: "sem_site" },
     ]);
     expect(r.contagem).toEqual({ novo: 1, repetido: 1, nao_e_celular: 1 });
-    expect(sim.lista({ busca: "nova" }).itens.map((l) => l.negocio)).toEqual(["Nova"]);
+    expect(sim.lista("voob", { busca: "nova" }).itens.map((l) => l.negocio)).toEqual(["Nova"]);
   });
   it("rodando: número e mensagem prontos, funil com respostas e trocar o número ligado é recusado", () => {
     process.env.VOOB_MOCK_CENARIO = "rodando";
     sim.__reiniciarSimulacao();
-    const c = sim.config();
+    const c = sim.config("voob");
     expect(c.empresa.ligado).toBe(true);
     expect(c.prontidao.every((p) => p.ok)).toBe(true);
-    expect(() => sim.definir({ canal_id: null })).toThrow(/Desligue o Radar/);
-    const p = sim.painel(14);
+    expect(() => sim.definir("voob", { canal_id: null })).toThrow(/Desligue o Radar/);
+    const p = sim.painel("voob", 14);
     expect(p.serie).toHaveLength(14);
     const f = funil(p);
     expect(f[1].valor).toBeGreaterThan(0);
     expect(f[2].valor).toBeLessThanOrEqual(f[1].valor);
-    const fila = sim.lista({ status: ["na_fila"] }).itens.map((l) => l.id);
-    expect(sim.acao(fila.slice(0, 2), "tirar_da_fila").afetados).toBe(2);
-    expect(sim.ligar(false).hoje.na_fila).toBe(0);
+    const fila = sim.lista("voob", { status: ["na_fila"] }).itens.map((l) => l.id);
+    expect(sim.acao("voob", fila.slice(0, 2), "tirar_da_fila").afetados).toBe(2);
+    expect(sim.ligar("voob", false).hoje.na_fila).toBe(0);
+  });
+
+  it("white label: a empresa nova da simulação começa sem número; a conta tem um para escolher, e o teste liga só para o celular", () => {
+    const c = sim.config("clinica-exemplo");
+    expect(c.numero).toBeNull();
+    expect(c.numeros_disponiveis).toHaveLength(1);
+    expect(c.empresa.cor).toBe("#1d4ed8");
+    expect(() => sim.definir("clinica-exemplo", { canal_id: "outro" })).toThrow(/não é da conta/);
+    const d = sim.definir("clinica-exemplo", { canal_id: c.numeros_disponiveis[0].id });
+    expect(d.numero?.final).toBe(c.numeros_disponiveis[0].final);
+    expect(() => sim.teste("clinica-exemplo", "12", true)).toThrow(/Telefone inválido/);
+    const t = sim.teste("clinica-exemplo", "(31) 98888-0001", true);
+    expect(t.empresa.ligado).toBe(true);
+    expect(t.empresa.teste?.final).toBe("0001");
+    expect(() => sim.definir("clinica-exemplo", { canal_id: null })).toThrow(/Desligue o Radar|Encerre o teste/);
+    const fim = sim.teste("clinica-exemplo", null, false);
+    expect(fim.empresa.ligado).toBe(false);
+    expect(fim.empresa.teste).toBeNull();
+  });
+  it("white label: quem vê o quê, criar empresa e modelos", () => {
+    expect(sim.empresasLista(null, true).map((e) => e.id)).toEqual(["voob", "clinica-exemplo"]);
+    expect(sim.empresasLista(sim.CLIENTE_SIMULADO, false).map((e) => e.id)).toEqual(["clinica-exemplo"]);
+    expect(sim.empresaVer("voob", sim.CLIENTE_SIMULADO, false)).toBeNull();
+    expect(() => sim.empresaCriar({ nome: "X", conta: "50000000-0000-4000-8000-0000000000c2" }, "Jean")).toThrow(/2 a 40/);
+    const nova = sim.empresaCriar({ nome: "Lavacar", conta: "50000000-0000-4000-8000-0000000000c2", cor: "#0f766e" }, "Jean");
+    expect(nova.empresa.id).toBe("lavacar-2");
+    expect(nova.empresa.ligado).toBe(false);
+    const cfg = sim.definir("clinica-exemplo", { canal_id: sim.config("clinica-exemplo").numeros_disponiveis[0].id });
+    expect(cfg.modelos.abertura?.ok).toBe(false);
+    const m = sim.modeloSalvarSimulado("clinica-exemplo", { titulo: "Abertura", categoria: "MARKETING", texto: "Oi, {Nome do negócio}! Aqui é a {Nome de quem atende}.", botoes: ["Quero ver"] });
+    expect(m.corpo).toBe("Oi, {{nome_do_negocio}}! Aqui é a {{atendente}}.");
+    expect(m.status).toBe("PENDING");
+    sim.definir("clinica-exemplo", { modelo_prefixo: m.nome });
+    expect(sim.config("clinica-exemplo").modelos.abertura?.motivo).toBe("modelo_em_analise");
+    expect(sim.modeloRenomear("clinica-exemplo", m.id, "Primeira").find((x) => x.id === m.id)?.titulo).toBe("Primeira");
+    expect(() => sim.modeloArquivar("clinica-exemplo", m.id, true)).toThrow(/mensagem do Radar/);
   });
 });

@@ -5,7 +5,7 @@
 
 import type { Lead } from "@/lib/types";
 
-import type { EntradaBase, NumeroProspeccao, PainelVoob, ResultadoBusca, SituacaoSite, StatusLead } from "./tipos";
+import type { EntradaBase, FiltroSite, NumeroProspeccao, PainelVoob, PerfilBusca, ResultadoBusca, SituacaoSite, StatusLead } from "./tipos";
 
 // ---------------------------------------------------------------- quem procurar
 
@@ -24,6 +24,36 @@ export const SEGMENTOS: Segmento[] = [
 ];
 
 export const CIDADE_PADRAO = "Belo Horizonte, MG";
+
+// ---------------------------------------------------------------- filtro de site da campanha (13/11/2026)
+
+export const ROTULO_FILTRO_SITE: Record<FiltroSite, { titulo: string; texto: string }> = {
+  sem_site: { titulo: "Só quem não tem site", texto: "Sem site ou só com rede social." },
+  desatualizado: { titulo: "Sem site ou com site desatualizado", texto: "Também quem tem site com problema (o Raio-X confere)." },
+  tanto_faz: { titulo: "Tanto faz", texto: "Qualquer empresa do ramo, com ou sem site." },
+};
+
+/** Para quem a 1ª mensagem serve, pelo filtro escolhido. */
+export function situacoesDoFiltro(f: FiltroSite): SituacaoSite[] {
+  if (f === "tanto_faz") return ["sem_site", "rede_social", "desatualizado", "com_site", "nao_conferido"];
+  if (f === "desatualizado") return ["sem_site", "rede_social", "desatualizado"];
+  return ["sem_site", "rede_social"];
+}
+
+/** O filtro que está valendo (o novo campo "site" ou o jeito antigo: so_sem_site e com_desatualizado). */
+export function filtroDoPerfil(p: PerfilBusca | null | undefined): FiltroSite {
+  if (p?.site) return p.site;
+  if (p?.so_sem_site === false) return "tanto_faz";
+  return p?.com_desatualizado ? "desatualizado" : "sem_site";
+}
+
+/** As mudanças de configuração para trocar o filtro (perfil e situações juntos). */
+export function mudancasDoFiltro(p: PerfilBusca, f: FiltroSite): { perfil: PerfilBusca; situacoes_site: SituacaoSite[] } {
+  return {
+    perfil: { ...p, site: f, so_sem_site: f !== "tanto_faz", com_desatualizado: f === "desatualizado" },
+    situacoes_site: situacoesDoFiltro(f),
+  };
+}
 
 /** Bairros e regiões de BH para dividir a busca (o Google devolve no máximo 60 por busca). */
 export const BAIRROS_BH = [
@@ -206,8 +236,8 @@ export const STATUS: Record<StatusLead, { rotulo: string; tom: Tom; dica: string
   novo: { rotulo: "Na base", tom: "gray", dica: "Esperando a vez. Entra na fila de um dia de envio." },
   na_fila: { rotulo: "Na fila de hoje", tom: "brand", dica: "Sai hoje, no horário e no espaçamento combinados." },
   enviado: { rotulo: "Recebeu", tom: "navy", dica: "A primeira mensagem saiu. Ainda não respondeu." },
-  respondeu: { rotulo: "Respondeu", tom: "green", dica: "Escreveu de volta: a Renata está conversando." },
-  interessado: { rotulo: "Quer ver", tom: "green", dica: "Tocou em “Quero ver”: a Renata mostra como ficaria." },
+  respondeu: { rotulo: "Respondeu", tom: "green", dica: "Escreveu de volta: o atendimento está conversando." },
+  interessado: { rotulo: "Quer ver", tom: "green", dica: "Tocou no botão do “sim” da 1ª mensagem." },
   sem_interesse: { rotulo: "Sem interesse", tom: "amber", dica: "Tocou em “Não tenho interesse”. Não recebe mais nada do Radar." },
   parou: { rotulo: "Pediu para parar", tom: "red", dica: "Pediu para não receber mensagens. Conta no freio de saídas." },
   pulado: { rotulo: "Não enviado", tom: "gray", dica: "O porteiro segurou antes de sair (motivo ao lado)." },
@@ -219,11 +249,11 @@ export const STATUS: Record<StatusLead, { rotulo: string; tom: Tom; dica: string
 export const ORDEM_STATUS: StatusLead[] = ["interessado", "respondeu", "na_fila", "novo", "enviado", "sem_interesse", "parou", "pulado", "erro", "descartado"];
 
 const MOTIVOS: Record<string, string> = {
-  ja_e_lead: "Já é lead no CRM da Voob",
-  ja_no_crm: "Já é lead no CRM da Voob",
-  cliente_ou_equipe: "É cliente ou da equipe da Voob",
-  ja_conversou: "Já conversou com a Voob",
-  ja_conversa: "Já conversou com a Voob",
+  ja_e_lead: "Já é lead no CRM",
+  ja_no_crm: "Já é lead no CRM",
+  cliente_ou_equipe: "É cliente ou da equipe",
+  ja_conversou: "Já conversou com a empresa",
+  ja_conversa: "Já conversou com a empresa",
   ja_respondeu: "Já respondeu",
   pediu_para_parar: "Pediu para não receber mensagens",
   ja_recebeu: "Já recebeu a mensagem do Radar",
@@ -256,8 +286,8 @@ export function motivoLegivel(motivo: string | null | undefined): string {
 export const CONFERIDA: Record<string, { rotulo: string; tom: Tom }> = {
   novo: { rotulo: "Novo", tom: "green" },
   cliente_ou_equipe: { rotulo: "Cliente ou equipe", tom: "gray" },
-  ja_no_crm: { rotulo: "Já é lead da Voob", tom: "gray" },
-  ja_conversa: { rotulo: "Já conversou com a Voob", tom: "gray" },
+  ja_no_crm: { rotulo: "Já é lead no CRM", tom: "gray" },
+  ja_conversa: { rotulo: "Já conversou", tom: "gray" },
   invalido: { rotulo: "Telefone inválido", tom: "gray" },
   fixo: { rotulo: "Telefone fixo", tom: "gray" },
   sem_conferir: { rotulo: "Não conferido", tom: "amber" },
@@ -274,8 +304,8 @@ export function rotuloConferida(s: ResultadoBusca["situacao"]): { rotulo: string
 export const RESULTADO_INSERCAO: Record<string, string> = {
   novo: "entraram na base",
   repetido: "já estavam na base",
-  ja_no_crm: "já são leads da Voob",
-  ja_conversa: "já conversaram com a Voob",
+  ja_no_crm: "já são leads no CRM",
+  ja_conversa: "já conversaram com a empresa",
   cliente_ou_equipe: "são clientes ou da equipe",
   nao_e_celular: "não são celular",
   invalido: "com telefone inválido",

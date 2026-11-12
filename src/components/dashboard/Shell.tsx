@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Bot, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Rocket, Search, Send, Settings2, TrendingUp, Users, WifiOff } from "lucide-react";
+import { ArrowUpRight, Bot, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, MessageSquareText, Rocket, Search, Send, Settings2, TrendingUp, Users, WifiOff } from "lucide-react";
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
@@ -13,7 +13,7 @@ import type { Uso } from "@/lib/types";
 import { SeletorEmpresa } from "./SeletorEmpresa";
 import { UsoMini } from "./UsoCota";
 
-export type View = "comecar" | "buscar" | "resultados" | "disparo" | "automatico" | "leads" | "painel" | "historico" | "config";
+export type View = "comecar" | "buscar" | "resultados" | "disparo" | "automatico" | "leads" | "painel" | "historico" | "config" | "modelos";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
   { id: "comecar", label: "Primeiros passos", icon: Rocket },
@@ -22,6 +22,7 @@ const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
   { id: "disparo", label: "Disparo", icon: Send },
   { id: "automatico", label: "Disparo automático", icon: Bot },
   { id: "leads", label: "Leads", icon: Users },
+  { id: "modelos", label: "Modelos", icon: MessageSquareText },
   { id: "painel", label: "Desempenho", icon: TrendingUp },
   { id: "historico", label: "Histórico", icon: History },
   { id: "config", label: "Configuração", icon: Settings2 },
@@ -50,6 +51,7 @@ export function Shell({
   pessoa,
   onSair,
   children,
+  podeCriar = false,
 }: {
   /** Empresa escolhida no seletor (12/11/2026): o menu mostra só as telas dela. */
   empresa: Empresa;
@@ -66,6 +68,8 @@ export function Shell({
   pessoa?: string | null;
   onSair: () => void;
   children: ReactNode;
+  /** 13/11/2026: a equipe da Voob vê "Criar empresa" no seletor. */
+  podeCriar?: boolean;
 }) {
   const badge = (id: View) =>
     id === "resultados" && (totalResultados > 0 || rodando) ? (
@@ -117,7 +121,7 @@ export function Shell({
           <Logo dark />
         </div>
         <div className="mt-7">
-          <SeletorEmpresa empresa={empresa} empresas={empresas} onErro={onErro} />
+          <SeletorEmpresa empresa={empresa} empresas={empresas} onErro={onErro} podeCriar={podeCriar} />
         </div>
         {urlAtendimento && (
           <div className="mt-5">
@@ -204,7 +208,7 @@ export function Shell({
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <Logo dark />
           <div className="flex min-w-0 items-center gap-1">
-            <SeletorEmpresa empresa={empresa} empresas={empresas} onErro={onErro} compacto />
+            <SeletorEmpresa empresa={empresa} empresas={empresas} onErro={onErro} compacto podeCriar={podeCriar} />
             {simulacao && <FlaskConical className="size-4 text-amber-300" aria-label="Modo simulação" />}
             {urlAtendimento && (
               <button

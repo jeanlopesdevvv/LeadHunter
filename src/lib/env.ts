@@ -103,6 +103,14 @@ export function getConfig() {
     // (usuário "radar_voob.<projeto>"); VOOB_CRM_URL só se precisar trocar.
     voobCrmAnonKey: str("VOOB_CRM_ANON_KEY"),
     voobCrmUrl: str("VOOB_CRM_URL"),
+    // 13/11/2026 (white label): onde a janela da Meta ("Conectar o WhatsApp") pode abrir. A Meta só abre nos endereços
+    // liberados no app da Voob; nos outros, o Radar manda conectar pelo Voob CRM.
+    metaJanelaHosts: str("META_JANELA_HOSTS", "radar.voob.online")
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
+    /** Onde fica o Voob CRM (o botão "Conectar pelo Voob CRM"). */
+    voobCrmSite: str("VOOB_CRM_SITE", "https://voob.online"),
     serviceAccount: parseServiceAccount(),
     serviceAccountInvalid: Boolean(serviceAccountRaw) && !parseServiceAccount(),
     sheetId: str("SHEET_ID", DEFAULT_SHEET_ID),

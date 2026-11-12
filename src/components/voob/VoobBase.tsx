@@ -124,7 +124,7 @@ export function VoobBase({
 
   return (
     <div className="space-y-5">
-      <Titulo titulo="Base" texto="Todas as empresas que o Radar achou para a Voob e o que aconteceu com cada uma. O disparo chama daqui, na ordem em que entraram.">
+      <Titulo titulo="Base" texto={`Todas as empresas que o Radar achou para a ${cfg?.empresa.nome ?? "empresa"} e o que aconteceu com cada uma. O disparo chama daqui, na ordem em que entraram.`}>
         <Button variant="ghost" size="sm" onClick={() => void carregar()} loading={carregando} icon={<RefreshCw className="size-4" />}>
           Atualizar
         </Button>

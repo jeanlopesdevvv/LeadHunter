@@ -125,7 +125,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
               rotulo="Responderam"
               valor={<Porcento parte={per.responderam} total={per.enviados} />}
               detalhe={<><b>{n(per.responderam)}</b> de {n(per.enviados)}</>}
-              explica="Escreveram ou tocaram num botão. Viram lead no CRM e a Renata atende."
+              explica="Escreveram ou tocaram num botão. Viram lead no CRM e o atendimento responde."
               icone={<MessageCircle className="size-4" />}
             />
             <Indicador
@@ -134,7 +134,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
               rotulo="Querem ver"
               valor={<Porcento parte={per.interessados} total={per.enviados} />}
               detalhe={<><b>{n(per.interessados)}</b> tocaram em “Quero ver”</>}
-              explica="O sinal mais forte: a Renata mostra como ficaria para eles."
+              explica="O sinal mais forte: tocaram no botão do “sim”."
               icone={<Eye className="size-4" />}
             />
             <Indicador
@@ -152,7 +152,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
               rotulo="Compraram"
               valor={<AnimatedNumber value={per.vendas ?? 0} />}
               detalhe={<><Porcento parte={per.vendas ?? 0} total={per.enviados} /> de quem recebeu</>}
-              explica="Pagaram depois de receber a 1ª mensagem: pelo link da Renata ou pelo site com o mesmo telefone."
+              explica="Fecharam depois de receber a 1ª mensagem (o card foi para Vendido no CRM)."
               icone={<BadgeCheck className="size-4" />}
             />
             <Indicador

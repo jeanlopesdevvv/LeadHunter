@@ -12,6 +12,7 @@ import {
   SESSION_DAYS,
   SESSION_DAYS_PESSOA,
 } from "@/lib/session";
+import { apagarSessaoCrm, guardarSessaoCrm } from "@/lib/voob/crm-sessao";
 import { entrarComConta, LoginError, loginPorContaDisponivel } from "@/lib/voob/pessoas";
 
 export const maxDuration = 30;
@@ -42,9 +43,12 @@ export async function POST(request: Request) {
     if (!loginPorContaDisponivel()) return jsonError("Entrar com a conta do Voob CRM ainda não foi configurado no servidor.", 503);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !senha || senha.length > 200) return falhou("E-mail ou senha incorretos.");
     try {
-      const pessoa = await entrarComConta(email, senha);
+      const { pessoa, tokens } = await entrarComConta(email, senha);
       limparFalhas(ip);
       gravar(createPersonToken(pessoa), SESSION_DAYS_PESSOA);
+      // 13/11/2026: o login do Voob CRM fica guardado (criptografado) para conectar número e mexer em modelos.
+      if (tokens) await guardarSessaoCrm(tokens, SESSION_DAYS_PESSOA);
+      else await apagarSessaoCrm();
       return Response.json({ ok: true, nome: pessoa.nome });
     } catch (e) {
       if (e instanceof LoginError) return e.status === 401 || e.status === 403 ? falhou(e.message, e.status) : jsonError(e.message, e.status);
@@ -57,5 +61,6 @@ export async function POST(request: Request) {
   if (!senha || !passwordMatches(senha)) return falhou("Senha incorreta.");
   limparFalhas(ip);
   gravar(createSessionToken(), SESSION_DAYS);
+  await apagarSessaoCrm();
   return Response.json({ ok: true });
 }

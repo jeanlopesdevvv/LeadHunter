@@ -8,7 +8,7 @@ import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, Toggle, cx, inputClass } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
 import { NOME_DO_MODELO, ROTULO_MENSAGEM, textoParaOModelo, type TipoMensagem } from "@/lib/voob/mensagens";
-import { DIAS_SEMANA, custoEstimado, reais, textoDias, textoPausa } from "@/lib/voob/regras";
+import { DIAS_SEMANA, custoEstimado, filtroDoPerfil, reais, ROTULO_FILTRO_SITE, textoDias, textoPausa } from "@/lib/voob/regras";
 import type { ConfigVoob } from "@/lib/voob/tipos";
 
 import { Carregando, Chip, PreviaMensagem, Titulo, n, quando } from "./comum";
@@ -83,7 +83,7 @@ export function VoobDisparo({
   if (!cfg || !ritmo) {
     return (
       <div className="space-y-4">
-        <Titulo titulo="Disparo" texto="A 1ª mensagem da Voob sai sozinha, pelo WhatsApp oficial da prospecção, 20 por dia." />
+        <Titulo titulo="Disparo" texto="A 1ª mensagem sai sozinha, pelo WhatsApp oficial da empresa, no ritmo escolhido." />
         {erro ? <ComoLigarOCrm erro={erro.mensagem} onTentar={onRecarregar} /> : <Carregando />}
       </div>
     );
@@ -126,7 +126,7 @@ export function VoobDisparo({
     <div className="space-y-5">
       <Titulo
         titulo="Disparo"
-        texto={`A 1ª mensagem sai sozinha pelo WhatsApp oficial da prospecção, ${textoDias(e.dias)}, das ${e.hora_inicio} às ${e.hora_fim}. A ${e.agente} atende quem responder.`}
+        texto={`A 1ª mensagem sai sozinha pelo WhatsApp oficial da ${e.nome}, ${textoDias(e.dias)}, das ${e.hora_inicio} às ${e.hora_fim}. ${quemAtende(e)}`}
       >
         <Button variant="ghost" size="sm" onClick={onRecarregar} icon={<RefreshCw className="size-4" />}>
           Atualizar
@@ -188,7 +188,7 @@ export function VoobDisparo({
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* O número */}
-        <Bloco i={1} icone={<Smartphone className="size-4" />} titulo="Número da prospecção">
+        <Bloco i={1} icone={<Smartphone className="size-4" />} titulo="Número">
           {cfg.numero ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -208,8 +208,8 @@ export function VoobDisparo({
                 <dd className="text-ink">{cfg.numero.crm ?? "—"}</dd>
                 <dt className="text-muted">Quem responde vira lead</dt>
                 <dd className="text-ink">{cfg.numero.criar_leads ? (cfg.numero.etapa ? `em “${cfg.numero.etapa}”` : "sim") : "não (ligue “criar leads” no número)"}</dd>
-                <dt className="text-muted">IA atende</dt>
-                <dd className="text-ink">{cfg.numero.ia_ativa ? `sim, a ${e.agente}` : "não (ligue a IA no número)"}</dd>
+                <dt className="text-muted">Quem responde</dt>
+                <dd className="text-ink">{e.responde === "outro" ? (e.responde_sistema ?? "outro sistema") : e.responde === "crm" ? "a equipe, pelo Voob CRM" : cfg.numero.ia_ativa ? `a IA (${e.agente})` : "a IA, mas ela está desligada no número"}</dd>
               </dl>
               {!e.ligado && (
                 <button type="button" className="text-xs font-semibold text-brand-700 underline" onClick={() => void salvar({ canal_id: null }, "Número tirado do Radar.")}>
@@ -219,7 +219,7 @@ export function VoobDisparo({
             </div>
           ) : cfg.numeros_disponiveis.length ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted">Escolha o número que vai fazer a prospecção (o da Renata não aparece aqui: ele não faz prospecção fria).</p>
+              <p className="text-sm text-muted">Escolha o número oficial da conta {e.conta ?? "da empresa"} no Voob CRM que vai mandar a 1ª mensagem.</p>
               <select value={canal} onChange={(x) => setCanal(x.target.value)} className={inputClass}>
                 <option value="">Escolha…</option>
                 {cfg.numeros_disponiveis.map((d) => (
@@ -233,7 +233,7 @@ export function VoobDisparo({
               </Button>
             </div>
           ) : (
-            <ComoConectar />
+            <ComoConectar onIr={onIr} />
           )}
         </Bloco>
 
@@ -243,17 +243,17 @@ export function VoobDisparo({
       {/* As mensagens */}
       <Bloco i={3} icone={<MessageSquareText className="size-4" />} titulo="Mensagens">
         <div className="space-y-3">
-          <SituacaoModelo titulo="1ª mensagem" prefixo={e.modelo_prefixo} m={cfg.modelos.abertura} semNumero={!cfg.numero} />
-          <SituacaoModelo titulo="Retomada (opcional)" prefixo={e.retomada_prefixo} m={cfg.modelos.retomada} semNumero={!cfg.numero} />
-          {cfg.modelos.site !== undefined && (
-            <SituacaoModelo
-              titulo="Site desatualizado (opcional, Raio-X)"
-              prefixo={e.modelo_prefixo_site ?? "radar_voob_site"}
-              m={cfg.modelos.site}
-              semNumero={!cfg.numero}
-            />
+          <SituacaoModelo titulo="1ª mensagem" m={cfg.modelos.abertura} semNumero={!cfg.numero} />
+          {e.situacoes_site.includes("desatualizado") && cfg.modelos.site !== undefined && e.modelo_prefixo_site !== e.modelo_prefixo && (
+            <SituacaoModelo titulo="Site desatualizado (Raio-X)" m={cfg.modelos.site} semNumero={!cfg.numero} />
           )}
-          <TextosDasMensagens agente={e.agente} botoes={[e.botao_sim, e.botao_nao]} comSite={cfg.modelos.site !== undefined} />
+          {e.retomada_ligada && <SituacaoModelo titulo="Retomada" m={cfg.modelos.retomada} semNumero={!cfg.numero} />}
+          {cfg.numero && (
+            <Button variant="outline" size="sm" onClick={() => onIr("modelos")} icon={<MessageSquareText className="size-3.5" />}>
+              Escolher ou criar em Modelos
+            </Button>
+          )}
+          {e.id === "voob" && <TextosDasMensagens agente={e.agente} botoes={[e.botao_sim, e.botao_nao]} comSite={cfg.modelos.site !== undefined} />}
         </div>
       </Bloco>
 
@@ -362,7 +362,7 @@ export function VoobDisparo({
                   “{e.botao_nao}” não conta: só quem pede para sair.
                 </li>
                 <li>Pausa se a qualidade do número ficar vermelha; com amarela, o limite cai pela metade.</li>
-                <li>Nunca chama quem já é cliente, lead ou já conversou com a Voob, nem quem já recebeu.</li>
+                <li>Nunca chama quem já é cliente, lead ou já conversou com a {e.nome}, nem quem já recebeu.</li>
               </ul>
             </div>
           </div>
@@ -383,7 +383,7 @@ export function VoobDisparo({
       {/* Busca automática */}
       <BlocoBuscaAuto resumo={auto.busca} i={5} onResumo={auto.setBusca} onIr={onIr} onBaseMudou={onRecarregar} />
 
-      <Modal open={confirmar !== null} onClose={() => setConfirmar(null)} title={confirmar ? "Ligar a prospecção da Voob?" : "Desligar a prospecção?"}>
+      <Modal open={confirmar !== null} onClose={() => setConfirmar(null)} title={confirmar ? `Ligar a prospecção da ${e.nome}?` : "Desligar a prospecção?"}>
         {confirmar ? (
           <div className="space-y-4 text-sm text-ink">
             <ul className="list-disc space-y-1.5 pl-5">
@@ -391,7 +391,7 @@ export function VoobDisparo({
                 Até <b>{n(h.limite_efetivo)}</b> mensagens por dia, {textoDias(e.dias)}, das {e.hora_inicio} às {e.hora_fim}, uma a cada {e.intervalo_min} min.
               </li>
               <li>
-                Só para quem não tem site ou só tem rede social ({n(cfg.base_pronta)} na base agora).
+                {ROTULO_FILTRO_SITE[filtroDoPerfil(e.perfil)].titulo} ({n(cfg.base_pronta)} na base agora).
                 {cfg.base_pronta < h.limite_efetivo && (
                   <>
                     {" "}
@@ -401,7 +401,7 @@ export function VoobDisparo({
                   </>
                 )}
               </li>
-              <li>Pelo número final {cfg.numero?.final}, com a mensagem aprovada pela Meta. Quem responde vira lead e a {e.agente} atende.</li>
+              <li>Pelo número final {cfg.numero?.final}, com a mensagem aprovada pela Meta. {quemAtende(e)}</li>
               <li>≈ {reais(custoEstimado(h.limite_efetivo))} por dia na Meta.</li>
               {cfg.numero?.teste && <li className="font-semibold text-amber-700">O número está em modo teste: só a lista de teste recebe.</li>}
             </ul>
@@ -432,6 +432,13 @@ export function VoobDisparo({
   );
 }
 
+/** Quem atende quem responder, numa frase. */
+function quemAtende(e: ConfigVoob["empresa"]): string {
+  if (e.responde === "outro") return `Quem responde é o ${e.responde_sistema ?? "outro sistema"}.`;
+  if (e.responde === "crm") return "A equipe responde pelo Voob CRM.";
+  return `A ${e.agente} atende quem responder.`;
+}
+
 function Bloco({ i, icone, titulo, children }: { i: number; icone: ReactNode; titulo: string; children: ReactNode }) {
   return (
     <Card className="entrar p-5 sm:p-6" style={{ "--i": i } as CSSProperties}>
@@ -453,15 +460,16 @@ function Campo({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   );
 }
 
-function SituacaoModelo({ titulo, prefixo, m, semNumero }: { titulo: string; prefixo: string; m: ConfigVoob["modelos"]["abertura"]; semNumero: boolean }) {
+function SituacaoModelo({ titulo, m, semNumero }: { titulo: string; m: ConfigVoob["modelos"]["abertura"]; semNumero: boolean }) {
   const ok = Boolean(m?.ok);
+  const nome = m?.titulo || m?.nome;
   const texto = semNumero
-    ? "Criada no número da prospecção, depois que ele entrar."
+    ? "Fica no número da empresa, depois que ele for escolhido."
     : ok
-      ? `${m?.nome} · ${m?.categoria === "MARKETING" ? "Marketing" : m?.categoria}`
+      ? `${nome} · ${m?.categoria === "MARKETING" ? "Marketing" : m?.categoria === "UTILITY" ? "Aviso" : m?.categoria}`
       : m?.motivo === "modelo_em_analise"
-        ? "Em análise na Meta."
-        : `Falta criar (nome começando por ${prefixo}).`;
+        ? `${nome ?? "Modelo"}: em análise na Meta.`
+        : "Falta escolher em Modelos.";
   return (
     <div className="flex items-start gap-3">
       <span className={cx("mt-0.5 grid size-6 shrink-0 place-items-center rounded-full", ok ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")}>
@@ -483,7 +491,7 @@ function TextosDasMensagens({ agente, botoes, comSite }: { agente: string; botoe
   const copiar = async () => {
     try {
       await navigator.clipboard.writeText(textoParaOModelo(tipo, agente));
-      toast("Texto copiado. Cole em Modelos › Novo modelo, no Voob CRM.", "success");
+      toast("Texto copiado. Cole em Modelos › Novo modelo.", "success");
     } catch {
       toast("Não deu para copiar. Selecione o texto e copie.", "error");
     }
@@ -511,7 +519,7 @@ function TextosDasMensagens({ agente, botoes, comSite }: { agente: string; botoe
         </Button>
         <ol className="list-decimal space-y-1 pl-4">
           <li>
-            No Voob CRM, no CRM da prospecção, em Modelos › Novo modelo: nome <b className="text-ink">{NOME_DO_MODELO[tipo]}</b>, para que serve: Marketing.
+            Aqui no Radar, em Modelos › Novo modelo: nome <b className="text-ink">{NOME_DO_MODELO[tipo]}</b>, para que serve: Marketing.
           </li>
           <li>
             Cole o texto copiado. O <b className="text-ink">{"{nome do negócio}"}</b>
@@ -526,23 +534,20 @@ function TextosDasMensagens({ agente, botoes, comSite }: { agente: string; botoe
           <li>
             Dois botões de resposta: <b className="text-ink">{botoes[0]}</b> e <b className="text-ink">{botoes[1]}</b>.
           </li>
-          <li>Quando a Meta aprovar, a mensagem aparece aqui como pronta. Nada mais precisa mudar.</li>
+          <li>Quando a Meta aprovar, escolha em Modelos “Usar como 1ª mensagem”.</li>
         </ol>
       </div>
     </details>
   );
 }
 
-function ComoConectar() {
+function ComoConectar({ onIr }: { onIr: (v: View) => void }) {
   return (
-    <div className="space-y-2 text-sm text-muted">
-      <p>Nenhum número de prospecção conectado ainda. Quando o número for definido:</p>
-      <ol className="list-decimal space-y-1 pl-5">
-        <li>No Voob CRM, abrir um CRM só da prospecção (o Voob CRM aceita 1 WhatsApp oficial por CRM).</li>
-        <li>Conectar o número pela janela da Meta (a Voob é Tech Provider), numa conta separada da Renata.</li>
-        <li>No número: ligar “criar leads” (etapa de entrada) e a IA.</li>
-        <li>Ele aparece aqui para escolher. Antes de ligar, um teste só para o número do Jean.</li>
-      </ol>
+    <div className="space-y-3 text-sm text-muted">
+      <p>Nenhum número na conta desta empresa ainda. Conecte o WhatsApp oficial em Primeiros passos (passo 2) e ele aparece aqui.</p>
+      <Button variant="outline" size="sm" onClick={() => onIr("comecar")}>
+        Conectar o número
+      </Button>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { readJson } from "@/lib/http";
 import { buscaAutoDefinir } from "@/lib/voob/banco";
+import { empresaAtual } from "@/lib/voob/empresa-atual";
 import { erroVoob } from "@/lib/voob/http";
 import { quemFez } from "@/lib/voob/pessoas";
 
@@ -15,7 +16,8 @@ export async function POST(request: Request) {
   const desconhecida = Object.keys(m).find((k) => !CHAVES.has(k));
   if (desconhecida) return Response.json({ erro: `Campo desconhecido: ${desconhecida}.` }, { status: 400 });
   try {
-    return Response.json(await buscaAutoDefinir(m, await quemFez()));
+    const emp = await empresaAtual();
+    return Response.json(await buscaAutoDefinir(emp.id, m, await quemFez()));
   } catch (e) {
     return erroVoob(e);
   }
