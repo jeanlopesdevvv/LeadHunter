@@ -7,7 +7,7 @@ import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
 import { Logo } from "@/components/Logo";
 import { BotaoTema, SeletorTema } from "@/components/tema";
 import { cx } from "@/components/ui";
-import { temRecurso, type Empresa } from "@/lib/empresas";
+import { rotuloDaTela, temRecurso, type Empresa } from "@/lib/empresas";
 import type { Uso } from "@/lib/types";
 
 import { SeletorEmpresa } from "./SeletorEmpresa";
@@ -79,7 +79,10 @@ export function Shell({
   }, [view]);
 
   const online = useSyncExternalStore(assinarConexao, () => navigator.onLine, () => true);
-  const itens = ITEMS.filter((i) => temRecurso(empresa, i.id));
+  // Na ordem das telas da empresa (a do Lavacar é a de sempre; a Voob põe a Base antes do Disparo).
+  const itens = ITEMS.filter((i) => temRecurso(empresa, i.id))
+    .sort((a, b) => empresa.recursos.indexOf(a.id) - empresa.recursos.indexOf(b.id))
+    .map((i) => ({ ...i, label: rotuloDaTela(empresa, i.id, i.label) }));
   const comAtendimento = temRecurso(empresa, "atendimento");
   const chatwoot = useChatwoot(comAtendimento);
   const urlAtendimento = comAtendimento ? (chatwoot?.url ?? "") : "";

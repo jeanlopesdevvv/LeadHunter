@@ -39,6 +39,8 @@ export interface Empresa {
   motor: MotorEmpresa;
   situacao: SituacaoEmpresa;
   recursos: readonly Recurso[];
+  /** Nome de uma tela no menu, quando é diferente do padrão (ex.: a "Base" da Voob). */
+  rotulos?: Partial<Record<Recurso, string>>;
 }
 
 export const EMPRESAS: readonly Empresa[] = [
@@ -62,7 +64,9 @@ export const EMPRESAS: readonly Empresa[] = [
     agente: "Renata",
     motor: "voob-crm",
     situacao: "preparando",
-    recursos: ["comecar"],
+    // 12/11/2026 (Entrega 3): o motor do Voob CRM (schema "radar"). "Em preparação" até o número da prospecção entrar.
+    recursos: ["comecar", "buscar", "leads", "disparo", "painel"],
+    rotulos: { leads: "Base", disparo: "Disparo" },
   },
 ];
 
@@ -109,15 +113,27 @@ export function temRecurso(empresa: Empresa, recurso: Recurso): boolean {
 const ROTAS_DE_TODAS = ["/api/auth/login", "/api/auth/logout", "/api/empresa", "/api/health"];
 /** Abas do Radar dentro do Chatwoot do Lavacar ("Enviar Template"): são do Lavacar, seja qual for a empresa escolhida aqui. */
 const ROTAS_DO_CHATWOOT_LAVACAR = ["/api/chatwoot", "/api/modelos"];
+/** Consultas grátis do Google: a cota é uma só para todas as empresas (só leitura). */
+const ROTAS_COMPARTILHADAS = ["/api/uso"];
+/** O motor da Voob (Voob CRM, schema "radar"): só com uma empresa desse motor escolhida. */
+const ROTAS_DO_VOOB_CRM = "/api/voob";
+
+const comecaCom = (caminho: string, r: string) => caminho === r || caminho.startsWith(`${r}/`);
 
 /**
- * O que a empresa escolhida pode chamar. Hoje as rotas /api usam o motor do Lavacar
+ * O que a empresa escolhida pode chamar. As rotas /api de sempre usam o motor do Lavacar
  * (banco "atendimento", planilha, n8n): com outra empresa escolhida, elas ficam fechadas,
- * para ninguém disparar ou buscar para o Lavacar achando que está na Voob.
+ * para ninguém disparar ou buscar para o Lavacar achando que está na Voob. E as /api/voob
+ * (motor do Voob CRM) só abrem com a Voob escolhida.
  */
 export function rotaPermitida(empresa: Empresa, caminho: string): boolean {
   if (!caminho.startsWith("/api/")) return true;
-  if (ROTAS_DE_TODAS.includes(caminho)) return true;
-  if (ROTAS_DO_CHATWOOT_LAVACAR.some((r) => caminho === r || caminho.startsWith(`${r}/`))) return true;
+  if (ROTAS_DE_TODAS.includes(caminho) || ROTAS_COMPARTILHADAS.includes(caminho)) return true;
+  if (ROTAS_DO_CHATWOOT_LAVACAR.some((r) => comecaCom(caminho, r))) return true;
+  if (comecaCom(caminho, ROTAS_DO_VOOB_CRM)) return empresa.motor === "voob-crm";
   return empresa.motor === "lavacar";
+}
+
+export function rotuloDaTela(empresa: Empresa, recurso: Recurso, padrao: string): string {
+  return empresa.rotulos?.[recurso] ?? padrao;
 }

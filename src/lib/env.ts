@@ -97,6 +97,8 @@ export function getConfig() {
     appPassword: str("APP_PASSWORD"),
     authSecret: str("AUTH_SECRET"),
     placesApiKey: str("GOOGLE_MAPS_API_KEY"),
+    // Radar · Voob (12/11/2026): o Voob CRM, com o usuário radar_voob (só executa as funções do schema "radar").
+    voobCrmDbUrl: str("VOOB_CRM_DB_URL"),
     serviceAccount: parseServiceAccount(),
     serviceAccountInvalid: Boolean(serviceAccountRaw) && !parseServiceAccount(),
     sheetId: str("SHEET_ID", DEFAULT_SHEET_ID),

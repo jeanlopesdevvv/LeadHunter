@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { EMPRESAS, empresaPorId, empresasDisponiveis, escolherEmpresa, idsDisponiveis, rotaPermitida, temRecurso } from "@/lib/empresas";
+import { EMPRESAS, empresaPorId, empresasDisponiveis, escolherEmpresa, idsDisponiveis, rotaPermitida, rotuloDaTela, temRecurso } from "@/lib/empresas";
 
 const lavacar = empresaPorId("lavacar")!;
 const voob = empresaPorId("voob")!;
 
 describe("empresas do Radar (12/11/2026)", () => {
-  it("Lavacar continua com todas as telas de hoje; a Voob só com os primeiros passos", () => {
+  it("Lavacar continua com todas as telas de hoje; a Voob com as telas do motor do Voob CRM", () => {
     for (const r of ["buscar", "resultados", "disparo", "automatico", "leads", "painel", "historico", "config", "atendimento"] as const) {
       expect(temRecurso(lavacar, r)).toBe(true);
     }
     expect(temRecurso(lavacar, "comecar")).toBe(false);
-    expect(voob.situacao).toBe("preparando");
-    expect(voob.recursos).toEqual(["comecar"]);
+    expect(voob.motor).toBe("voob-crm");
+    expect(voob.recursos).toEqual(["comecar", "buscar", "leads", "disparo", "painel"]);
+    expect(temRecurso(voob, "atendimento")).toBe(false);
+    expect(rotuloDaTela(voob, "leads", "Leads")).toBe("Base");
+    expect(rotuloDaTela(lavacar, "leads", "Leads")).toBe("Leads");
   });
 
   it("ids únicos, sigla de 2 letras e cor em hexadecimal", () => {
@@ -52,7 +55,17 @@ describe("empresas do Radar (12/11/2026)", () => {
       expect(rotaPermitida(voob, r)).toBe(true);
     }
     expect(rotaPermitida(voob, "/api/chatwootx")).toBe(false);
+    expect(rotaPermitida(voob, "/api/uso")).toBe(true);
+    expect(rotaPermitida(lavacar, "/api/uso")).toBe(true);
     expect(rotaPermitida(voob, "/")).toBe(true);
     expect(rotaPermitida(voob, "/login")).toBe(true);
+  });
+
+  it("o motor da Voob (/api/voob) só abre com a Voob escolhida", () => {
+    for (const r of ["/api/voob/config", "/api/voob/ligar", "/api/voob/busca", "/api/voob/base", "/api/voob/base/acao", "/api/voob/painel"]) {
+      expect(rotaPermitida(voob, r)).toBe(true);
+      expect(rotaPermitida(lavacar, r)).toBe(false);
+    }
+    expect(rotaPermitida(voob, "/api/voobx")).toBe(false);
   });
 });
