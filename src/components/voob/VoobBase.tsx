@@ -183,7 +183,7 @@ export function VoobBase({
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="font-semibold text-strong">{l.negocio}</span>
                         <SeloStatus status={l.status} />
-                        <SeloSite situacao={l.site_situacao} url={l.site_url} />
+                        <SeloSite situacao={l.site_situacao} url={l.site_url} problemas={l.site_problemas} />
                         {l.prioridade > 0 && l.status === "novo" && <Badge tone="brand">Primeiro da fila</Badge>}
                         {l.crm_lead_id && <Badge tone="green">No CRM</Badge>}
                       </div>
@@ -197,6 +197,9 @@ export function VoobBase({
                         )}
                         <span>· {linhaDeTempo(l)}</span>
                       </p>
+                      {l.site_situacao === "desatualizado" && l.site_problemas?.length ? (
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Raio-X: {l.site_problemas.join("; ")}.</p>
+                      ) : null}
                       {l.motivo && ["pulado", "erro", "novo", "descartado"].includes(l.status) && l.motivo !== "descartado" && (
                         <p className="mt-1 text-xs text-amber-700">{motivoLegivel(l.motivo)}</p>
                       )}

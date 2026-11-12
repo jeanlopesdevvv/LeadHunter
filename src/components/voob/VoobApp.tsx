@@ -34,7 +34,7 @@ function telaGuardada(): View {
   }
 }
 
-export function VoobApp({ empresa, empresas }: { empresa: Empresa; empresas: Empresa[] }) {
+export function VoobApp({ empresa, empresas, pessoa }: { empresa: Empresa; empresas: Empresa[]; pessoa?: string | null }) {
   const router = useRouter();
   const toast = useToast();
   const [view, setView] = useState<View>(telaGuardada);
@@ -89,6 +89,7 @@ export function VoobApp({ empresa, empresas }: { empresa: Empresa; empresas: Emp
       rodando={busca.rodando}
       simulacao={Boolean(cfg?.simulacao)}
       uso={uso}
+      pessoa={pessoa}
       onSair={sair}
     >
       {view === "comecar" && <VoobComecar empresa={empresa} cfg={cfg} erro={erroCfg} onIr={irPara} onRecarregar={carregar} />}

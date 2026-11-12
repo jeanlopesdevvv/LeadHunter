@@ -4,7 +4,8 @@ import { Check, CircleDashed, Hammer, MessageCircleQuestion, Sparkles } from "lu
 import type { CSSProperties, ReactNode } from "react";
 
 import { Badge, Card, cx } from "@/components/ui";
-import { ROTULO_SITE, STATUS, textoAbertura } from "@/lib/voob/regras";
+import { EXEMPLO_NEGOCIO, EXEMPLO_PROBLEMA, paragrafos, type TipoMensagem } from "@/lib/voob/mensagens";
+import { ROTULO_SITE, STATUS } from "@/lib/voob/regras";
 import type { SituacaoSite, StatusLead } from "@/lib/voob/tipos";
 
 export const n = (v: number) => v.toLocaleString("pt-BR");
@@ -24,12 +25,17 @@ export function Chip({ children, ativo, onClick, title }: { children: ReactNode;
   );
 }
 
-export function SeloSite({ situacao, url }: { situacao: SituacaoSite; url?: string | null }) {
-  const tom = situacao === "sem_site" ? "green" : situacao === "rede_social" ? "brand" : "gray";
-  const selo = <Badge tone={tom}>{ROTULO_SITE[situacao]}</Badge>;
+export function SeloSite({ situacao, url, problemas }: { situacao: SituacaoSite; url?: string | null; problemas?: string[] | null }) {
+  const tom = situacao === "sem_site" ? "green" : situacao === "rede_social" ? "brand" : situacao === "desatualizado" ? "amber" : "gray";
+  const dica = problemas?.length ? `Raio-X: ${problemas.join("; ")}` : undefined;
+  const selo = (
+    <Badge tone={tom} title={dica}>
+      {ROTULO_SITE[situacao]}
+    </Badge>
+  );
   if (!url) return selo;
   return (
-    <a href={url} target="_blank" rel="noreferrer" title={url} className="transition hover:opacity-80">
+    <a href={url} target="_blank" rel="noreferrer" title={dica ?? url} className="transition hover:opacity-80">
       {selo}
     </a>
   );
@@ -99,19 +105,32 @@ export function Indicador({
   );
 }
 
-/** Prévia da 1ª mensagem no formato do WhatsApp (o texto que vai para a aprovação da Meta). */
-export function PreviaMensagem({ agente, negocio = "Clínica Bem Estar", botoes = ["Quero ver", "Não tenho interesse"] }: { agente: string; negocio?: string; botoes?: string[] }) {
-  const texto = textoAbertura(agente, "§");
-  const [antes, depois] = texto.split("§");
+/** *negrito* do WhatsApp virando <b>. */
+function comNegrito(texto: string): ReactNode[] {
+  return texto.split(/(\*[^*\n]+\*)/g).map((parte, i) => (/^\*[^*\n]+\*$/.test(parte) ? <b key={i}>{parte.slice(1, -1)}</b> : parte));
+}
+
+/** Prévia de uma mensagem no formato do WhatsApp (o texto que vai para a aprovação da Meta). */
+export function PreviaMensagem({
+  agente,
+  tipo = "abertura",
+  negocio = EXEMPLO_NEGOCIO,
+  problema = EXEMPLO_PROBLEMA,
+  botoes = ["Quero ver", "Não tenho interesse"],
+}: {
+  agente: string;
+  tipo?: TipoMensagem;
+  negocio?: string;
+  problema?: string;
+  botoes?: string[];
+}) {
   return (
     <div className="max-w-md rounded-2xl bg-[#e9e3d8] p-3 dark:bg-[#0b141a]">
-      <div className="relative rounded-xl rounded-tl-sm bg-white px-3.5 py-2.5 text-[13.5px] leading-relaxed text-[#111b21] shadow-sm dark:bg-[#202c33] dark:text-[#e9edef]">
-        <p>
-          {antes}
-          <b>{negocio}</b>
-          {depois}
-        </p>
-        <span className="mt-1 block text-right text-[11px] text-[#667781] dark:text-[#8696a0]">09:41</span>
+      <div className="relative space-y-2 rounded-xl rounded-tl-sm bg-white px-3.5 py-2.5 text-[13.5px] leading-relaxed text-[#111b21] shadow-sm dark:bg-[#202c33] dark:text-[#e9edef]">
+        {paragrafos(tipo, agente, negocio, problema).map((p, i) => (
+          <p key={i}>{comNegrito(p)}</p>
+        ))}
+        <span className="block text-right text-[11px] text-[#667781] dark:text-[#8696a0]">09:41</span>
       </div>
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         {botoes.map((b) => (

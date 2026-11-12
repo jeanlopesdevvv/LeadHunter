@@ -1,6 +1,7 @@
 import { readJson } from "@/lib/http";
 import { acao } from "@/lib/voob/banco";
 import { erroVoob } from "@/lib/voob/http";
+import { quemFez } from "@/lib/voob/pessoas";
 import type { AcaoBase } from "@/lib/voob/tipos";
 
 export const maxDuration = 30;
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   if (ids.length > 500) return Response.json({ erro: "No máximo 500 de cada vez." }, { status: 400 });
   if (!ACOES.has(body?.acao as AcaoBase)) return Response.json({ erro: "Ação desconhecida." }, { status: 400 });
   try {
-    return Response.json(await acao(ids, body!.acao as AcaoBase));
+    return Response.json(await acao(ids, body!.acao as AcaoBase, await quemFez()));
   } catch (e) {
     return erroVoob(e);
   }

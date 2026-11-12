@@ -15,8 +15,8 @@ import type { AcaoBase, ConfigVoob, EntradaBase, ListaBase, PainelVoob, Resposta
  */
 
 export const EMPRESA_VOOB = "voob";
-/** Quem fez a mudança, no histórico do banco (o Radar ainda entra com uma senha só). */
-export const QUEM = "Radar";
+/** Quem fez a mudança, no histórico do banco: o nome de quem entrou (ou "Radar", com a senha da equipe). */
+const QUEM_PADRAO = "Radar";
 
 export class VoobError extends Error {
   constructor(
@@ -98,23 +98,23 @@ export async function config(): Promise<ConfigVoob> {
   return noCrm(async (sql) => (await sql`select radar.config(${EMPRESA_VOOB}) as r`)[0].r as ConfigVoob, true);
 }
 
-export async function definir(mudancas: Record<string, unknown>): Promise<ConfigVoob> {
+export async function definir(mudancas: Record<string, unknown>, quem = QUEM_PADRAO): Promise<ConfigVoob> {
   if (usarSimulacao()) return simular(() => simulado.definir(mudancas));
   return noCrm(
-    async (sql) => (await sql`select radar.definir(${EMPRESA_VOOB}, ${JSON.stringify(mudancas)}::jsonb, ${QUEM}) as r`)[0].r as ConfigVoob,
+    async (sql) => (await sql`select radar.definir(${EMPRESA_VOOB}, ${JSON.stringify(mudancas)}::jsonb, ${quem}) as r`)[0].r as ConfigVoob,
     false,
   );
 }
 
-export async function ligar(ligado: boolean): Promise<ConfigVoob> {
+export async function ligar(ligado: boolean, quem = QUEM_PADRAO): Promise<ConfigVoob> {
   if (usarSimulacao()) return simular(() => simulado.ligar(ligado));
-  return noCrm(async (sql) => (await sql`select radar.ligar(${EMPRESA_VOOB}, ${ligado}, ${QUEM}) as r`)[0].r as ConfigVoob, false);
+  return noCrm(async (sql) => (await sql`select radar.ligar(${EMPRESA_VOOB}, ${ligado}, ${quem}) as r`)[0].r as ConfigVoob, false);
 }
 
-export async function inserir(leads: EntradaBase[]): Promise<RespostaInsercao> {
+export async function inserir(leads: EntradaBase[], quem = QUEM_PADRAO): Promise<RespostaInsercao> {
   if (usarSimulacao()) return simular(() => simulado.inserir(leads));
   return noCrm(
-    async (sql) => (await sql`select radar.leads_inserir(${EMPRESA_VOOB}, ${JSON.stringify(leads)}::jsonb, ${QUEM}) as r`)[0].r as RespostaInsercao,
+    async (sql) => (await sql`select radar.leads_inserir(${EMPRESA_VOOB}, ${JSON.stringify(leads)}::jsonb, ${quem}) as r`)[0].r as RespostaInsercao,
     false,
   );
 }
@@ -144,11 +144,11 @@ export async function lista(filtro: { status?: StatusLead[]; busca?: string; lim
   );
 }
 
-export async function acao(ids: string[], qual: AcaoBase): Promise<{ afetados: number; na_fila: number }> {
+export async function acao(ids: string[], qual: AcaoBase, quem = QUEM_PADRAO): Promise<{ afetados: number; na_fila: number }> {
   if (usarSimulacao()) return simular(() => simulado.acao(ids, qual));
   return noCrm(
     async (sql) =>
-      (await sql`select radar.leads_acao(${EMPRESA_VOOB}, ${sql.array(ids)}::uuid[], ${qual}, ${QUEM}) as r`)[0].r as {
+      (await sql`select radar.leads_acao(${EMPRESA_VOOB}, ${sql.array(ids)}::uuid[], ${qual}, ${quem}) as r`)[0].r as {
         afetados: number;
         na_fila: number;
       },
@@ -163,4 +163,9 @@ export async function painel(dias: number): Promise<PainelVoob> {
     await sql`select radar.apurar(${EMPRESA_VOOB})`;
     return (await sql`select radar.painel(${EMPRESA_VOOB}, ${dias}) as r`)[0].r as PainelVoob;
   }, false);
+}
+
+/** Login por pessoa: a conta (id do Voob CRM) é da equipe que usa o Radar? Devolve também o nome. */
+export async function pessoaDoRadar(userId: string): Promise<{ pode: boolean; nome: string | null }> {
+  return noCrm(async (sql) => (await sql`select radar.pessoa(${userId}::uuid) as r`)[0].r as { pode: boolean; nome: string | null }, true);
 }

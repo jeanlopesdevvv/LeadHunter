@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, ExternalLink, MapPin, Plus, Search, Square, Star, X } from "lucide-react";
+import { Database, ExternalLink, MapPin, Plus, ScanSearch, Search, Square, Star, X } from "lucide-react";
 import { useMemo, useState, type CSSProperties, type Dispatch, type SetStateAction } from "react";
 
 import type { View } from "@/components/dashboard/Shell";
@@ -15,6 +15,8 @@ import {
   PAGINAS_POR_BUSCA,
   SEGMENTOS,
   SERVE_PARA_ABERTURA,
+  precisaRaioX,
+  publicoDaBusca,
   consultasMaximas,
   lugaresDaBusca,
   paraBase,
@@ -81,6 +83,10 @@ export function VoobBusca({
   const [cidade, setCidade] = useState(perfil?.cidade ?? CIDADE_PADRAO);
   const [bairros, setBairros] = useState<string[]>(perfil?.bairros ?? []);
   const [soSemSite, setSoSemSite] = useState(perfil?.so_sem_site ?? true);
+  // Site desatualizado (Raio-X) só entra no público quando o banco já tem a 2ª mensagem (migração do Raio-X).
+  const temMensagemDoSite = cfg?.modelos.site !== undefined;
+  const [comDesatualizado, setComDesatualizado] = useState(Boolean(perfil?.com_desatualizado) && temMensagemDoSite);
+  const [raio, setRaio] = useState<{ feitos: number; total: number } | null>(null);
   const [filtro, setFiltro] = useState<"chamar" | "todos">("chamar");
   const [fora, setFora] = useState<Set<string>>(new Set());
   const [mostrar, setMostrar] = useState(MOSTRAR);
@@ -92,7 +98,9 @@ export function VoobBusca({
   const maximo = consultasMaximas(tarefas.length);
   const semCota = uso ? maximo > uso.restantes : false;
 
-  const serve = (r: ResultadoBusca) => !soSemSite || SERVE_PARA_ABERTURA.includes(r.siteSituacao);
+  const publico = publicoDaBusca(comDesatualizado);
+  const serve = (r: ResultadoBusca) => !soSemSite || publico.includes(r.siteSituacao);
+  const semRaioX = estado.resultados.filter(precisaRaioX);
   const paraChamar = estado.resultados.filter((r) => podeIrParaBase(r) && serve(r));
   const escolhidos = paraChamar.filter((r) => !fora.has(r.placeId));
   const visiveis = filtro === "chamar" ? paraChamar : estado.resultados;
@@ -118,7 +126,7 @@ export function VoobBusca({
     onEstado({ resultados: [], feitas: 0, total: tarefas.length, rodando: true, aviso: "" });
     // Guarda o público escolhido (a próxima vez já abre assim). Sem o Voob CRM, só não guarda.
     if (cfg) {
-      void api("/api/voob/config", { mudancas: { perfil: { cidade, segmentos, termos_extras: extras, bairros, so_sem_site: soSemSite } } }).catch(() => {});
+      void api("/api/voob/config", { mudancas: { perfil: { cidade, segmentos, termos_extras: extras, bairros, so_sem_site: soSemSite, com_desatualizado: comDesatualizado } } }).catch(() => {});
     }
     const vistos = new Set<string>();
     let parou = false;
@@ -183,6 +191,33 @@ export function VoobBusca({
       toast(e instanceof ApiError ? e.message : "Não deu para pôr na base agora.", "error");
     } finally {
       setGravando(false);
+    }
+  };
+
+  const fazerRaioX = async () => {
+    const fila = semRaioX;
+    if (!fila.length) return;
+    setRaio({ feitos: 0, total: fila.length });
+    try {
+      for (let i = 0; i < fila.length; i += 10) {
+        const lote = fila.slice(i, i + 10);
+        const r = await api<{ itens: { situacao: "desatualizado" | "ok" | "nao_conferido"; textos: string[] }[] }>("/api/voob/raio-x", { urls: lote.map((x) => x.site) });
+        const porId = new Map(lote.map((x, k) => [x.placeId, r.itens[k]]));
+        onResultados((lista) =>
+          lista.map((x) => {
+            const res = porId.get(x.placeId);
+            if (!res) return x;
+            return res.situacao === "desatualizado"
+              ? { ...x, raioX: "desatualizado", siteSituacao: "desatualizado", siteProblemas: res.textos }
+              : { ...x, raioX: res.situacao };
+          }),
+        );
+        setRaio({ feitos: Math.min(fila.length, i + lote.length), total: fila.length });
+      }
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "O Raio-X parou no meio; o que já foi conferido ficou.", "error");
+    } finally {
+      setRaio(null);
     }
   };
 
@@ -251,6 +286,16 @@ export function VoobBusca({
               </div>
               <div className="sm:pt-7">
                 <Toggle checked={soSemSite} onChange={setSoSemSite} label="Só quem não tem site" hint="Sem site ou só com rede social: é para eles a 1ª mensagem." />
+                {temMensagemDoSite && (
+                  <div className="mt-3">
+                    <Toggle
+                      checked={comDesatualizado}
+                      onChange={setComDesatualizado}
+                      label="Também site desatualizado"
+                      hint="Depois do Raio-X: quem tem site que não abre, sem versão de celular, sem cadeado ou parado no tempo recebe a mensagem do site."
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -318,6 +363,31 @@ export function VoobBusca({
         </Card>
       )}
 
+      {/* Raio-X dos sites */}
+      {!estado.rodando && (semRaioX.length > 0 || raio) && (
+        <Card className="entrar flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:p-5" style={{ "--i": 2 } as CSSProperties}>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700 ring-1 ring-brand-100">
+            <ScanSearch className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-bold text-ink">Raio-X dos sites</p>
+            <p className="text-muted">
+              {raio
+                ? `Conferindo ${n(raio.feitos)} de ${n(raio.total)}…`
+                : `${n(semRaioX.length)} ${semRaioX.length === 1 ? "empresa tem" : "empresas têm"} site. O Raio-X abre cada um e marca só o que dá para afirmar: endereço que não abre, sem versão de celular, sem cadeado, endereço gratuito ou rodapé de ano antigo.`}
+            </p>
+            {raio && (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface">
+                <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${Math.max(4, (raio.feitos / raio.total) * 100)}%` }} />
+              </div>
+            )}
+          </div>
+          <Button variant="outline" onClick={() => void fazerRaioX()} loading={Boolean(raio)} disabled={Boolean(raio)} icon={<ScanSearch className="size-4" />}>
+            Fazer o Raio-X
+          </Button>
+        </Card>
+      )}
+
       {/* Resultados */}
       {estado.resultados.length > 0 && (
         <Card className="entrar overflow-hidden" style={{ "--i": 2 } as CSSProperties}>
@@ -372,7 +442,7 @@ export function VoobBusca({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-semibold text-strong">{r.negocio}</span>
-                      <SeloSite situacao={r.siteSituacao} url={r.site || null} />
+                      <SeloSite situacao={r.siteSituacao} url={r.site || null} problemas={r.siteProblemas} />
                       <Badge tone={conf.tom}>{conf.rotulo}</Badge>
                     </div>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
@@ -385,6 +455,9 @@ export function VoobBusca({
                         </span>
                       )}
                     </p>
+                    {r.siteSituacao === "desatualizado" && r.siteProblemas?.length ? (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Raio-X: {r.siteProblemas.join("; ")}.</p>
+                    ) : null}
                   </div>
                   {r.mapsUrl && (
                     <a href={r.mapsUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg p-1.5 text-muted transition hover:bg-strong/5 hover:text-ink" title="Abrir no Google Maps">

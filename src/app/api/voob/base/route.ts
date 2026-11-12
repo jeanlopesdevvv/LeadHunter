@@ -1,6 +1,7 @@
 import { readJson } from "@/lib/http";
 import { inserir, lista } from "@/lib/voob/banco";
 import { erroVoob } from "@/lib/voob/http";
+import { quemFez } from "@/lib/voob/pessoas";
 import { ORDEM_STATUS } from "@/lib/voob/regras";
 import type { EntradaBase, SituacaoSite, StatusLead } from "@/lib/voob/tipos";
 
@@ -50,6 +51,9 @@ export async function POST(request: Request) {
       endereco: texto(x.endereco, 200),
       site_url: texto(x.site_url, 300),
       site_situacao: SITUACOES.has(sit) ? sit : "nao_conferido",
+      site_problemas: Array.isArray(x.site_problemas)
+        ? (x.site_problemas as unknown[]).filter((p): p is string => typeof p === "string" && p.trim().length > 0).slice(0, 6).map((p) => p.trim().slice(0, 100))
+        : undefined,
       nota: numero(x.nota),
       avaliacoes: numero(x.avaliacoes),
       place_id: texto(x.place_id, 300),
@@ -58,7 +62,7 @@ export async function POST(request: Request) {
   }
   if (!leads.length) return Response.json({ erro: "Nenhuma empresa com telefone e nome." }, { status: 400 });
   try {
-    return Response.json(await inserir(leads));
+    return Response.json(await inserir(leads, await quemFez()));
   } catch (e) {
     return erroVoob(e);
   }

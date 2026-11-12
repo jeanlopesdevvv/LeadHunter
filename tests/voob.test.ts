@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Lead } from "@/lib/types";
+import { emojis, textoDaMensagem, textoParaOModelo } from "@/lib/voob/mensagens";
 import * as sim from "@/lib/voob/mock";
 import {
   SEGMENTOS,
@@ -17,7 +18,6 @@ import {
   rotuloConferida,
   situacaoDoSite,
   termosDosSegmentos,
-  textoAbertura,
   textoDias,
 } from "@/lib/voob/regras";
 
@@ -91,11 +91,29 @@ describe("Radar · Voob: do Google para a base", () => {
     expect(textoDias([1, 3])).toBe("seg, qua");
     expect(custoEstimado(20)).toBe(6.43);
   });
-  it("a 1ª mensagem não tem preço e diz de onde veio o contato", () => {
-    const t = textoAbertura("Renata", "Clínica Bem Estar");
-    expect(t).toContain("Aqui é a Renata, da Voob");
-    expect(t).toContain("Encontrei Clínica Bem Estar no Google");
-    expect(t).not.toMatch(/R\$|\d+,\d{2}/);
+  it("as mensagens: quem é, de onde veio o contato, sem preço, sem link, 1 emoji no máximo e dentro das regras da Meta", () => {
+    for (const tipo of ["abertura", "site", "retomada"] as const) {
+      const t = textoDaMensagem(tipo, "Renata");
+      expect(t).toContain("Renata");
+      expect(t).toContain("Voob");
+      expect(t).toContain("*Clínica Bem Estar*");
+      expect(t).not.toMatch(/R\$|\d+,\d{2}|https?:|www\./);
+      expect(t.length).toBeLessThanOrEqual(1024);
+      expect(emojis(t)).toBeLessThanOrEqual(1);
+      // O modelo não começa nem termina com campo, e nenhum parágrafo é só um campo.
+      const m = textoParaOModelo(tipo, "Renata");
+      expect(m.startsWith("{")).toBe(false);
+      expect(m.trimEnd().endsWith("}")).toBe(false);
+      expect(m).toContain("{nome do negócio}");
+      expect(m.split("\n\n").some((p) => /^\{[^}]+\}$/.test(p.trim()))).toBe(false);
+    }
+    const abertura = textoDaMensagem("abertura", "Renata");
+    expect(abertura).toContain("assistente virtual da Voob");
+    expect(abertura).toContain("no Google, mas não achei um site de vocês");
+    expect(abertura.trimEnd().endsWith("?")).toBe(true);
+    expect(textoDaMensagem("site", "Renata", "Casa Mineira", "o site não abre")).toContain("notei o seguinte: o site não abre. Isso");
+    expect(textoParaOModelo("site", "Renata")).toContain("{problema do site}");
+    expect(textoDaMensagem("retomada", "Renata")).toContain("Não tenho interesse");
   });
 });
 

@@ -71,7 +71,7 @@ function primeirosElegiveis(lista: Lead[], max: number, incluirFixos: boolean): 
 
 const VIEWS: View[] = ["buscar", "resultados", "disparo", "automatico", "leads", "painel", "historico", "config"];
 
-export function Dashboard({ empresa, empresas }: { empresa: Empresa; empresas: Empresa[] }) {
+export function Dashboard({ empresa, empresas, pessoa }: { empresa: Empresa; empresas: Empresa[]; pessoa?: string | null }) {
   const toast = useToast();
   const router = useRouter();
   // O que estava na tela antes de recarregar (lista, seleção, busca em andamento). Lido uma vez.
@@ -594,6 +594,7 @@ export function Dashboard({ empresa, empresas }: { empresa: Empresa; empresas: E
       simulacao={Boolean(status?.simulacao)}
       planilhaUrl={status?.planilha.planilhaUrl}
       uso={uso}
+      pessoa={pessoa}
       onSair={sair}
     >
       {view === "buscar" && (

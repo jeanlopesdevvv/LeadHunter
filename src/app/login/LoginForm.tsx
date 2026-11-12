@@ -1,26 +1,34 @@
 "use client";
 
-import { ArrowRight, Eye, EyeOff, Lock } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useState } from "react";
 
 import { Button, inputClass } from "@/components/ui";
 
-export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean }) {
+/**
+ * Entrar no Radar (12/11/2026): com a conta do Voob CRM (e-mail e senha) e, enquanto estiver liberada, com a senha da
+ * equipe. Com a conta, o histórico mostra o nome de quem fez cada coisa.
+ */
+export function LoginForm({ next, semSenha, comConta, comSenhaUnica }: { next: string; semSenha: boolean; comConta: boolean; comSenhaUnica: boolean }) {
+  const [modo, setModo] = useState<"conta" | "equipe">(comConta ? "conta" : "equipe");
+  const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [ver, setVer] = useState(false);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const conta = modo === "conta";
+  const pronto = Boolean(senha) && (!conta || Boolean(email.trim()));
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
-    if (!senha) return;
+    if (!pronto) return;
     setErro("");
     setCarregando(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ senha }),
+        body: JSON.stringify(conta ? { email: email.trim(), senha } : { senha }),
       });
       const data = (await res.json().catch(() => ({}))) as { erro?: string };
       if (!res.ok) throw new Error(data.erro || "Não foi possível entrar.");
@@ -31,6 +39,12 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
     }
   }
 
+  const trocar = (m: "conta" | "equipe") => {
+    setModo(m);
+    setErro("");
+    setSenha("");
+  };
+
   return (
     <form onSubmit={entrar} className="mt-8 space-y-4">
       {semSenha && (
@@ -38,14 +52,29 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
           O acesso ao Radar ainda não foi configurado. Fale com o administrador.
         </div>
       )}
+      {conta && (
+        <div className="relative">
+          <Mail className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted" />
+          <input
+            type="email"
+            autoFocus
+            autoComplete="username"
+            placeholder="E-mail do Voob CRM"
+            aria-label="E-mail do Voob CRM"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={`${inputClass} h-12 pl-10 text-[15px]`}
+          />
+        </div>
+      )}
       <div className="relative">
         <Lock className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted" />
         <input
           type={ver ? "text" : "password"}
-          autoFocus
+          autoFocus={!conta}
           autoComplete="current-password"
-          placeholder="Senha"
-          aria-label="Senha"
+          placeholder={conta ? "Senha do Voob CRM" : "Senha da equipe"}
+          aria-label={conta ? "Senha do Voob CRM" : "Senha da equipe"}
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           className={`${inputClass} h-12 pr-11 pl-10 text-[15px]`}
@@ -60,9 +89,22 @@ export function LoginForm({ next, semSenha }: { next: string; semSenha: boolean 
         </button>
       </div>
       {erro && <p className="text-sm font-medium text-red-600">{erro}</p>}
-      <Button type="submit" size="lg" className="w-full" loading={carregando} disabled={!senha || semSenha}>
+      <Button type="submit" size="lg" className="w-full" loading={carregando} disabled={!pronto || semSenha}>
         Entrar <ArrowRight className="size-4" />
       </Button>
+      {comConta && comSenhaUnica && (
+        <p className="text-center text-sm text-muted">
+          {conta ? (
+            <button type="button" className="font-semibold text-brand-700 underline-offset-2 hover:underline" onClick={() => trocar("equipe")}>
+              Entrar com a senha da equipe
+            </button>
+          ) : (
+            <button type="button" className="font-semibold text-brand-700 underline-offset-2 hover:underline" onClick={() => trocar("conta")}>
+              Entrar com a minha conta do Voob CRM
+            </button>
+          )}
+        </p>
+      )}
     </form>
   );
 }

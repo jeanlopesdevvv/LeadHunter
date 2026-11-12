@@ -94,7 +94,7 @@ function passos(empresa: Empresa, cfg: ConfigVoob | null, erro: { mensagem: stri
       situacao: modelo?.ok ? "pronto" : "rascunho",
       rotulo: modelo?.ok ? undefined : "Falta aprovar",
       icone: MessageCircleQuestion,
-      texto: "Curta, sem preço, diz de onde veio o contato e dá a saída em um toque.",
+      texto: "Diz quem é, de onde veio o contato e o que a Voob resolve, sem preço. Termina com uma pergunta e dá a saída em um toque.",
       extra: (
         <div className="mt-4">
           <PreviaMensagem agente={empresa.agente} />

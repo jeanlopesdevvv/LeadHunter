@@ -1,6 +1,7 @@
 import { readJson } from "@/lib/http";
 import { ligar } from "@/lib/voob/banco";
 import { erroVoob } from "@/lib/voob/http";
+import { quemFez } from "@/lib/voob/pessoas";
 
 export const maxDuration = 30;
 
@@ -9,7 +10,7 @@ export async function POST(request: Request) {
   const body = await readJson<{ ligado?: unknown }>(request);
   if (typeof body?.ligado !== "boolean") return Response.json({ erro: "Diga se é para ligar ou desligar." }, { status: 400 });
   try {
-    return Response.json(await ligar(body.ligado));
+    return Response.json(await ligar(body.ligado, await quemFez()));
   } catch (e) {
     return erroVoob(e);
   }

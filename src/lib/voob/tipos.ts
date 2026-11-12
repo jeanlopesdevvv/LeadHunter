@@ -35,6 +35,8 @@ export interface EmpresaConfig {
   intervalo_min: number;
   situacoes_site: SituacaoSite[];
   modelo_prefixo: string;
+  /** 1ª mensagem para quem tem site desatualizado (Raio-X). Só existe depois da migração do Raio-X. */
+  modelo_prefixo_site?: string;
   retomada_ligada: boolean;
   retomada_prefixo: string;
   retomada_dias: number;
@@ -53,6 +55,7 @@ export interface PerfilBusca {
   termos_extras?: string[];
   bairros?: string[];
   so_sem_site?: boolean;
+  com_desatualizado?: boolean;
 }
 
 export interface NumeroProspeccao {
@@ -114,7 +117,8 @@ export interface ConfigVoob {
   empresa: EmpresaConfig;
   numero: NumeroProspeccao | null;
   numeros_disponiveis: NumeroDisponivel[];
-  modelos: { abertura: SituacaoModelo | null; retomada: SituacaoModelo | null };
+  /** "site" só existe depois da migração do Raio-X (1ª mensagem para site desatualizado). */
+  modelos: { abertura: SituacaoModelo | null; retomada: SituacaoModelo | null; site?: SituacaoModelo | null };
   hoje: Hoje;
   base: Partial<Record<StatusLead, number>>;
   /** Na base, para quem a 1ª mensagem serve (hoje: sem site ou só rede social). */
@@ -136,6 +140,8 @@ export interface LeadBase {
   endereco: string | null;
   site_url: string | null;
   site_situacao: SituacaoSite;
+  /** O que o Raio-X achou no site (só para "desatualizado"). */
+  site_problemas?: string[] | null;
   nota: number | null;
   avaliacoes: number | null;
   maps_url: string | null;
@@ -171,6 +177,7 @@ export interface EntradaBase {
   endereco?: string;
   site_url?: string;
   site_situacao: SituacaoSite;
+  site_problemas?: string[];
   nota?: number | null;
   avaliacoes?: number | null;
   place_id?: string;
@@ -251,6 +258,9 @@ export interface ResultadoBusca {
   endereco: string;
   site: string;
   siteSituacao: SituacaoSite;
+  /** Raio-X feito: o resultado; os problemas em português (só quando desatualizado). */
+  raioX?: "ok" | "desatualizado" | "nao_conferido";
+  siteProblemas?: string[];
   nota: number | null;
   avaliacoes: number | null;
   mapsUrl: string;

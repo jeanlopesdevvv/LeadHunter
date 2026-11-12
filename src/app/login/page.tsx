@@ -1,7 +1,8 @@
 import { ShieldCheck, Sparkles, Table2 } from "lucide-react";
 
 import { Logo } from "@/components/Logo";
-import { senhaDoApp } from "@/lib/session";
+import { senhaDoApp, senhaUnicaLiberada } from "@/lib/session";
+import { loginPorContaDisponivel } from "@/lib/voob/pessoas";
 
 import { LoginForm } from "./LoginForm";
 
@@ -22,6 +23,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const params = await props.searchParams;
   const next = safeNext(typeof params.next === "string" ? params.next : "/");
   const semSenha = !senhaDoApp().ok;
+  const comConta = loginPorContaDisponivel();
+  // Sem o login por conta configurado, a senha da equipe é o único jeito de entrar (nunca tranca todo mundo para fora).
+  const comSenhaUnica = senhaUnicaLiberada() || !comConta;
 
   return (
     // 12/11/2026: a entrada é sempre da Voob ("radar by voob"); depois de entrar, as cores seguem a empresa escolhida.
@@ -66,8 +70,10 @@ export default async function LoginPage(props: PageProps<"/login">) {
           </div>
           <p className="eyebrow">Acesso restrito</p>
           <h2 className="display mt-3 text-4xl text-strong">Acesse o Radar</h2>
-          <p className="mt-3 text-[15px] text-muted">Digite a senha da equipe para entrar.</p>
-          <LoginForm next={next} semSenha={semSenha} />
+          <p className="mt-3 text-[15px] text-muted">
+            {comConta ? "Entre com o e-mail e a senha que você usa no Voob CRM." : "Digite a senha da equipe para entrar."}
+          </p>
+          <LoginForm next={next} semSenha={semSenha} comConta={comConta} comSenhaUnica={comSenhaUnica} />
         </div>
       </section>
     </main>

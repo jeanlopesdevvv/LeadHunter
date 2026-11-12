@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, CirclePause, CirclePlay, Clock, MessageSquareText, RefreshCw, Save, ShieldAlert, Smartphone, X } from "lucide-react";
+import { Check, CirclePause, CirclePlay, Clock, Copy, MessageSquareText, RefreshCw, Save, ShieldAlert, Smartphone, X } from "lucide-react";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 import type { View } from "@/components/dashboard/Shell";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, Toggle, cx, inputClass } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
+import { NOME_DO_MODELO, ROTULO_MENSAGEM, textoParaOModelo, type TipoMensagem } from "@/lib/voob/mensagens";
 import { DIAS_SEMANA, custoEstimado, reais, textoDias, textoPausa } from "@/lib/voob/regras";
 import type { ConfigVoob } from "@/lib/voob/tipos";
 
@@ -18,7 +19,10 @@ import { Carregando, Chip, PreviaMensagem, Titulo, n, quando } from "./comum";
  * e o motor de sempre envia, com o porteiro da prospecção conferindo cada mensagem na hora de sair.
  */
 
-type Ritmo = Pick<ConfigVoob["empresa"], "limite_dia" | "dias" | "hora_inicio" | "hora_fim" | "intervalo_min" | "retomada_ligada" | "retomada_dias">;
+type Ritmo = Pick<
+  ConfigVoob["empresa"],
+  "limite_dia" | "dias" | "hora_inicio" | "hora_fim" | "intervalo_min" | "retomada_ligada" | "retomada_dias" | "situacoes_site"
+>;
 
 const ritmoDe = (c: ConfigVoob): Ritmo => ({
   limite_dia: c.empresa.limite_dia,
@@ -28,6 +32,7 @@ const ritmoDe = (c: ConfigVoob): Ritmo => ({
   intervalo_min: c.empresa.intervalo_min,
   retomada_ligada: c.empresa.retomada_ligada,
   retomada_dias: c.empresa.retomada_dias,
+  situacoes_site: [...c.empresa.situacoes_site].sort(),
 });
 
 function mudancas(antes: Ritmo, depois: Ritmo): Partial<Ritmo> {
@@ -228,24 +233,15 @@ export function VoobDisparo({
           <div className="space-y-3">
             <SituacaoModelo titulo="1ª mensagem" prefixo={e.modelo_prefixo} m={cfg.modelos.abertura} semNumero={!cfg.numero} />
             <SituacaoModelo titulo="Retomada (opcional)" prefixo={e.retomada_prefixo} m={cfg.modelos.retomada} semNumero={!cfg.numero} />
-            <details className="group rounded-xl bg-surface p-3 ring-1 ring-line">
-              <summary className="cursor-pointer text-xs font-semibold text-brand-700">Ver o texto e como criar na Meta</summary>
-              <div className="mt-3 space-y-3 text-xs text-muted">
-                <PreviaMensagem agente={e.agente} botoes={[e.botao_sim, e.botao_nao]} />
-                <ol className="list-decimal space-y-1 pl-4">
-                  <li>
-                    No Voob CRM, no CRM da prospecção, em Modelos: nome começando por <b className="text-ink">{e.modelo_prefixo}</b>, categoria Marketing.
-                  </li>
-                  <li>
-                    Um campo livre <b className="text-ink">{"{{nome_do_negocio}}"}</b> no lugar do nome da empresa (sem o nome da pessoa: o Google não dá).
-                  </li>
-                  <li>
-                    Dois botões de resposta rápida: <b className="text-ink">{e.botao_sim}</b> e <b className="text-ink">{e.botao_nao}</b>.
-                  </li>
-                  <li>Quando a Meta aprovar, aparece aqui como pronta. Nada mais precisa mudar.</li>
-                </ol>
-              </div>
-            </details>
+            {cfg.modelos.site !== undefined && (
+              <SituacaoModelo
+                titulo="Site desatualizado (opcional, Raio-X)"
+                prefixo={e.modelo_prefixo_site ?? "radar_voob_site"}
+                m={cfg.modelos.site}
+                semNumero={!cfg.numero}
+              />
+            )}
+            <TextosDasMensagens agente={e.agente} botoes={[e.botao_sim, e.botao_nao]} comSite={cfg.modelos.site !== undefined} />
           </div>
         </Bloco>
       </div>
@@ -321,6 +317,19 @@ export function VoobDisparo({
               label="Uma retomada para quem não respondeu"
               hint={`Uma vez só, ${ritmo.retomada_dias} dias depois da 1ª mensagem. Precisa de uma 2ª mensagem aprovada.`}
             />
+            {cfg.modelos.site !== undefined && (
+              <Toggle
+                checked={ritmo.situacoes_site.includes("desatualizado")}
+                onChange={(v) =>
+                  setRitmo({
+                    ...ritmo,
+                    situacoes_site: (v ? [...ritmo.situacoes_site, "desatualizado"] : ritmo.situacoes_site.filter((x) => x !== "desatualizado")).sort() as Ritmo["situacoes_site"],
+                  })
+                }
+                label="Chamar também quem tem site desatualizado"
+                hint="Com a mensagem do site (citando o que o Raio-X achou). Precisa dela aprovada pela Meta."
+              />
+            )}
             {ritmo.retomada_ligada && (
               <Campo rotulo="Dias até a retomada">
                 <select value={ritmo.retomada_dias} onChange={(x) => setRitmo({ ...ritmo, retomada_dias: Number(x.target.value) })} className={cx(inputClass, "w-32")}>
@@ -449,6 +458,64 @@ function SituacaoModelo({ titulo, prefixo, m, semNumero }: { titulo: string; pre
         <p className="text-xs text-muted">{texto}</p>
       </div>
     </div>
+  );
+}
+
+/** Os textos para a aprovação da Meta: prévia de cada mensagem e o texto pronto para colar em Modelos › Novo modelo. */
+function TextosDasMensagens({ agente, botoes, comSite }: { agente: string; botoes: string[]; comSite: boolean }) {
+  const toast = useToast();
+  const tipos: TipoMensagem[] = comSite ? ["abertura", "site", "retomada"] : ["abertura", "retomada"];
+  const [tipo, setTipo] = useState<TipoMensagem>("abertura");
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(textoParaOModelo(tipo, agente));
+      toast("Texto copiado. Cole em Modelos › Novo modelo, no Voob CRM.", "success");
+    } catch {
+      toast("Não deu para copiar. Selecione o texto e copie.", "error");
+    }
+  };
+  return (
+    <details className="group rounded-xl bg-surface p-3 ring-1 ring-line">
+      <summary className="cursor-pointer text-xs font-semibold text-brand-700">Ver os textos e como criar na Meta</summary>
+      <div className="mt-3 space-y-3 text-xs text-muted">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Mensagem">
+          {tipos.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTipo(t)}
+              aria-pressed={tipo === t}
+              className={cx("rounded-lg px-2.5 py-1 text-xs font-semibold transition", tipo === t ? "bg-brand-50 text-brand-700 ring-1 ring-brand-100" : "text-muted hover:bg-strong/5")}
+            >
+              {ROTULO_MENSAGEM[t]}
+            </button>
+          ))}
+        </div>
+        <PreviaMensagem agente={agente} tipo={tipo} botoes={botoes} />
+        <Button variant="outline" size="sm" onClick={() => void copiar()} icon={<Copy className="size-3.5" />}>
+          Copiar o texto do modelo
+        </Button>
+        <ol className="list-decimal space-y-1 pl-4">
+          <li>
+            No Voob CRM, no CRM da prospecção, em Modelos › Novo modelo: nome <b className="text-ink">{NOME_DO_MODELO[tipo]}</b>, para que serve: Marketing.
+          </li>
+          <li>
+            Cole o texto copiado. O <b className="text-ink">{"{nome do negócio}"}</b>
+            {tipo === "site" && (
+              <>
+                {" "}
+                e o <b className="text-ink">{"{problema do site}"}</b>
+              </>
+            )}{" "}
+            o Radar preenche em cada envio (exemplo: Clínica Bem Estar{tipo === "site" && "; o site não se adapta à tela do celular"}).
+          </li>
+          <li>
+            Dois botões de resposta: <b className="text-ink">{botoes[0]}</b> e <b className="text-ink">{botoes[1]}</b>.
+          </li>
+          <li>Quando a Meta aprovar, a mensagem aparece aqui como pronta. Nada mais precisa mudar.</li>
+        </ol>
+      </div>
+    </details>
   );
 }
 

@@ -47,6 +47,7 @@ export function Shell({
   simulacao,
   planilhaUrl,
   uso,
+  pessoa,
   onSair,
   children,
 }: {
@@ -61,6 +62,8 @@ export function Shell({
   simulacao: boolean;
   planilhaUrl?: string;
   uso: Uso | null;
+  /** Quem entrou com a própria conta (12/11/2026); vazio = senha da equipe. */
+  pessoa?: string | null;
   onSair: () => void;
   children: ReactNode;
 }) {
@@ -191,6 +194,7 @@ export function Shell({
             className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-white/55 hover:bg-white/[0.04] hover:text-white"
           >
             <LogOut className="size-[18px]" /> Sair
+            {pessoa && <span className="ml-auto max-w-28 truncate text-xs font-medium text-white/40">{pessoa}</span>}
           </button>
         </div>
       </aside>

@@ -119,6 +119,7 @@ function empresaPadrao(): EmpresaConfig {
     intervalo_min: 4,
     situacoes_site: ["sem_site", "rede_social"],
     modelo_prefixo: "radar_voob_abertura",
+    modelo_prefixo_site: "radar_voob_site",
     retomada_ligada: false,
     retomada_prefixo: "radar_voob_retomada",
     retomada_dias: 3,
@@ -217,7 +218,11 @@ export function config(): ConfigVoob {
     empresa: { ...e.empresa },
     numero: e.numero,
     numeros_disponiveis: e.numero ? [{ id: NUMERO.id, nome: NUMERO.nome, final: NUMERO.final, crm: "Voob Prospecção", status: "conectado" }] : [],
-    modelos: { abertura: modelo, retomada: e.numero ? { ok: false, motivo: "aviso_sem_modelo", nome: null, categoria: null } : null },
+    modelos: {
+      abertura: modelo,
+      retomada: e.numero ? { ok: false, motivo: "aviso_sem_modelo", nome: null, categoria: null } : null,
+      site: e.numero ? { ok: false, motivo: "aviso_sem_modelo", nome: null, categoria: null } : null,
+    },
     hoje: {
       enviados: e.enviadosHoje,
       na_fila: naFila,
@@ -308,6 +313,7 @@ export function inserir(entrada: EntradaBase[]): RespostaInsercao {
         bairro: l.bairro ?? null,
         site_url: l.site_url ?? null,
         site_situacao: l.site_situacao,
+        site_problemas: l.site_problemas ?? null,
         nota: l.nota ?? null,
         avaliacoes: l.avaliacoes ?? null,
         created_at: agora,

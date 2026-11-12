@@ -1,7 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 /**
- * Sessão simples por senha única: cookie "exp.assinatura" (HMAC-SHA256).
+ * Sessão do Radar: cookie assinado (HMAC-SHA256). Dois formatos:
+ * - senha da equipe (o de sempre): "exp.assinatura";
+ * - por pessoa (12/11/2026, conta do Voob CRM): "p1.exp.dados.assinatura", com o id e o nome de quem entrou.
  * Trocar APP_PASSWORD (ou AUTH_SECRET) derruba todas as sessões.
  */
 
@@ -37,13 +39,58 @@ export function createSessionToken(now = Date.now()): string {
   return `${exp}.${sign(exp)}`;
 }
 
-export function verifySessionToken(token: string | undefined, now = Date.now()): boolean {
-  if (!token || !senhaDoApp().ok) return false;
-  const [exp, sig] = token.split(".");
-  if (!exp || !sig || !/^\d+$/.test(exp) || Number(exp) < now) return false;
-  const expected = Buffer.from(sign(exp));
+export interface Pessoa {
+  /** Id da conta no Voob CRM. */
+  id: string;
+  /** Primeiro nome (aparece no menu e no histórico do que foi feito). */
+  nome: string;
+}
+
+/** Sessão por pessoa vale menos dias: quem sai da equipe perde o acesso sozinho. */
+export const SESSION_DAYS_PESSOA = 14;
+
+function assinaturaConfere(payload: string, sig: string): boolean {
+  const expected = Buffer.from(sign(payload));
   const got = Buffer.from(sig);
   return expected.length === got.length && timingSafeEqual(expected, got);
+}
+
+export function createPersonToken(pessoa: Pessoa, now = Date.now()): string {
+  const exp = String(now + SESSION_DAYS_PESSOA * 24 * 60 * 60 * 1000);
+  const dados = Buffer.from(JSON.stringify({ u: pessoa.id, n: pessoa.nome.slice(0, 40) }), "utf8").toString("base64url");
+  const payload = `p1.${exp}.${dados}`;
+  return `${payload}.${sign(payload)}`;
+}
+
+/** Lê a sessão: válida ou não e, se for por pessoa, quem é. */
+export function lerSessao(token: string | undefined, now = Date.now()): { ok: boolean; pessoa: Pessoa | null } {
+  const nao = { ok: false, pessoa: null };
+  if (!token || !senhaDoApp().ok) return nao;
+  const partes = token.split(".");
+  if (partes[0] === "p1") {
+    const [, exp, dados, sig] = partes;
+    if (partes.length !== 4 || !exp || !dados || !sig || !/^\d+$/.test(exp) || Number(exp) < now) return nao;
+    if (!assinaturaConfere(`p1.${exp}.${dados}`, sig)) return nao;
+    try {
+      const d = JSON.parse(Buffer.from(dados, "base64url").toString("utf8")) as { u?: unknown; n?: unknown };
+      if (typeof d.u !== "string" || typeof d.n !== "string" || !d.u || !d.n) return nao;
+      return { ok: true, pessoa: { id: d.u, nome: d.n } };
+    } catch {
+      return nao;
+    }
+  }
+  const [exp, sig] = partes;
+  if (partes.length !== 2 || !exp || !sig || !/^\d+$/.test(exp) || Number(exp) < now) return nao;
+  return assinaturaConfere(exp, sig) ? { ok: true, pessoa: null } : nao;
+}
+
+export function verifySessionToken(token: string | undefined, now = Date.now()): boolean {
+  return lerSessao(token, now).ok;
+}
+
+/** A senha única da equipe ainda vale? (RADAR_SENHA_UNICA=0 desliga, depois que todos entrarem com a própria conta.) */
+export function senhaUnicaLiberada(): boolean {
+  return !/^(0|nao|não|false|off)$/i.test(process.env.RADAR_SENHA_UNICA?.trim() ?? "");
 }
 
 export function passwordMatches(input: string): boolean {

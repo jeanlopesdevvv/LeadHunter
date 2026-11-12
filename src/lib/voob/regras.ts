@@ -135,6 +135,14 @@ export function situacaoDoSite(url: string | null | undefined): Exclude<Situacao
 /** Para quem a 1ª mensagem ("vi que vocês ainda não têm site") serve. */
 export const SERVE_PARA_ABERTURA: SituacaoSite[] = ["sem_site", "rede_social"];
 
+/** O público da busca: quem não tem site e, se escolhido, quem tem site desatualizado (a 2ª mensagem, do Raio-X). */
+export function publicoDaBusca(comDesatualizado: boolean): SituacaoSite[] {
+  return comDesatualizado ? [...SERVE_PARA_ABERTURA, "desatualizado"] : SERVE_PARA_ABERTURA;
+}
+
+/** Quem tem site e ainda não passou pelo Raio-X. */
+export const precisaRaioX = (r: ResultadoBusca) => r.siteSituacao === "com_site" && !r.raioX && Boolean(r.site);
+
 export const ROTULO_SITE: Record<SituacaoSite, string> = {
   sem_site: "Sem site",
   rede_social: "Só rede social",
@@ -179,6 +187,7 @@ export function paraBase(r: ResultadoBusca): EntradaBase {
     endereco: r.endereco || undefined,
     site_url: r.site || undefined,
     site_situacao: r.siteSituacao,
+    site_problemas: r.siteProblemas?.length ? r.siteProblemas.slice(0, 6) : undefined,
     nota: r.nota,
     avaliacoes: r.avaliacoes,
     place_id: r.placeId || undefined,
@@ -326,17 +335,4 @@ export function funil(p: PainelVoob) {
     { id: "interessados", rotulo: "Querem ver", valor: t.interessados },
     { id: "no_crm", rotulo: "No CRM", valor: t.no_crm },
   ];
-}
-
-/** O texto da 1ª mensagem (o mesmo que vai para a aprovação da Meta), com o nome do negócio. */
-export function textoAbertura(agente: string, negocio: string): string {
-  return (
-    `Olá! Aqui é a ${agente}, da Voob. Encontrei ${negocio} no Google e vi que vocês ainda não têm site. ` +
-    "A gente monta o site, o CRM e uma IA que responde os seus clientes no WhatsApp na hora, até à noite e no fim de semana. " +
-    "Posso te mostrar como ficaria para vocês?"
-  );
-}
-
-export function textoRetomada(negocio: string): string {
-  return `Oi! Passando de novo por aqui: quer que eu te mostre como ficaria o site e o atendimento com IA para ${negocio}? Se não for o momento, é só me falar.`;
 }

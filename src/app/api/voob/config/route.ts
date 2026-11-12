@@ -1,6 +1,7 @@
 import { readJson } from "@/lib/http";
 import { config, definir } from "@/lib/voob/banco";
 import { erroVoob } from "@/lib/voob/http";
+import { quemFez } from "@/lib/voob/pessoas";
 
 export const maxDuration = 30;
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   const desconhecida = Object.keys(m).find((k) => !CHAVES.has(k));
   if (desconhecida) return Response.json({ erro: `Campo desconhecido: ${desconhecida}.` }, { status: 400 });
   try {
-    return Response.json(await definir(m));
+    return Response.json(await definir(m, await quemFez()));
   } catch (e) {
     return erroVoob(e);
   }

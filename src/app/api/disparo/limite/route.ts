@@ -2,6 +2,7 @@ import { salvarLimiteDiario } from "@/lib/banco";
 import { statusDisparo } from "@/lib/disparo";
 import { validarLimiteDiario } from "@/lib/disparo-regras";
 import { handleError, jsonError, readJson } from "@/lib/http";
+import { quemFez } from "@/lib/voob/pessoas";
 
 export const maxDuration = 30;
 
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
   const v = validarLimiteDiario(body?.valor);
   if (!v.ok) return jsonError(v.erro, 400);
   try {
-    await salvarLimiteDiario(v.valor, "Radar");
+    await salvarLimiteDiario(v.valor, await quemFez());
     return Response.json(await statusDisparo());
   } catch (e) {
     return handleError(e);
