@@ -154,6 +154,8 @@ export interface LeadBase {
   respondeu_em: string | null;
   saiu_em: string | null;
   crm_lead_id: string | null;
+  /** Comprou depois da 1ª mensagem (migração das vendas, 12/11/2026). */
+  vendeu_em?: string | null;
   created_at: string;
   atualizado: string;
   /** Quando sai (se está na fila). */
@@ -208,6 +210,7 @@ export interface DiaPainel {
   responderam: number;
   interessados: number;
   pararam: number;
+  vendas?: number;
 }
 
 export interface PainelVoob {
@@ -227,6 +230,8 @@ export interface PainelVoob {
     pulados: number;
     erros: number;
     descartados: number;
+    /** Compraram depois da 1ª mensagem. */
+    vendas?: number;
   };
   periodo: {
     enviados: number;
@@ -236,6 +241,7 @@ export interface PainelVoob {
     sem_interesse: number;
     pararam: number;
     adicionados: number;
+    vendas?: number;
   };
   serie: DiaPainel[];
   ligado: boolean;
@@ -266,4 +272,100 @@ export interface ResultadoBusca {
   mapsUrl: string;
   /** Na base / já é da Voob / novo (só para celulares). "sem_conferir": o Voob CRM não respondeu. */
   situacao: SituacaoConferida | "fixo" | "sem_conferir";
+}
+
+// ---------------------------------------------------------------- busca automática, saúde do número e sugestão de limite
+// (migração 20261112210000_radar_busca_saude, 12/11/2026)
+
+export interface ConfigBuscaAuto {
+  ligado: boolean;
+  /** A base precisa ter empresas para quantos dias de disparo (limite × dias). */
+  fila_dias: number;
+  max_consultas_dia: number;
+  /** Consultas do mês que ficam guardadas para a busca manual (a cota do Google é uma só para o Lavacar e a Voob). */
+  reserva_cota: number;
+  /** Depois de quantos dias a mesma busca (termo em lugar) pode ser feita de novo. */
+  refazer_dias: number;
+}
+
+export interface RodadaBuscaAuto {
+  id: number;
+  origem: "rotina" | "manual";
+  quem: string | null;
+  inicio: string;
+  fim: string | null;
+  precisava: number;
+  consultas: number;
+  adicionados: number;
+  motivo: string | null;
+  texto: string | null;
+  erro: string | null;
+}
+
+export interface FeitaBuscaVoob {
+  termo: string;
+  lugar: string;
+  cheia: boolean;
+  novos: number;
+}
+
+export interface EstadoBuscaAuto {
+  config: ConfigBuscaAuto;
+  perfil: PerfilBusca;
+  limite: number;
+  dias: number[];
+  situacoes_site: SituacaoSite[];
+  ligado: boolean;
+  dia_de_disparo: boolean;
+  base_pronta: number;
+  consultas_hoje: number;
+  rodando: boolean;
+  feitas: FeitaBuscaVoob[];
+  ultimas: RodadaBuscaAuto[];
+}
+
+export type FreioVoob = "normal" | "metade" | "pausado" | "sem_leitura" | "sem_numero";
+
+export interface SugestaoLimite {
+  pode: boolean;
+  motivo: "maximo" | "sem_numero" | "dias" | "qualidade" | "saidas" | "pausa" | null;
+  texto: string;
+  atual: number;
+  novo: number;
+  dias_cheios: number;
+  dias_precisa: number;
+  cheio_a_partir: number;
+  enviados: number;
+  saidas: number;
+  saidas_pct: number | null;
+}
+
+export interface SaudeVoob {
+  numero: { final: string; conectado: boolean; nome: string | null } | null;
+  freio: FreioVoob;
+  qualidade_radar: string | null;
+  limite_configurado: number;
+  limite_efetivo: number;
+  leitura: {
+    qualidade: string | null;
+    status: string | null;
+    nome_status: string | null;
+    limite_meta: string | null;
+    pode_enviar: string | null;
+    avisos: string[];
+    checado_em: string | null;
+    tentativa_em: string | null;
+    ok: boolean | null;
+    erro: string | null;
+    falhas: number;
+    pedido_em: string | null;
+    esperando: boolean;
+  } | null;
+  enviados_hoje: number;
+  saidas_7d: number;
+  sem_interesse_7d: number;
+  erros_7d: number;
+  sugestao: SugestaoLimite;
+  /** Só na simulação. */
+  simulacao?: boolean;
 }

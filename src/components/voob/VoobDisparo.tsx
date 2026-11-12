@@ -12,9 +12,11 @@ import { DIAS_SEMANA, custoEstimado, reais, textoDias, textoPausa } from "@/lib/
 import type { ConfigVoob } from "@/lib/voob/tipos";
 
 import { Carregando, Chip, PreviaMensagem, Titulo, n, quando } from "./comum";
+import { AvisoSaudeVoob, BlocoBuscaAuto, CartaoSaudeVoob, FaixaSugestao, LimiteRapido, useAutomatico } from "./VoobAutomatico";
 
 /**
- * Disparo da Voob (12/11/2026): ligar/desligar, o que falta para ligar, o número, as mensagens e o ritmo.
+ * Disparo da Voob (12/11/2026): ligar/desligar, o que falta para ligar, o número, a saúde dele na Meta, as mensagens, o
+ * ritmo (com o limite do dia à mão e a sugestão de subir) e a busca automática que enche a base.
  * Quem manda é o Voob CRM: o Radar só muda a configuração; o pg_cron (a cada 10 min) enche a fila do dia
  * e o motor de sempre envia, com o porteiro da prospecção conferindo cada mensagem na hora de sair.
  */
@@ -74,6 +76,8 @@ export function VoobDisparo({
   const [canal, setCanal] = useState("");
 
   const pendentes = useMemo(() => (cfg && ritmo ? mudancas(ritmoDe(cfg), ritmo) : {}), [cfg, ritmo]);
+  // Saúde do número + busca automática (relê quando a configuração muda).
+  const auto = useAutomatico(`${chave}|${cfg?.base_pronta ?? ""}`);
   const temMudanca = Object.keys(pendentes).length > 0;
 
   if (!cfg || !ritmo) {
@@ -129,6 +133,8 @@ export function VoobDisparo({
         </Button>
       </Titulo>
 
+      <AvisoSaudeVoob s={auto.saude} />
+
       {/* Situação + ligar/desligar */}
       <div className={cx("entrar rounded-2xl", e.ligado && "borda-viva p-px")} style={{ "--i": 0 } as CSSProperties}>
         <Card className={cx("overflow-hidden", e.ligado && "border-transparent")}>
@@ -152,7 +158,8 @@ export function VoobDisparo({
               <p className="mt-2 text-xs text-muted tabular-nums">
                 Hoje: <b className="text-ink">{n(h.enviados)}</b> de <b className="text-ink">{n(h.limite_efetivo)}</b> enviadas
                 {h.na_fila > 0 && <> · {n(h.na_fila)} na fila</>}
-                {h.limite_efetivo < h.limite && <> · limite pela metade (qualidade do número)</>} · base para chamar: <b className="text-ink">{n(cfg.base_pronta)}</b>
+                {h.limite_efetivo < h.limite && <> · limite pela metade (qualidade do número)</>} · base para chamar: <b className="text-ink">{n(cfg.base_pronta)}</b> ·{" "}
+                <LimiteRapido key={e.limite_dia} cfg={cfg} onCfg={onCfg} />
               </p>
               {e.pausado_em && !e.ligado && <p className="mt-1 text-[11px] text-muted">Desde {quando(e.pausado_em)}.</p>}
             </div>
@@ -176,6 +183,8 @@ export function VoobDisparo({
           </ul>
         </Card>
       </div>
+
+      <FaixaSugestao saude={auto.saude} onCfg={onCfg} onSaude={() => void auto.carregar()} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* O número */}
@@ -228,26 +237,28 @@ export function VoobDisparo({
           )}
         </Bloco>
 
-        {/* As mensagens */}
-        <Bloco i={2} icone={<MessageSquareText className="size-4" />} titulo="Mensagens">
-          <div className="space-y-3">
-            <SituacaoModelo titulo="1ª mensagem" prefixo={e.modelo_prefixo} m={cfg.modelos.abertura} semNumero={!cfg.numero} />
-            <SituacaoModelo titulo="Retomada (opcional)" prefixo={e.retomada_prefixo} m={cfg.modelos.retomada} semNumero={!cfg.numero} />
-            {cfg.modelos.site !== undefined && (
-              <SituacaoModelo
-                titulo="Site desatualizado (opcional, Raio-X)"
-                prefixo={e.modelo_prefixo_site ?? "radar_voob_site"}
-                m={cfg.modelos.site}
-                semNumero={!cfg.numero}
-              />
-            )}
-            <TextosDasMensagens agente={e.agente} botoes={[e.botao_sim, e.botao_nao]} comSite={cfg.modelos.site !== undefined} />
-          </div>
-        </Bloco>
+        <CartaoSaudeVoob s={auto.saude} i={2} onAtualizado={auto.setSaude} />
       </div>
 
+      {/* As mensagens */}
+      <Bloco i={3} icone={<MessageSquareText className="size-4" />} titulo="Mensagens">
+        <div className="space-y-3">
+          <SituacaoModelo titulo="1ª mensagem" prefixo={e.modelo_prefixo} m={cfg.modelos.abertura} semNumero={!cfg.numero} />
+          <SituacaoModelo titulo="Retomada (opcional)" prefixo={e.retomada_prefixo} m={cfg.modelos.retomada} semNumero={!cfg.numero} />
+          {cfg.modelos.site !== undefined && (
+            <SituacaoModelo
+              titulo="Site desatualizado (opcional, Raio-X)"
+              prefixo={e.modelo_prefixo_site ?? "radar_voob_site"}
+              m={cfg.modelos.site}
+              semNumero={!cfg.numero}
+            />
+          )}
+          <TextosDasMensagens agente={e.agente} botoes={[e.botao_sim, e.botao_nao]} comSite={cfg.modelos.site !== undefined} />
+        </div>
+      </Bloco>
+
       {/* Ritmo */}
-      <Bloco i={3} icone={<Clock className="size-4" />} titulo="Ritmo e freios">
+      <Bloco i={4} icone={<Clock className="size-4" />} titulo="Ritmo e freios">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
@@ -368,6 +379,9 @@ export function VoobDisparo({
           </Button>
         </div>
       </Bloco>
+
+      {/* Busca automática */}
+      <BlocoBuscaAuto resumo={auto.busca} i={5} onResumo={auto.setBusca} onIr={onIr} onBaseMudou={onRecarregar} />
 
       <Modal open={confirmar !== null} onClose={() => setConfirmar(null)} title={confirmar ? "Ligar a prospecção da Voob?" : "Desligar a prospecção?"}>
         {confirmar ? (

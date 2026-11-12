@@ -2,6 +2,7 @@ import { ShieldCheck, Sparkles, Table2 } from "lucide-react";
 
 import { Logo } from "@/components/Logo";
 import { senhaDoApp, senhaUnicaLiberada } from "@/lib/session";
+import { MENSAGEM_GOOGLE, type ErroGoogle } from "@/lib/voob/google-regras";
 import { loginPorContaDisponivel } from "@/lib/voob/pessoas";
 
 import { LoginForm } from "./LoginForm";
@@ -26,6 +27,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const comConta = loginPorContaDisponivel();
   // Sem o login por conta configurado, a senha da equipe é o único jeito de entrar (nunca tranca todo mundo para fora).
   const comSenhaUnica = senhaUnicaLiberada() || !comConta;
+  // Volta do "Entrar com o Google" com erro (/login?erro=google_...).
+  const codigo = typeof params.erro === "string" ? params.erro : "";
+  const erroInicial = codigo in MENSAGEM_GOOGLE ? MENSAGEM_GOOGLE[codigo as ErroGoogle] : "";
 
   return (
     // 12/11/2026: a entrada é sempre da Voob ("radar by voob"); depois de entrar, as cores seguem a empresa escolhida.
@@ -71,9 +75,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
           <p className="eyebrow">Acesso restrito</p>
           <h2 className="display mt-3 text-4xl text-strong">Acesse o Radar</h2>
           <p className="mt-3 text-[15px] text-muted">
-            {comConta ? "Entre com o e-mail e a senha que você usa no Voob CRM." : "Digite a senha da equipe para entrar."}
+            {comConta ? "Entre com a sua conta do Voob CRM: pelo Google ou com o e-mail e a senha." : "Digite a senha da equipe para entrar."}
           </p>
-          <LoginForm next={next} semSenha={semSenha} comConta={comConta} comSenhaUnica={comSenhaUnica} />
+          <LoginForm next={next} semSenha={semSenha} comConta={comConta} comSenhaUnica={comSenhaUnica} erroInicial={erroInicial} />
         </div>
       </section>
     </main>

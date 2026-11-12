@@ -5,7 +5,18 @@ import postgres from "postgres";
 import { getConfig } from "@/lib/env";
 
 import * as simulado from "./mock";
-import type { AcaoBase, ConfigVoob, EntradaBase, ListaBase, PainelVoob, RespostaInsercao, SituacaoConferida, StatusLead } from "./tipos";
+import type {
+  AcaoBase,
+  ConfigVoob,
+  EntradaBase,
+  EstadoBuscaAuto,
+  ListaBase,
+  PainelVoob,
+  RespostaInsercao,
+  SaudeVoob,
+  SituacaoConferida,
+  StatusLead,
+} from "./tipos";
 
 /**
  * Radar · Voob: o motor é o Voob CRM (12/11/2026). O Radar só chama as funções do schema "radar" de lá
@@ -168,4 +179,62 @@ export async function painel(dias: number): Promise<PainelVoob> {
 /** Login por pessoa: a conta (id do Voob CRM) é da equipe que usa o Radar? Devolve também o nome. */
 export async function pessoaDoRadar(userId: string): Promise<{ pode: boolean; nome: string | null }> {
   return noCrm(async (sql) => (await sql`select radar.pessoa(${userId}::uuid) as r`)[0].r as { pode: boolean; nome: string | null }, true);
+}
+
+// ---------------------------------------------------------------- busca automática (migração 20261112210000)
+
+export async function buscaAutoEstado(): Promise<EstadoBuscaAuto> {
+  if (usarSimulacao()) return simular(() => simulado.buscaAutoEstado());
+  return noCrm(async (sql) => (await sql`select radar.busca_auto_estado(${EMPRESA_VOOB}) as r`)[0].r as EstadoBuscaAuto, true);
+}
+
+export async function buscaAutoDefinir(mudancas: Record<string, unknown>, quem = QUEM_PADRAO): Promise<EstadoBuscaAuto> {
+  if (usarSimulacao()) return simular(() => simulado.buscaAutoDefinir(mudancas));
+  return noCrm(
+    async (sql) => (await sql`select radar.busca_auto_definir(${EMPRESA_VOOB}, ${JSON.stringify(mudancas)}::jsonb, ${quem}) as r`)[0].r as EstadoBuscaAuto,
+    false,
+  );
+}
+
+/** Começa uma rodada; null = já tem uma rodando. */
+export async function buscaAutoIniciar(origem: "rotina" | "manual", quem: string, precisa: number, podeGastar: number): Promise<number | null> {
+  if (usarSimulacao()) return simular(() => simulado.buscaAutoIniciar(origem, quem, precisa, podeGastar));
+  return noCrm(async (sql) => {
+    const r = (await sql`select radar.busca_auto_iniciar(${EMPRESA_VOOB}, ${origem}, ${quem}, ${precisa}, ${podeGastar}) as r`)[0].r;
+    return r === null || r === undefined ? null : Number(r);
+  }, false);
+}
+
+export async function buscaAutoFeita(
+  rodada: number,
+  u: { termo: string; lugar: string },
+  x: { consultas: number; vistos: number; novos: number; adicionados: number; cheia: boolean },
+): Promise<void> {
+  if (usarSimulacao()) return simular(() => simulado.buscaAutoFeita(rodada, u.termo, u.lugar, x.consultas, x.novos, x.cheia));
+  await noCrm(
+    (sql) => sql`select radar.busca_auto_feita(${rodada}, ${u.termo}, ${u.lugar}, ${x.consultas}, ${x.vistos}, ${x.novos}, ${x.adicionados}, ${x.cheia})`,
+    false,
+  );
+}
+
+export async function buscaAutoTerminar(rodada: number, resultado: Record<string, unknown>): Promise<void> {
+  if (usarSimulacao()) {
+    return simular(() =>
+      simulado.buscaAutoTerminar(rodada, resultado as { consultas: number; adicionados: number; motivo: string; texto?: string; erro?: string | null }),
+    );
+  }
+  await noCrm((sql) => sql`select radar.busca_auto_terminar(${rodada}, ${JSON.stringify(resultado)}::jsonb)`, false);
+}
+
+// ---------------------------------------------------------------- saúde do número e sugestão de limite
+
+export async function saude(): Promise<SaudeVoob> {
+  if (usarSimulacao()) return simular(() => simulado.saude());
+  return noCrm(async (sql) => (await sql`select radar.saude(${EMPRESA_VOOB}) as r`)[0].r as SaudeVoob, true);
+}
+
+/** "Ler agora": pede uma leitura nova à Meta (no máximo uma a cada 2 min). */
+export async function saudeAtualizar(): Promise<SaudeVoob> {
+  if (usarSimulacao()) return simular(() => simulado.saudeAtualizar());
+  return noCrm(async (sql) => (await sql`select radar.saude_atualizar(${EMPRESA_VOOB}) as r`)[0].r as SaudeVoob, false);
 }

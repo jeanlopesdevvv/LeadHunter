@@ -321,6 +321,8 @@ export function textoNumero(n: NumeroProspeccao | null): string {
 /** Preço aproximado de uma mensagem de marketing para o Brasil (Meta, tabela de 01/10/2026; conferir no painel). */
 export const PRECO_MARKETING = 0.3217;
 export const custoEstimado = (mensagens: number) => Math.round(mensagens * PRECO_MARKETING * 100) / 100;
+/** Custo na Meta por resultado (venda, "Quero ver"): null quando ainda não tem resultado. */
+export const custoPor = (mensagens: number, resultados: number): number | null => (resultados > 0 ? Math.round((custoEstimado(mensagens) / resultados) * 100) / 100 : null);
 export const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export const taxaPct = (parte: number, total: number): number | null => (total > 0 ? Math.round((parte / total) * 1000) / 10 : null);
@@ -333,6 +335,6 @@ export function funil(p: PainelVoob) {
     { id: "enviados", rotulo: "Receberam", valor: t.enviados },
     { id: "responderam", rotulo: "Responderam", valor: t.responderam },
     { id: "interessados", rotulo: "Querem ver", valor: t.interessados },
-    { id: "no_crm", rotulo: "No CRM", valor: t.no_crm },
+    { id: "vendas", rotulo: "Compraram", valor: t.vendas ?? 0 },
   ];
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Coins, Eye, MessageCircle, RefreshCw, Send, ThumbsDown } from "lucide-react";
+import { BadgeCheck, Coins, Eye, MessageCircle, RefreshCw, Send, ThumbsDown } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 
 import { GraficoEnvios } from "@/components/dashboard/GraficoEnvios";
@@ -8,12 +8,15 @@ import type { View } from "@/components/dashboard/Shell";
 import { AnimatedNumber } from "@/components/motion";
 import { Button, Card, cx } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
-import { custoEstimado, funil, reais, taxaPct, textoPausa } from "@/lib/voob/regras";
+import { custoEstimado, custoPor, funil, reais, taxaPct, textoPausa } from "@/lib/voob/regras";
 import type { ConfigVoob, PainelVoob } from "@/lib/voob/tipos";
 
 import { Carregando, Indicador, Titulo, n } from "./comum";
 
-/** Desempenho da prospecção da Voob (12/11/2026): quem recebeu, respondeu, quer ver, pediu para parar e quanto custou. */
+/**
+ * Desempenho da prospecção da Voob (12/11/2026): quem recebeu, respondeu, quer ver, pediu para parar, quem comprou e
+ * quanto custou (por "Quero ver" e por venda).
+ */
 
 const PERIODOS = [7, 14, 30];
 
@@ -48,7 +51,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
   if (!p) {
     return (
       <div className="space-y-4">
-        <Titulo titulo="Desempenho" texto="Quem recebeu, quem respondeu e quem quer ver, dia a dia." />
+        <Titulo titulo="Desempenho" texto="Quem recebeu, quem respondeu, quem quer ver e quem comprou, dia a dia." />
         {erro ? (
           <Card className="p-5 text-sm text-muted">
             {erro || erroCfg?.mensagem}{" "}
@@ -71,7 +74,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
 
   return (
     <div className="space-y-5">
-      <Titulo titulo="Desempenho" texto="Quem recebeu a 1ª mensagem, quem respondeu e quem quer ver como ficaria. Atualiza na hora em que abre.">
+      <Titulo titulo="Desempenho" texto="Quem recebeu a 1ª mensagem, quem respondeu, quem quer ver como ficaria e quem comprou. Atualiza na hora em que abre.">
         <div className="flex gap-1" role="group" aria-label="Período">
           {PERIODOS.map((d) => (
             <button
@@ -106,7 +109,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
         </Card>
       ) : (
         <>
-          <div key={`kpi-${p.dias}`} className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div key={`kpi-${p.dias}`} className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Indicador
               i={0}
               cor="neutro"
@@ -145,16 +148,30 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
             />
             <Indicador
               i={4}
+              cor="verde"
+              rotulo="Compraram"
+              valor={<AnimatedNumber value={per.vendas ?? 0} />}
+              detalhe={<><Porcento parte={per.vendas ?? 0} total={per.enviados} /> de quem recebeu</>}
+              explica="Pagaram depois de receber a 1ª mensagem: pelo link da Renata ou pelo site com o mesmo telefone."
+              icone={<BadgeCheck className="size-4" />}
+            />
+            <Indicador
+              i={5}
               cor="neutro"
               rotulo="Custo na Meta"
               valor={reais(custoEstimado(per.enviados + per.retomadas))}
-              detalhe={<>≈ {reais(per.interessados ? custoEstimado(per.enviados + per.retomadas) / per.interessados : 0)} por “Quero ver”</>}
+              detalhe={(() => {
+                const total = per.enviados + per.retomadas;
+                const venda = custoPor(total, per.vendas ?? 0);
+                const ver = custoPor(total, per.interessados);
+                return venda !== null ? <>≈ {reais(venda)} por venda</> : ver !== null ? <>≈ {reais(ver)} por “Quero ver”</> : <>sem resultado ainda</>;
+              })()}
               explica="Estimativa: R$ 0,32 por mensagem de marketing (tabela da Meta para o Brasil; conferir no painel)."
               icone={<Coins className="size-4" />}
             />
           </div>
 
-          <Card className="entrar p-5 sm:p-6" style={{ "--i": 5 } as CSSProperties}>
+          <Card className="entrar p-5 sm:p-6" style={{ "--i": 6 } as CSSProperties}>
             <p className="text-base font-bold text-ink">Do Google à conversa</p>
             <p className="mt-0.5 text-xs text-muted">Desde o começo.</p>
             <div className="mt-4 space-y-2.5">
@@ -173,7 +190,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
             </div>
           </Card>
 
-          <Card className="entrar p-5 sm:p-6" style={{ "--i": 6 } as CSSProperties}>
+          <Card className="entrar p-5 sm:p-6" style={{ "--i": 7 } as CSSProperties}>
             <GraficoEnvios
               dias={p.serie.map((d) => ({ dia: d.dia, enviados: d.enviados, segundos: d.retomadas, responderam: d.responderam, saidas: d.pararam, erros: 0 }))}
             />

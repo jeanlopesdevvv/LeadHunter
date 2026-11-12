@@ -25,6 +25,7 @@ const ACOES: { id: AcaoBase; rotulo: string; icone: typeof Ban; de: StatusLead[]
 ];
 
 function linhaDeTempo(l: LeadBase): string {
+  if (l.vendeu_em) return `comprou ${quando(l.vendeu_em)}`;
   if (l.status === "na_fila") return l.sai_em ? `sai ${quando(l.sai_em)}` : "na fila de hoje";
   if (l.saiu_em) return `pediu para parar ${quando(l.saiu_em)}`;
   if (l.respondeu_em) return `respondeu ${quando(l.respondeu_em)}`;
@@ -185,7 +186,7 @@ export function VoobBase({
                         <SeloStatus status={l.status} />
                         <SeloSite situacao={l.site_situacao} url={l.site_url} problemas={l.site_problemas} />
                         {l.prioridade > 0 && l.status === "novo" && <Badge tone="brand">Primeiro da fila</Badge>}
-                        {l.crm_lead_id && <Badge tone="green">No CRM</Badge>}
+                        {l.vendeu_em ? <Badge tone="green">Comprou</Badge> : l.crm_lead_id && <Badge tone="green">No CRM</Badge>}
                       </div>
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
                         <span>{l.categoria || l.termo || "—"}</span>

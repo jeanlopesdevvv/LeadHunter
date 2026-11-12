@@ -6,6 +6,7 @@ import type { PageResult } from "@/lib/types";
 import { SERVE_PARA_ABERTURA } from "./regras";
 import type {
   AcaoBase,
+  ConfigBuscaAuto,
   ConfigVoob,
   DiaPainel,
   EmpresaConfig,
@@ -13,8 +14,12 @@ import type {
   LeadBase,
   ListaBase,
   NumeroProspeccao,
+  EstadoBuscaAuto,
+  FeitaBuscaVoob,
   PainelVoob,
   RespostaInsercao,
+  RodadaBuscaAuto,
+  SaudeVoob,
   SituacaoConferida,
   StatusLead,
 } from "./tipos";
@@ -32,6 +37,10 @@ interface Estado {
   modeloOk: boolean;
   leads: LeadBase[];
   enviadosHoje: number;
+  busca: ConfigBuscaAuto;
+  rodadas: RodadaBuscaAuto[];
+  feitas: (FeitaBuscaVoob & { em: number; consultas: number })[];
+  saudeLida: number | null;
 }
 
 const g = globalThis as unknown as { __radarVoobMock?: Estado };
@@ -158,7 +167,19 @@ function estado(): Estado {
   const r = semente(20261112);
   const rodando = process.env.VOOB_MOCK_CENARIO === "rodando";
   const leads = Array.from({ length: rodando ? 300 : 34 }, (_, i) => leadFalso(i, r, agora));
-  const e: Estado = { empresa: empresaPadrao(), numero: rodando ? NUMERO : null, modeloOk: rodando, leads, enviadosHoje: 0 };
+  const e: Estado = {
+    empresa: empresaPadrao(),
+    numero: rodando ? NUMERO : null,
+    modeloOk: rodando,
+    leads,
+    enviadosHoje: 0,
+    busca: { ligado: rodando, fila_dias: 3, max_consultas_dia: 40, reserva_cota: 150, refazer_dias: 60 },
+    rodadas: rodando
+      ? [{ id: 1, origem: "rotina", quem: "Radar", inicio: iso(agora - 3 * 3600e3), fim: iso(agora - 3 * 3600e3 + 95_000), precisava: 26, consultas: 9, adicionados: 27, motivo: "alvo", texto: "achou o que a base precisava", erro: null }]
+      : [],
+    feitas: [],
+    saudeLida: rodando ? agora - 40 * 60_000 : null,
+  };
   if (rodando) {
     e.empresa.ligado = true;
     e.empresa.ligado_em = iso(agora - 9 * DIA);
@@ -184,6 +205,8 @@ function estado(): Estado {
         if (d === 0) e.enviadosHoje++;
       }
     }
+    // Três vendas entre os que quiseram ver (para o Desempenho mostrar o custo por venda).
+    leads.filter((l) => l.status === "interessado").slice(0, 3).forEach((l, i) => (l.vendeu_em = iso(Math.min(agora - 3600e3, new Date(l.respondeu_em ?? l.enviado_em ?? iso(agora)).getTime() + (i + 1) * DIA))));
     // A fila de hoje: o que falta para os 20.
     leads
       .filter((l) => l.status === "novo" && SERVE_PARA_ABERTURA.includes(l.site_situacao))
@@ -374,6 +397,7 @@ export function painel(dias: number): PainelVoob {
       responderam: e.leads.filter((l) => noDia(l.respondeu_em, d)).length,
       interessados: e.leads.filter((l) => l.status === "interessado" && noDia(l.respondeu_em, d)).length,
       pararam: e.leads.filter((l) => noDia(l.saiu_em, d)).length,
+      vendas: e.leads.filter((l) => noDia(l.vendeu_em ?? null, d)).length,
     };
   });
   const c = (f: (l: LeadBase) => boolean) => e.leads.filter(f).length;
@@ -395,6 +419,7 @@ export function painel(dias: number): PainelVoob {
       pulados: c((l) => l.status === "pulado"),
       erros: c((l) => l.status === "erro"),
       descartados: c((l) => l.status === "descartado"),
+      vendas: c((l) => Boolean(l.vendeu_em)),
     },
     periodo: {
       enviados: c((l) => noPeriodo(l.enviado_em)),
@@ -404,6 +429,7 @@ export function painel(dias: number): PainelVoob {
       sem_interesse: c((l) => l.status === "sem_interesse" && noPeriodo(l.respondeu_em)),
       pararam: c((l) => noPeriodo(l.saiu_em)),
       adicionados: c((l) => noPeriodo(l.created_at)),
+      vendas: c((l) => noPeriodo(l.vendeu_em ?? null)),
     },
     serie,
     ligado: e.empresa.ligado,
@@ -456,6 +482,126 @@ export async function buscaSimulada(input: { textQuery: string; termo: string; c
   });
   const leads = lugares.map((p) => placeToLead(p, input.termo, input.cidade));
   return { leads, nextPageToken: pagina < 2 ? `voob:${pagina + 1}` : null, bruto: lugares.length };
+}
+
+// ---------------------------------------------------------------- busca automática e saúde do número, simuladas
+
+export function buscaAutoEstado(): EstadoBuscaAuto {
+  const e = estado();
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const isodow = ((new Date().getDay() + 6) % 7) + 1;
+  const refazer = Date.now() - e.busca.refazer_dias * DIA;
+  return {
+    config: { ...e.busca },
+    perfil: { ...e.empresa.perfil },
+    limite: e.empresa.limite_dia,
+    dias: [...e.empresa.dias],
+    situacoes_site: [...e.empresa.situacoes_site],
+    ligado: e.empresa.ligado,
+    dia_de_disparo: e.empresa.dias.includes(isodow),
+    base_pronta: e.leads.filter((l) => l.status === "novo" && e.empresa.situacoes_site.includes(l.site_situacao)).length,
+    consultas_hoje: e.rodadas.filter((r) => new Date(r.inicio).getTime() >= hoje.getTime()).reduce((a, r) => a + r.consultas, 0),
+    rodando: e.rodadas.some((r) => !r.fim && Date.now() - new Date(r.inicio).getTime() < 20 * 60_000),
+    feitas: e.feitas.filter((f) => f.em > refazer).map(({ termo, lugar, cheia, novos }) => ({ termo, lugar, cheia, novos })),
+    ultimas: [...e.rodadas].sort((a, z) => z.inicio.localeCompare(a.inicio)).slice(0, 5),
+  };
+}
+
+const CHAVES_BUSCA = new Set(["ligado", "fila_dias", "max_consultas_dia", "reserva_cota", "refazer_dias"]);
+
+export function buscaAutoDefinir(m: Record<string, unknown>): EstadoBuscaAuto {
+  const e = estado();
+  for (const k of Object.keys(m)) if (!CHAVES_BUSCA.has(k)) throw Object.assign(new Error(`Não dá para mudar "${k}" na busca automática.`), { code: "P0001" });
+  Object.assign(e.busca, m);
+  return buscaAutoEstado();
+}
+
+export function buscaAutoIniciar(origem: "rotina" | "manual", quem: string, precisa: number, podeGastar: number): number | null {
+  const e = estado();
+  if (e.rodadas.some((r) => !r.fim)) return null;
+  const id = (e.rodadas.at(-1)?.id ?? 0) + 1;
+  e.rodadas.push({ id, origem, quem, inicio: iso(Date.now()), fim: null, precisava: precisa, consultas: 0, adicionados: 0, motivo: null, texto: null, erro: null });
+  void podeGastar;
+  return id;
+}
+
+export function buscaAutoFeita(rodada: number, termo: string, lugar: string, consultas: number, novos: number, cheia: boolean) {
+  const e = estado();
+  const r = e.rodadas.find((x) => x.id === rodada);
+  if (!r || r.fim) throw Object.assign(new Error("Rodada da busca automática encerrada ou inexistente."), { code: "P0001" });
+  r.consultas += consultas;
+  e.feitas.push({ termo, lugar, cheia, novos, consultas, em: Date.now() });
+}
+
+export function buscaAutoTerminar(rodada: number, res: { consultas: number; adicionados: number; motivo: string; texto?: string; erro?: string | null }) {
+  const e = estado();
+  const r = e.rodadas.find((x) => x.id === rodada);
+  if (!r || r.fim) return;
+  Object.assign(r, { fim: iso(Date.now()), consultas: Math.max(r.consultas, res.consultas), adicionados: res.adicionados, motivo: res.motivo, texto: res.texto ?? null, erro: res.erro ?? null });
+}
+
+export function saude(): SaudeVoob {
+  const e = estado();
+  const lim = e.empresa.limite_dia;
+  const semNumero = !e.numero;
+  const enviados = e.leads.filter((l) => l.enviado_em && Date.now() - new Date(l.enviado_em).getTime() < 14 * DIA);
+  // A sugestão na simulação: no cenário "rodando", 5 dias cheios e verde.
+  const cheios = semNumero ? 0 : 5;
+  const novo = Math.min(250, lim + Math.max(5, Math.round(lim * 0.5)));
+  const pode = !semNumero && lim === 20;
+  return {
+    numero: semNumero ? null : { final: NUMERO.final, conectado: true, nome: NUMERO.nome },
+    freio: semNumero ? "sem_numero" : "normal",
+    qualidade_radar: semNumero ? null : "GREEN",
+    limite_configurado: lim,
+    limite_efetivo: lim,
+    leitura: semNumero
+      ? null
+      : {
+          qualidade: "GREEN",
+          status: "CONNECTED",
+          nome_status: "APPROVED",
+          limite_meta: "TIER_250",
+          pode_enviar: "AVAILABLE",
+          avisos: [],
+          checado_em: iso(e.saudeLida ?? Date.now()),
+          tentativa_em: iso(e.saudeLida ?? Date.now()),
+          ok: true,
+          erro: null,
+          falhas: 0,
+          pedido_em: iso(e.saudeLida ?? Date.now()),
+          esperando: false,
+        },
+    enviados_hoje: e.enviadosHoje,
+    saidas_7d: e.leads.filter((l) => l.saiu_em && Date.now() - new Date(l.saiu_em).getTime() < 7 * DIA).length,
+    sem_interesse_7d: e.leads.filter((l) => l.status === "sem_interesse" && l.respondeu_em && Date.now() - new Date(l.respondeu_em).getTime() < 7 * DIA).length,
+    erros_7d: 0,
+    sugestao: {
+      pode,
+      motivo: semNumero ? "sem_numero" : pode ? null : "dias",
+      texto: semNumero
+        ? "A sugestão começa depois que o número estiver conectado e disparando."
+        : pode
+          ? `5 dias de envio cheios, 1,5% de saídas e qualidade verde: dá para subir de ${lim} para ${novo} por dia.`
+          : `Faltam 5 dias de envio cheio (${Math.ceil(lim * 0.8)} ou mais mensagens no dia) para sugerir.`,
+      atual: lim,
+      novo,
+      dias_cheios: pode ? cheios : 0,
+      dias_precisa: 5,
+      cheio_a_partir: Math.ceil(lim * 0.8),
+      enviados: enviados.length,
+      saidas: 1,
+      saidas_pct: 1.5,
+    },
+    simulacao: true,
+  };
+}
+
+export function saudeAtualizar(): SaudeVoob {
+  const e = estado();
+  if (e.numero) e.saudeLida = Date.now();
+  return saude();
 }
 
 /** Só para testes: volta ao começo. */

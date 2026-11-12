@@ -1,20 +1,33 @@
 "use client";
 
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, LogIn, Mail } from "lucide-react";
 import { useState } from "react";
 
 import { Button, inputClass } from "@/components/ui";
 
 /**
- * Entrar no Radar (12/11/2026): com a conta do Voob CRM (e-mail e senha) e, enquanto estiver liberada, com a senha da
- * equipe. Com a conta, o histórico mostra o nome de quem fez cada coisa.
+ * Entrar no Radar (12/11/2026): com o Google ou com a conta do Voob CRM (e-mail e senha) e, enquanto estiver liberada,
+ * com a senha da equipe. Com a conta, o histórico mostra o nome de quem fez cada coisa.
  */
-export function LoginForm({ next, semSenha, comConta, comSenhaUnica }: { next: string; semSenha: boolean; comConta: boolean; comSenhaUnica: boolean }) {
+export function LoginForm({
+  next,
+  semSenha,
+  comConta,
+  comSenhaUnica,
+  erroInicial = "",
+}: {
+  next: string;
+  semSenha: boolean;
+  comConta: boolean;
+  comSenhaUnica: boolean;
+  erroInicial?: string;
+}) {
   const [modo, setModo] = useState<"conta" | "equipe">(comConta ? "conta" : "equipe");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [ver, setVer] = useState(false);
-  const [erro, setErro] = useState("");
+  const [erro, setErro] = useState(erroInicial);
+  const [indoAoGoogle, setIndoAoGoogle] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const conta = modo === "conta";
   const pronto = Boolean(senha) && (!conta || Boolean(email.trim()));
@@ -53,11 +66,28 @@ export function LoginForm({ next, semSenha, comConta, comSenhaUnica }: { next: s
         </div>
       )}
       {conta && (
+        <>
+          <a
+            href={`/api/auth/google?next=${encodeURIComponent(next)}`}
+            onClick={() => setIndoAoGoogle(true)}
+            aria-busy={indoAoGoogle}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-card text-[15px] font-semibold text-ink shadow-sm transition hover:bg-strong/[0.04] focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+          >
+            {indoAoGoogle ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4 text-muted" />}
+            Entrar com o Google
+          </a>
+          <div className="flex items-center gap-3 text-xs text-muted" aria-hidden>
+            <span className="h-px flex-1 bg-line" />
+            ou com e-mail e senha
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        </>
+      )}
+      {conta && (
         <div className="relative">
           <Mail className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted" />
           <input
             type="email"
-            autoFocus
             autoComplete="username"
             placeholder="E-mail do Voob CRM"
             aria-label="E-mail do Voob CRM"

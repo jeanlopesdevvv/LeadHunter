@@ -72,6 +72,11 @@ export async function entrarComConta(email: string, senha: string): Promise<Pess
   const dados = (await res.json().catch(() => null)) as { user?: { id?: unknown }; error_code?: unknown } | null;
   if (!res.ok) throw new LoginError(...motivoDaRecusa(res.status, typeof dados?.error_code === "string" ? dados.error_code : ""));
   const id = typeof dados?.user?.id === "string" ? dados.user.id : "";
+  return pessoaDaConta(id, email);
+}
+
+/** A conta (id do Voob CRM) que acabou de entrar pode usar o Radar? Vale para o e-mail e senha e para o Google. */
+export async function pessoaDaConta(id: string, email: string): Promise<Pessoa> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new LoginError("O Voob CRM não respondeu ao login. Tente de novo em instantes.", 502);
   let p: { pode: boolean; nome: string | null };
   try {
@@ -80,7 +85,7 @@ export async function entrarComConta(email: string, senha: string): Promise<Pess
     throw new LoginError(e instanceof VoobError ? e.message : "Não deu para conferir o seu acesso agora.", e instanceof VoobError ? e.status : 502);
   }
   if (!p.pode) throw new LoginError("A sua conta do Voob CRM não tem acesso ao Radar. Fale com o Jean.", 403);
-  return { id, nome: primeiroNome(p.nome ?? email.split("@")[0]) };
+  return { id, nome: primeiroNome(p.nome ?? (email.split("@")[0] || "Equipe")) };
 }
 
 /** Quem está usando o Radar agora (pelo cookie da sessão). Senha da equipe = ninguém em particular. */
