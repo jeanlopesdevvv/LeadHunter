@@ -587,7 +587,7 @@ export function SearchView({
         </div>
 
         <aside className="xl:sticky xl:top-8">
-          <div className="cartao-noite relative overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_60px_-28px_rgb(3_171_201_/_0.65)] ring-1 ring-white/10">
+          <div className="cartao-noite relative overflow-hidden rounded-3xl p-6 text-white shadow-[0_24px_60px_-28px_rgb(var(--brand-rgb)_/_0.65)] ring-1 ring-white/10">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold tracking-[0.18em] text-brand-300 uppercase">Sua busca</p>

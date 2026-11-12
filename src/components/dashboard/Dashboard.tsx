@@ -12,6 +12,7 @@ import { carregarSessao, salvarSessao } from "@/lib/client/sessao-salva";
 import { aplicarDescartados, carregarDescartados, chaveDoDescarte, esquecerDescartados, lembrarDescartados } from "@/lib/client/descartados";
 import { confete } from "@/components/motion";
 import { formatarRenovacaoCurta } from "@/lib/periodo";
+import type { Empresa } from "@/lib/empresas";
 import type { CheckResult, Lead, SendResult, Uso } from "@/lib/types";
 
 import { AutomaticoView } from "./AutomaticoView";
@@ -70,7 +71,7 @@ function primeirosElegiveis(lista: Lead[], max: number, incluirFixos: boolean): 
 
 const VIEWS: View[] = ["buscar", "resultados", "disparo", "automatico", "leads", "painel", "historico", "config"];
 
-export function Dashboard() {
+export function Dashboard({ empresa, empresas }: { empresa: Empresa; empresas: Empresa[] }) {
   const toast = useToast();
   const router = useRouter();
   // O que estava na tela antes de recarregar (lista, seleção, busca em andamento). Lido uma vez.
@@ -583,6 +584,9 @@ export function Dashboard() {
 
   return (
     <Shell
+      empresa={empresa}
+      empresas={empresas}
+      onErro={(m) => toast(m, "error")}
       view={view}
       onView={irPara}
       totalResultados={leads.length}

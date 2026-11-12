@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { COOKIE_EMPRESA, escolherEmpresa, idsDisponiveis, rotaPermitida } from "@/lib/empresas";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 /**
@@ -12,7 +13,14 @@ export function proxy(request: NextRequest) {
   if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next();
 
   const ok = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
-  if (ok) return NextResponse.next();
+  if (ok) {
+    // 12/11/2026: com outra empresa escolhida no seletor, as rotas do motor do Lavacar ficam fechadas.
+    const empresa = escolherEmpresa(request.cookies.get(COOKIE_EMPRESA)?.value, idsDisponiveis(process.env.RADAR_EMPRESAS));
+    if (!rotaPermitida(empresa, pathname)) {
+      return NextResponse.json({ erro: `Esta ação é do Lavacar. Você está na ${empresa.nome}: troque a empresa no menu.` }, { status: 409 });
+    }
+    return NextResponse.next();
+  }
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ erro: "Sessão expirada. Entre novamente." }, { status: 401 });
@@ -25,5 +33,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|icon.svg|favicon.ico|robots.txt).*)"],
+  matcher: ["/((?!_next/static|_next/image|icon.svg|favicon.ico|robots.txt|marca/).*)"],
 };

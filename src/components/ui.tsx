@@ -13,7 +13,7 @@ type Variant = "primary" | "dark" | "outline" | "ghost" | "danger" | "aviso";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "lift bg-brand text-white shadow-brand hover:bg-brand-600 hover:shadow-[0_14px_34px_-10px_rgb(3_171_201_/_0.7)] active:bg-brand-press",
+  primary: "lift bg-brand text-white shadow-brand hover:bg-brand-600 hover:shadow-[0_14px_34px_-10px_rgb(var(--brand-rgb)_/_0.7)] active:bg-brand-press",
   dark: "lift bg-navy text-white hover:bg-navy-800",
   outline: "bg-card text-brand-700 border border-brand-200 hover:border-brand hover:bg-brand-50",
   ghost: "text-muted hover:text-ink hover:bg-strong/5",

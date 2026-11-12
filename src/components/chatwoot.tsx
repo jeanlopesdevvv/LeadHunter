@@ -45,10 +45,13 @@ function assinar(f: () => void) {
 }
 
 /** Endereço do atendimento (lido uma vez do servidor). */
-export function useChatwoot(): EstadoChatwoot | null {
+const semAssinar = () => () => undefined;
+
+/** `ligado = false` (empresa sem atendimento no Chatwoot, 12/11/2026): nem pergunta ao servidor. */
+export function useChatwoot(ligado = true): EstadoChatwoot | null {
   return useSyncExternalStore(
-    assinar,
-    () => estado,
+    ligado ? assinar : semAssinar,
+    () => (ligado ? estado : null),
     () => null,
   );
 }

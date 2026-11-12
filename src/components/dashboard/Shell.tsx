@@ -1,19 +1,22 @@
 "use client";
 
-import { ArrowUpRight, Bot, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Search, Send, Settings2, TrendingUp, Users, WifiOff } from "lucide-react";
+import { ArrowUpRight, Bot, ExternalLink, FlaskConical, Headset, History, ListChecks, LogOut, Rocket, Search, Send, Settings2, TrendingUp, Users, WifiOff } from "lucide-react";
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { abrirAtendimento, useChatwoot } from "@/components/chatwoot";
 import { Logo } from "@/components/Logo";
 import { BotaoTema, SeletorTema } from "@/components/tema";
 import { cx } from "@/components/ui";
+import { temRecurso, type Empresa } from "@/lib/empresas";
 import type { Uso } from "@/lib/types";
 
+import { SeletorEmpresa } from "./SeletorEmpresa";
 import { UsoMini } from "./UsoCota";
 
-export type View = "buscar" | "resultados" | "disparo" | "automatico" | "leads" | "painel" | "historico" | "config";
+export type View = "comecar" | "buscar" | "resultados" | "disparo" | "automatico" | "leads" | "painel" | "historico" | "config";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
+  { id: "comecar", label: "Primeiros passos", icon: Rocket },
   { id: "buscar", label: "Nova prospecção", icon: Search },
   { id: "resultados", label: "Oportunidades", icon: ListChecks },
   { id: "disparo", label: "Disparo", icon: Send },
@@ -34,6 +37,9 @@ function assinarConexao(avisar: () => void) {
 }
 
 export function Shell({
+  empresa,
+  empresas,
+  onErro,
   view,
   onView,
   totalResultados,
@@ -44,6 +50,10 @@ export function Shell({
   onSair,
   children,
 }: {
+  /** Empresa escolhida no seletor (12/11/2026): o menu mostra só as telas dela. */
+  empresa: Empresa;
+  empresas: Empresa[];
+  onErro?: (mensagem: string) => void;
   view: View;
   onView: (v: View) => void;
   totalResultados: number;
@@ -69,8 +79,10 @@ export function Shell({
   }, [view]);
 
   const online = useSyncExternalStore(assinarConexao, () => navigator.onLine, () => true);
-  const chatwoot = useChatwoot();
-  const urlAtendimento = chatwoot?.url ?? "";
+  const itens = ITEMS.filter((i) => temRecurso(empresa, i.id));
+  const comAtendimento = temRecurso(empresa, "atendimento");
+  const chatwoot = useChatwoot(comAtendimento);
+  const urlAtendimento = comAtendimento ? (chatwoot?.url ?? "") : "";
 
   // Alt + A abre o atendimento de qualquer tela (menos quando está digitando).
   useEffect(() => {
@@ -98,8 +110,11 @@ export function Shell({
         <div className="px-2">
           <Logo dark />
         </div>
+        <div className="mt-7">
+          <SeletorEmpresa empresa={empresa} empresas={empresas} onErro={onErro} />
+        </div>
         {urlAtendimento && (
-          <div className="mt-8">
+          <div className="mt-5">
             <a
               href={urlAtendimento}
               target="lavacar-chatwoot"
@@ -108,7 +123,7 @@ export function Shell({
                 abrirAtendimento(urlAtendimento);
               }}
               title="Abrir o atendimento no Chatwoot (Alt + A)"
-              className="group block rounded-2xl bg-gradient-to-br from-brand to-brand-600 p-4 text-white shadow-[0_12px_32px_-14px_rgb(3_171_201_/_0.9)] ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-14px_rgb(3_171_201_/_1)]"
+              className="group block rounded-2xl bg-gradient-to-br from-brand to-brand-600 p-4 text-white shadow-[0_12px_32px_-14px_rgb(var(--brand-rgb)_/_0.9)] ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-14px_rgb(var(--brand-rgb)_/_1)]"
             >
               <span className="flex items-center justify-between">
                 <span className="grid size-10 place-items-center rounded-xl bg-white/15 ring-1 ring-white/20">
@@ -126,9 +141,9 @@ export function Shell({
             </p>
           </div>
         )}
-        <nav className={cx("flex flex-col gap-1", urlAtendimento ? "mt-5" : "mt-10")}>
+        <nav className={cx("flex flex-col gap-1", urlAtendimento ? "mt-5" : "mt-7")}>
           <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.18em] text-white/35 uppercase">Menu</p>
-          {ITEMS.map(({ id, label, icon: Icon }) => (
+          {itens.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => onView(id)}
@@ -145,9 +160,12 @@ export function Shell({
             </button>
           ))}
         </nav>
-        <div className="mt-auto mb-4">
-          <UsoMini uso={uso} />
-        </div>
+        {uso && (
+          <div className="mt-auto mb-4">
+            <UsoMini uso={uso} />
+          </div>
+        )}
+        {!uso && <div className="mt-auto" />}
         <div className="flex flex-col gap-1 border-t border-white/10 pt-4">
           <SeletorTema className="mb-2" />
           {simulacao && (
@@ -176,9 +194,10 @@ export function Shell({
 
       {/* Topo (celular/tablet) */}
       <header className="glow-tl sticky top-0 z-30 text-white lg:hidden">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between gap-2 px-4 py-3">
           <Logo dark />
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1">
+            <SeletorEmpresa empresa={empresa} empresas={empresas} onErro={onErro} compacto />
             {simulacao && <FlaskConical className="size-4 text-amber-300" aria-label="Modo simulação" />}
             {urlAtendimento && (
               <button
@@ -199,7 +218,7 @@ export function Shell({
           ref={navMovel}
           className="flex gap-1 overflow-x-auto px-3 pb-2.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,#000_12px,#000_calc(100%-32px),transparent)] [&::-webkit-scrollbar]:hidden"
         >
-          {ITEMS.map(({ id, label, icon: Icon }) => (
+          {itens.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => onView(id)}

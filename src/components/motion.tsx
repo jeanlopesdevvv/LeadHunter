@@ -76,15 +76,15 @@ export function RadarSweep({ ativo, pontos, tamanho = 88, className }: { ativo: 
     <div className={cx("relative shrink-0 overflow-hidden rounded-full bg-navy", className)} style={{ width: tamanho, height: tamanho }} aria-hidden>
       <svg viewBox="0 0 100 100" className="absolute inset-0 size-full">
         {[46, 32, 18].map((r) => (
-          <circle key={r} cx="50" cy="50" r={r} fill="none" stroke="rgb(3 171 201 / 0.28)" strokeWidth="0.8" />
+          <circle key={r} cx="50" cy="50" r={r} fill="none" style={{ stroke: "rgb(var(--brand-rgb) / 0.28)" }} strokeWidth="0.8" />
         ))}
-        <line x1="50" y1="4" x2="50" y2="96" stroke="rgb(3 171 201 / 0.18)" strokeWidth="0.6" />
-        <line x1="4" y1="50" x2="96" y2="50" stroke="rgb(3 171 201 / 0.18)" strokeWidth="0.6" />
+        <line x1="50" y1="4" x2="50" y2="96" style={{ stroke: "rgb(var(--brand-rgb) / 0.18)" }} strokeWidth="0.6" />
+        <line x1="4" y1="50" x2="96" y2="50" style={{ stroke: "rgb(var(--brand-rgb) / 0.18)" }} strokeWidth="0.6" />
       </svg>
       {ativo && (
         <div
           className="absolute inset-0 animate-radar rounded-full"
-          style={{ background: "conic-gradient(from 0deg, rgb(3 171 201 / 0.55), rgb(3 171 201 / 0.08) 22%, transparent 30%)" }}
+          style={{ background: "conic-gradient(from 0deg, rgb(var(--brand-rgb) / 0.55), rgb(var(--brand-rgb) / 0.08) 22%, transparent 30%)" }}
         />
       )}
       {Array.from({ length: n }, (_, i) => {
@@ -92,8 +92,8 @@ export function RadarSweep({ ativo, pontos, tamanho = 88, className }: { ativo: 
         return (
           <span
             key={i}
-            className="absolute size-[7%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-300 shadow-[0_0_8px_rgb(95_211_234)] animate-blip"
-            style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${(i % 6) * 0.35}s`, animationIterationCount: ativo ? "infinite" : 1 }}
+            className="absolute size-[7%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-300 shadow-[0_0_8px_rgb(var(--brand-rgb))] animate-blip"
+            style={{ left: `${x.toFixed(3)}%`, top: `${y.toFixed(3)}%`, animationDelay: `${(i % 6) * 0.35}s`, animationIterationCount: ativo ? "infinite" : 1 }}
           />
         );
       })}
@@ -109,7 +109,10 @@ export async function confete(intensidade: "leve" | "forte" = "forte") {
   const mod = await import("canvas-confetti").catch(() => null);
   if (!mod) return;
   const confetti = mod.default;
-  const cores = ["#03abc9", "#5fd3ea", "#ffffff", "#081021", "#22bedb", "#fbbf24"];
+  // Cores da empresa escolhida (12/11/2026): lidas do tema; sem tema, as do Lavacar.
+  const tema = getComputedStyle(document.documentElement);
+  const cor = (nome: string, padrao: string) => tema.getPropertyValue(nome).trim() || padrao;
+  const cores = [cor("--color-brand", "#03abc9"), cor("--color-brand-300", "#5fd3ea"), "#ffffff", cor("--color-navy", "#081021"), cor("--color-brand-400", "#22bedb"), "#fbbf24"];
   const base = { colors: cores, disableForReducedMotion: true, zIndex: 80 };
   if (intensidade === "leve") {
     confetti({ ...base, particleCount: 70, spread: 70, origin: { y: 0.7 } });

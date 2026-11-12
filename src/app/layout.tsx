@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
+import { empresaAtiva } from "@/lib/empresa-ativa";
 import { SCRIPT_TEMA } from "@/lib/tema-script";
 import { ToastProvider } from "@/components/toast";
 
@@ -17,8 +18,8 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Radar · Lavacar",
-  description: "Radar Lavacar: encontra lava-jatos no Google, remove repetidos e envia os novos para a planilha da Carol.",
+  title: "Radar · Voob",
+  description: "Radar by Voob: encontra empresas no Google, tira quem já foi contatado e manda só contatos novos para o WhatsApp da empresa.",
   robots: { index: false, follow: false },
 };
 
@@ -26,9 +27,11 @@ export const viewport: Viewport = {
   themeColor: "#081021",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // 12/11/2026: as cores seguem a empresa escolhida no seletor (cookie), já no primeiro desenho, sem piscar.
+  const empresa = await empresaAtiva();
   return (
-    <html lang="pt-BR" className={`${inter.variable} h-full`} suppressHydrationWarning>
+    <html lang="pt-BR" data-empresa={empresa.id} className={`${inter.variable} h-full`} suppressHydrationWarning>
       <head>
         {/* Aplica o tema (claro/escuro) antes de pintar a página, sem piscar. */}
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />

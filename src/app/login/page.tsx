@@ -5,7 +5,7 @@ import { senhaDoApp } from "@/lib/session";
 
 import { LoginForm } from "./LoginForm";
 
-export const metadata = { title: "Entrar · Radar Lavacar" };
+export const metadata = { title: "Entrar · Radar Voob" };
 
 /** Só aceita caminhos deste próprio site (bloqueia "/\\evil.com", "/<tab>/evil.com" etc.). */
 function safeNext(raw: string): string {
@@ -24,19 +24,20 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const semSenha = !senhaDoApp().ok;
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
+    // 12/11/2026: a entrada é sempre da Voob ("radar by voob"); depois de entrar, as cores seguem a empresa escolhida.
+    <main data-empresa="voob" className="grid min-h-screen bg-surface lg:grid-cols-2">
       <section className="glow-tl relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex xl:p-16">
         <Logo dark />
         <div className="max-w-lg">
-          <p className="eyebrow">Radar Lavacar</p>
+          <p className="eyebrow">Radar by Voob</p>
           <h1 className="display mt-5 text-6xl xl:text-7xl">
             <span className="block animate-enter">Encontre.</span>
             <span className="block animate-enter [animation-delay:120ms]">Conecte.</span>
             <span className="block animate-enter text-brand [animation-delay:240ms]">Feche negócio.</span>
           </h1>
           <p className="mt-6 max-w-md animate-enter text-[17px] leading-relaxed text-white/65 [animation-delay:360ms]">
-            O Radar encontra lava-jatos e lavadores autônomos no Google Maps, remove quem já está na planilha e entrega apenas
-            contatos novos para a Carol abordar no WhatsApp.
+            O Radar encontra empresas no Google Maps, tira quem já foi contatado e entrega só contatos novos para o WhatsApp
+            oficial da sua empresa, com a IA atendendo quem responde.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-6 border-t border-white/10 pt-8 text-sm">

@@ -3,6 +3,9 @@
 import dynamic from "next/dynamic";
 
 import { Logo } from "@/components/Logo";
+import type { Empresa } from "@/lib/empresas";
+
+import { EmpresaPreparando } from "./EmpresaPreparando";
 
 /**
  * O painel roda só no navegador: ele recupera do armazenamento local o que estava na tela
@@ -24,6 +27,11 @@ const Dashboard = dynamic(() => import("./Dashboard").then((m) => m.Dashboard), 
   ),
 });
 
-export function DashboardCliente() {
-  return <Dashboard />;
+/**
+ * 12/11/2026: o Radar tem várias empresas. Empresa em preparação (a Voob, por enquanto) vê os passos até o primeiro
+ * disparo; as outras veem o painel de sempre (motor do Lavacar).
+ */
+export function DashboardCliente({ empresa, empresas }: { empresa: Empresa; empresas: Empresa[] }) {
+  if (empresa.situacao === "preparando") return <EmpresaPreparando empresa={empresa} empresas={empresas} />;
+  return <Dashboard empresa={empresa} empresas={empresas} />;
 }
