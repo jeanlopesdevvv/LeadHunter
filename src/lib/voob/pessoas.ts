@@ -53,17 +53,24 @@ export interface Entrada {
   tokens: TokensCrm | null;
 }
 
+/**
+ * Simulação: o nome sai do e-mail. "cliente" no e-mail = cliente; "novo" = cliente da Voob que ainda não tem o Radar
+ * (vê o pedido de liberação); qualquer outro = equipe.
+ */
+export function pessoaSimulada(email: string): Pessoa {
+  const nome = email.split("@")[0].replace(/[^a-zA-ZÀ-ÿ]+/g, " ").trim();
+  const novo = /novo/i.test(email);
+  const cliente = novo || /cliente/i.test(email);
+  const id = novo ? "00000000-0000-4000-8000-00000000000d" : cliente ? "00000000-0000-4000-8000-00000000000c" : "00000000-0000-4000-8000-00000000000a";
+  return { id, nome: primeiroNome(nome.charAt(0).toUpperCase() + nome.slice(1)), equipe: !cliente };
+}
+
 export async function entrarComConta(email: string, senha: string): Promise<Entrada> {
   const cfg = getConfig();
   if (cfg.mock) {
-    // Simulação: qualquer e-mail com a senha do app entra, com o nome tirado do e-mail. "cliente" no e-mail = cliente.
+    // Simulação: qualquer e-mail com a senha do app entra.
     if (!passwordMatches(senha)) throw new LoginError("E-mail ou senha incorretos.");
-    const nome = email.split("@")[0].replace(/[^a-zA-ZÀ-ÿ]+/g, " ").trim();
-    const cliente = /cliente/i.test(email);
-    return {
-      pessoa: { id: cliente ? "00000000-0000-4000-8000-00000000000c" : "00000000-0000-4000-8000-00000000000a", nome: primeiroNome(nome.charAt(0).toUpperCase() + nome.slice(1)), equipe: !cliente },
-      tokens: null,
-    };
+    return { pessoa: pessoaSimulada(email), tokens: null };
   }
   const base = enderecoDoCrm(cfg.voobCrmDbUrl, cfg.voobCrmUrl);
   if (!base || !cfg.voobCrmAnonKey) throw new LoginError("Entrar com a conta do Voob CRM ainda não foi configurado no servidor.", 503);
@@ -95,6 +102,7 @@ export async function pessoaDaConta(id: string, email: string): Promise<Pessoa> 
   } catch (e) {
     throw new LoginError(e instanceof VoobError ? e.message : "Não deu para conferir o seu acesso agora.", e instanceof VoobError ? e.status : 502);
   }
+  // Desde 19/11/2026 o banco deixa entrar qualquer conta do CRM (sem empresa, a pessoa vê o pedido de liberação).
   if (!p.pode) throw new LoginError("A sua conta do Voob CRM ainda não tem acesso ao Radar. Fale com a Voob.", 403);
   // Banco sem a parte das empresas (antes de 13/11) não manda "equipe": quem entrava era só a equipe.
   return { id, nome: primeiroNome(p.nome ?? (email.split("@")[0] || "Equipe")), equipe: p.equipe !== false };

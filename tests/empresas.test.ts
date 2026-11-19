@@ -40,7 +40,7 @@ describe("empresas do Radar (white label, 13/11/2026)", () => {
     for (const e of [voob, clinica]) {
       expect(e.motor).toBe("voob-crm");
       expect(e.recursos).toEqual(["comecar", "buscar", "leads", "disparo", "modelos", "painel"]);
-      expect(rotuloDaTela(e, "leads", "Leads")).toBe("Base");
+      expect(rotuloDaTela(e, "leads", "Leads")).toBe("Encontradas");
     }
     expect(clinica.sigla).toBe("CB");
     expect(voob.sigla).toBe("VO");
@@ -78,11 +78,12 @@ describe("empresas do Radar (white label, 13/11/2026)", () => {
       expect(rotaPermitida(voob, r)).toBe(false);
       expect(rotaPermitida(LAVACAR, r)).toBe(true);
     }
-    for (const r of ["/api/voob/config", "/api/voob/modelos", "/api/voob/whatsapp", "/api/voob/teste", "/api/voob/contas"]) {
+    for (const r of ["/api/voob/config", "/api/voob/modelos", "/api/voob/whatsapp", "/api/voob/teste", "/api/voob/aceite"]) {
       expect(rotaPermitida(clinica, r)).toBe(true);
       expect(rotaPermitida(LAVACAR, r)).toBe(false);
     }
-    for (const r of ["/api/auth/login", "/api/auth/logout", "/api/empresa", "/api/empresas", "/api/health", "/api/uso"]) {
+    // 19/11/2026: as contas do CRM (criar empresa com o Lavacar escolhido) e o pedido de quem não tem empresa valem sempre.
+    for (const r of ["/api/auth/login", "/api/auth/logout", "/api/empresa", "/api/empresas", "/api/health", "/api/uso", "/api/voob/contas", "/api/voob/pedido"]) {
       expect(rotaPermitida(voob, r)).toBe(true);
       expect(rotaPermitida(LAVACAR, r)).toBe(true);
     }
@@ -115,6 +116,13 @@ describe("marca da empresa", () => {
     expect(lerDadosDaEmpresa({ logo: "javascript:alert(1)" }, false)).toMatch(/logo/);
     expect(lerDadosDaEmpresa({ logo: null, responde: "outro", responde_sistema: " ManyChat " }, false)).toEqual({ logo: null, responde: "outro", responde_sistema: "ManyChat" });
     expect(lerDadosDaEmpresa({ responde: "robô" }, false)).toMatch(/quem responde/);
+    // 19/11/2026: ao criar, o nome pode vir da conta; logo da conta (https); limites e pedido.
+    expect(lerDadosDaEmpresa({ conta: "50000000-0000-0000-0000-00000000000c", pedido: 3, envios_max_dia: 30, cota_buscas_mes: null, oferta: " Agenda " }, true)).toEqual({
+      conta: "50000000-0000-0000-0000-00000000000c", pedido: 3, envios_max_dia: 30, cota_buscas_mes: null, oferta: "Agenda",
+    });
+    expect(lerDadosDaEmpresa({ conta: "50000000-0000-0000-0000-00000000000c", envios_max_dia: 900 }, true)).toMatch(/1 a 250/);
+    expect(lerDadosDaEmpresa({ logo: "https://cdn.exemplo.com/logo.png" }, false)).toEqual({ logo: "https://cdn.exemplo.com/logo.png" });
+    expect(lerDadosDaEmpresa({ logo: "http://cdn.exemplo.com/logo.png" }, false)).toMatch(/logo/);
   });
 
   it("filtro de site da campanha", () => {

@@ -25,12 +25,12 @@ function Barra({ uso, escura }: { uso: Uso; escura?: boolean }) {
 }
 
 /** Versão compacta (barra lateral escura). */
-export function UsoMini({ uso }: { uso: Uso | null }) {
+export function UsoMini({ uso, rotulo = "Consultas grátis" }: { uso: Uso | null; rotulo?: string }) {
   if (!uso) return null;
   return (
     <div className="rounded-xl bg-white/[0.04] px-3 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-semibold text-white/60">Consultas grátis</span>
+        <span className="text-[11px] font-semibold text-white/60">{rotulo}</span>
         <span className={cx("text-sm font-bold tabular-nums", uso.restantes <= 0 ? "text-red-300" : "text-white")}>
           <AnimatedNumber value={uso.restantes} />
           <span className="font-medium text-white/40">/{n(uso.limite)}</span>

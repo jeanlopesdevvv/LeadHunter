@@ -30,7 +30,7 @@ interface RespostaModelos {
 }
 
 /** Os exemplos que vão para a Meta junto com o modelo (a Meta pede um de cada campo). */
-const EXEMPLOS: Record<string, string> = { nome_do_negocio: EXEMPLO_NEGOCIO, bairro: "Savassi", cidade: "Belo Horizonte", categoria: "Clínica de estética" };
+export const EXEMPLOS: Record<string, string> = { nome_do_negocio: EXEMPLO_NEGOCIO, bairro: "Savassi", cidade: "Belo Horizonte", categoria: "Clínica de estética" };
 const MARCAS = [
   { marca: "{Nome do negócio}", dica: "O nome da empresa achada no Google" },
   { marca: "{bairro}", dica: "O bairro dela" },
@@ -57,7 +57,7 @@ export function textoDeExemplo(corpo: string, agente: string): string {
 }
 
 /** Do jeito que se escreve na tela ({Nome do negócio}) para como vai para a Meta ({{nome_do_negocio}}), só para a prévia. */
-function marcasParaMeta(texto: string, empresa: string): string {
+export function marcasParaMeta(texto: string, empresa: string): string {
   return texto
     .replace(/\{\s*(Nome do contato|nome)\s*\}/gi, "{{nome}}")
     .replace(/\{\s*(Nome de quem atende|atendente)\s*\}/gi, "{{atendente}}")
@@ -278,7 +278,7 @@ export function ModelosEmpresa({ cfg, onIr, onCfg }: { cfg: ConfigVoob | null; o
 
   return (
     <div className="space-y-6">
-      <Titulo titulo="Modelos" texto={<>As mensagens aprovadas pela Meta no número da {cfg?.empresa.nome ?? "empresa"}. A 1ª mensagem do Radar é uma delas.</>}>
+      <Titulo titulo="Mensagens" texto={<>As mensagens aprovadas pela Meta no número da {cfg?.empresa.nome ?? "empresa"}. A 1ª mensagem do Radar é uma delas.</>}>
         <Button variant="ghost" size="sm" icon={<RefreshCw className="size-3.5" />} onClick={() => void carregar()}>
           Atualizar
         </Button>
@@ -294,9 +294,9 @@ export function ModelosEmpresa({ cfg, onIr, onCfg }: { cfg: ConfigVoob | null; o
       {r && !r.numero && (
         <Card className="p-6">
           <p className="font-semibold text-ink">Escolha o número antes</p>
-          <p className="mt-1 text-sm text-muted">Os modelos ficam no número oficial da empresa. Escolha ou conecte o número em Primeiros passos.</p>
+          <p className="mt-1 text-sm text-muted">Os modelos ficam no número oficial da empresa. Escolha ou conecte o número no Começar (passo 2).</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => onIr("comecar")}>
-            Ir para os Primeiros passos
+            Ir para o Começar
           </Button>
         </Card>
       )}

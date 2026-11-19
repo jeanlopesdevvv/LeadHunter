@@ -40,6 +40,15 @@ export function SeletorEmpresa({
   const [aberto, setAberto] = useState(false);
   const [criando, setCriando] = useState(false);
   const [trocando, setTrocando] = useState<string | null>(null);
+  // 19/11/2026: pedidos de "Quero usar o Radar" esperando a equipe liberar.
+  const [pedidos, setPedidos] = useState(0);
+  useEffect(() => {
+    if (!podeCriar) return;
+    api<{ pedidos?: unknown[] }>("/api/empresas").then(
+      (r) => setPedidos(r.pedidos?.length ?? 0),
+      () => undefined,
+    );
+  }, [podeCriar]);
   const caixa = useRef<HTMLDivElement>(null);
   const idLista = useId();
 
@@ -165,8 +174,11 @@ export function SeletorEmpresa({
                 <Plus className="size-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-strong">Criar empresa</span>
-                <span className="block truncate text-xs text-muted">Nome, cor, logo e a conta do Voob CRM</span>
+                <span className="flex items-center gap-2 text-sm font-bold text-strong">
+                  Liberar o Radar
+                  {pedidos > 0 && <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800">{pedidos === 1 ? "1 pedido" : `${pedidos} pedidos`}</span>}
+                </span>
+                <span className="block truncate text-xs text-muted">Para uma conta do Voob CRM</span>
               </span>
             </button>
           )}

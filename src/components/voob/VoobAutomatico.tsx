@@ -334,7 +334,7 @@ const MOTIVO: Record<string, string> = {
 /** O que a busca procura, numa linha (os públicos e os ramos escritos à mão). */
 function oQueProcura(p: PerfilBusca | undefined): string {
   const nomes = [...SEGMENTOS.filter((s) => segmentosDoPerfil(p).includes(s.id)).map((s) => s.nome), ...(p?.termos_extras ?? [])];
-  return nomes.length ? nomes.join(", ") : "nada escolhido ainda (Primeiros passos, passo 5)";
+  return nomes.length ? nomes.join(", ") : "nada escolhido ainda (Começar, passo 1)";
 }
 
 export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { resumo: ResumoBusca | null; i: number; onResumo: (r: ResumoBusca) => void; onIr: (v: View) => void; onBaseMudou: () => void }) {
@@ -416,7 +416,7 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
           <span className="grid size-7 place-items-center rounded-lg bg-brand-50 text-brand-700">
             <ScanSearch className="size-4" />
           </span>
-          Busca automática
+          Procurar empresas sozinho
         </h2>
         {e.rodando ? (
           <Badge tone="brand">
@@ -431,23 +431,23 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
         <div className="space-y-4">
           <Toggle
             checked={e.config.ligado}
-            onChange={(v) => void salvar({ ligado: v }, v ? "Busca automática ligada." : "Busca automática desligada.")}
-            label="Encher a base sozinho nos dias de disparo"
-            hint={`${textoDias(e.dias).replace(/^./, (x) => x.toUpperCase())}, ${HORARIOS_ROTINA}, o Radar busca no Google até a base ter empresas para ${c.fila_dias} ${c.fila_dias === 1 ? "dia" : "dias"} de disparo (${n(alvo)}). Não busca nos feriados.`}
+            onChange={(v) => void salvar({ ligado: v }, v ? "O Radar vai procurar empresas sozinho." : "O Radar parou de procurar sozinho.")}
+            label="Procurar empresas novas nos dias de envio"
+            hint={`${textoDias(e.dias).replace(/^./, (x) => x.toUpperCase())}, ${HORARIOS_ROTINA}, o Radar busca no Google até ter empresas para ${c.fila_dias} ${c.fila_dias === 1 ? "dia" : "dias"} de envio (${n(alvo)}). Não busca nos feriados.`}
           />
           <div className="rounded-xl bg-surface p-3.5 text-sm ring-1 ring-line">
             <p className="text-ink">
-              Base pronta agora: <b className="tabular-nums">{n(e.base_pronta)}</b> de {n(alvo)}
+              Encontradas para chamar: <b className="tabular-nums">{n(e.base_pronta)}</b> de {n(alvo)}
               {precisa > 0 ? (
                 <span className="text-muted"> · a próxima busca procura até {n(precisa)}</span>
               ) : (
-                <span className="text-muted"> · cheia, a próxima rodada não busca</span>
+                <span className="text-muted"> · já basta, a próxima rodada não busca</span>
               )}
             </p>
             <p className="mt-1.5 text-xs text-muted">
               Procura: {oQueProcura(e.perfil)} · {cidade.replace(/,\s*[A-Za-z]{2}$/, "")} inteira{bairros.length ? ` e depois ${n(bairros.length)} bairros` : ""} · {ROTULO_FILTRO_SITE[filtroDoPerfil(e.perfil)].titulo.toLowerCase()}.{" "}
-              <button type="button" className="font-semibold text-brand-700 underline" onClick={() => onIr("buscar")}>
-                Mudar em Nova prospecção
+              <button type="button" className="font-semibold text-brand-700 underline" onClick={() => onIr("comecar")}>
+                Mudar no Começar
               </button>
             </p>
           </div>
@@ -467,10 +467,11 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
           )}
         </div>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+        <details className="space-y-4 rounded-xl ring-1 ring-line lg:self-start" open={mudou || undefined}>
+          <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-ink">Ajustes avançados</summary>
+          <div className="grid grid-cols-2 gap-3 px-3">
             <label className="block text-xs font-semibold text-muted">
-              Base para quantos dias
+              Encontradas para quantos dias
               <select value={c.fila_dias} onChange={(x) => setEdicao({ ...edicao, fila_dias: Number(x.target.value) })} className={cx(inputClass, "mt-1")}>
                 {[1, 2, 3, 5, 7].map((v) => (
                   <option key={v} value={v}>
@@ -490,21 +491,21 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
               </select>
             </label>
             <label className="col-span-2 block text-xs font-semibold text-muted">
-              Guardar da cota do mês para a busca manual
+              Guardar das buscas do mês para buscar à mão
               <select value={c.reserva_cota} onChange={(x) => setEdicao({ ...edicao, reserva_cota: Number(x.target.value) })} className={cx(inputClass, "mt-1")}>
                 {[0, 100, 150, 300].map((v) => (
                   <option key={v} value={v}>
-                    {v} consultas
+                    {v} buscas
                   </option>
                 ))}
               </select>
             </label>
           </div>
-          <p className="text-xs text-muted">
-            Cota do Google: <b className="text-ink tabular-nums">{resumo.cotaRestante === null ? "—" : n(resumo.cotaRestante)}</b> de {n(resumo.cotaLimite)} livres no mês (uma só para todas
-            as empresas do Radar) · hoje a busca automática já usou <b className="text-ink tabular-nums">{n(e.consultas_hoje)}</b> · agora dá para gastar até {n(resumo.podeGastar)}.
+          <p className="px-3 pb-3 text-xs text-muted">
+            Buscas livres no mês: <b className="text-ink tabular-nums">{resumo.cotaRestante === null ? "—" : n(resumo.cotaRestante)}</b> de {n(resumo.cotaLimite)} · hoje o Radar já usou{" "}
+            <b className="text-ink tabular-nums">{n(e.consultas_hoje)}</b> · agora dá para gastar até {n(resumo.podeGastar)}.
           </p>
-        </div>
+        </details>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4">
@@ -517,7 +518,7 @@ export function BlocoBuscaAuto({ resumo, i, onResumo, onIr, onBaseMudou }: { res
         <Button variant="outline" size="sm" onClick={() => void buscarAgora()} loading={buscando} disabled={e.rodando} icon={<ScanSearch className="size-4" />}>
           Buscar agora
         </Button>
-        <Button size="sm" disabled={!mudou} loading={salvando} onClick={() => void salvar(edicao, "Busca automática salva.")} icon={<Save className="size-4" />}>
+        <Button size="sm" disabled={!mudou} loading={salvando} onClick={() => void salvar(edicao, "Salvo.")} icon={<Save className="size-4" />}>
           Salvar
         </Button>
       </div>

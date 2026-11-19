@@ -63,7 +63,15 @@ export const EMPRESAS: readonly Empresa[] = [LAVACAR];
 
 /** As telas de toda empresa do Voob CRM, na ordem do menu. */
 export const RECURSOS_CRM: readonly Recurso[] = ["comecar", "buscar", "leads", "disparo", "modelos", "painel"];
-export const ROTULOS_CRM: Partial<Record<Recurso, string>> = { comecar: "Primeiros passos", leads: "Base", disparo: "Disparo", modelos: "Modelos" };
+/** 19/11/2026: nomes que qualquer pessoa entende (antes: Primeiros passos, Base, Disparo, Painel). */
+export const ROTULOS_CRM: Partial<Record<Recurso, string>> = {
+  comecar: "Começar",
+  buscar: "Buscar empresas",
+  leads: "Encontradas",
+  disparo: "Envios",
+  modelos: "Mensagens",
+  painel: "Resultados",
+};
 
 /** O que o banco devolve de cada empresa (radar.empresas_lista / radar.empresa_ver). */
 export interface ResumoEmpresaCrm {
@@ -159,8 +167,11 @@ export function temRecurso(empresa: Pick<Empresa, "recursos">, recurso: Recurso)
   return empresa.recursos.includes(recurso);
 }
 
-/** Rotas que valem para qualquer empresa (entrar, sair, trocar de empresa, lista de empresas, saúde do serviço). */
-const ROTAS_DE_TODAS = ["/api/auth/login", "/api/auth/logout", "/api/empresa", "/api/empresas", "/api/health"];
+/**
+ * Rotas que valem para qualquer empresa (entrar, sair, trocar de empresa, lista de empresas, saúde do serviço). 19/11/2026:
+ * as contas do CRM (criar empresa com o Lavacar escolhido dava 409) e o pedido de quem ainda não tem empresa.
+ */
+const ROTAS_DE_TODAS = ["/api/auth/login", "/api/auth/logout", "/api/auth/crm", "/api/empresa", "/api/empresas", "/api/health", "/api/voob/contas", "/api/voob/pedido"];
 /** Abas do Radar dentro do Chatwoot do Lavacar ("Enviar Template"): são do Lavacar, seja qual for a empresa escolhida aqui. */
 const ROTAS_DO_CHATWOOT_LAVACAR = ["/api/chatwoot", "/api/modelos"];
 /** Consultas grátis do Google: a cota é uma só para todas as empresas (só leitura). */

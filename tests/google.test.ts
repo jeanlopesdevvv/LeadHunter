@@ -68,6 +68,6 @@ describe("entrar com o Google (PKCE)", () => {
     expect(erroDaVolta("access_denied", "User denied access")).toBe("google_cancelado");
     expect(erroDaVolta("access_denied", "Signups not allowed for this instance")).toBe("google_recusado");
     expect(erroDaVolta("server_error", "Unable to exchange external code")).toBe("google_falhou");
-    expect(Object.keys(MENSAGEM_GOOGLE)).toHaveLength(6);
+    expect(Object.keys(MENSAGEM_GOOGLE)).toHaveLength(8);
   });
 });

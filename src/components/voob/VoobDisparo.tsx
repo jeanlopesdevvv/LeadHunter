@@ -5,13 +5,14 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 import type { View } from "@/components/dashboard/Shell";
 import { useToast } from "@/components/toast";
-import { Badge, Button, Card, Modal, Toggle, cx, inputClass } from "@/components/ui";
+import { Badge, Button, Card, Toggle, cx, inputClass } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
 import { NOME_DO_MODELO, ROTULO_MENSAGEM, textoParaOModelo, type TipoMensagem } from "@/lib/voob/mensagens";
-import { DIAS_SEMANA, custoEstimado, filtroDoPerfil, reais, ROTULO_FILTRO_SITE, textoDias, textoPausa } from "@/lib/voob/regras";
+import { DIAS_SEMANA, custoEstimado, reais, textoDias, textoPausa } from "@/lib/voob/regras";
 import type { ConfigVoob } from "@/lib/voob/tipos";
 
 import { Carregando, Chip, PreviaMensagem, Titulo, n, quando } from "./comum";
+import { LigarRadar, opcoesDoLimite } from "./LigarRadar";
 import { AvisoSaudeVoob, BlocoBuscaAuto, CartaoSaudeVoob, FaixaSugestao, LimiteRapido, useAutomatico } from "./VoobAutomatico";
 
 /**
@@ -72,7 +73,6 @@ export function VoobDisparo({
   const setRitmo = (r: Ritmo) => setEdicao({ chave, r });
   const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState<null | boolean>(null);
-  const [ligando, setLigando] = useState(false);
   const [canal, setCanal] = useState("");
 
   const pendentes = useMemo(() => (cfg && ritmo ? mudancas(ritmoDe(cfg), ritmo) : {}), [cfg, ritmo]);
@@ -83,7 +83,7 @@ export function VoobDisparo({
   if (!cfg || !ritmo) {
     return (
       <div className="space-y-4">
-        <Titulo titulo="Disparo" texto="A 1ª mensagem sai sozinha, pelo WhatsApp oficial da empresa, no ritmo escolhido." />
+        <Titulo titulo="Envios" texto="A 1ª mensagem sai sozinha, pelo WhatsApp oficial da empresa, no ritmo escolhido." />
         {erro ? <ComoLigarOCrm erro={erro.mensagem} onTentar={onRecarregar} /> : <Carregando />}
       </div>
     );
@@ -92,7 +92,9 @@ export function VoobDisparo({
   const e = cfg.empresa;
   const estado = e.ligado ? "ligado" : e.pausado_motivo && e.pausado_motivo !== "manual" ? "pausado" : "desligado";
   const selo = SELO[estado];
-  const faltam = cfg.prontidao.filter((p) => p.id !== "ligado" && p.id !== "base" && !p.ok);
+  // O aceite se confirma na própria janela de ligar.
+  const faltam = cfg.prontidao.filter((p) => p.id !== "ligado" && p.id !== "base" && p.id !== "aceite" && !p.ok);
+  const maximo = e.envios_max_dia ?? 250;
   const podeLigar = faltam.length === 0;
   const h = cfg.hoje;
 
@@ -108,24 +110,10 @@ export function VoobDisparo({
     }
   };
 
-  const ligar = async (ligado: boolean) => {
-    setLigando(true);
-    try {
-      const c = await api<ConfigVoob>("/api/voob/ligar", { ligado });
-      onCfg(c);
-      toast(ligado ? `Ligado. ${c.hoje.na_fila ? `${n(c.hoje.na_fila)} já estão na fila de hoje.` : "A fila enche no próximo horário de envio."}` : "Desligado. O que estava na fila voltou para a base.", "success");
-      setConfirmar(null);
-    } catch (x) {
-      toast(x instanceof ApiError ? x.message : "Não deu para mudar agora.", "error");
-    } finally {
-      setLigando(false);
-    }
-  };
-
   return (
     <div className="space-y-5">
       <Titulo
-        titulo="Disparo"
+        titulo="Envios"
         texto={`A 1ª mensagem sai sozinha pelo WhatsApp oficial da ${e.nome}, ${textoDias(e.dias)}, das ${e.hora_inicio} às ${e.hora_fim}. ${quemAtende(e)}`}
       >
         <Button variant="ghost" size="sm" onClick={onRecarregar} icon={<RefreshCw className="size-4" />}>
@@ -147,7 +135,7 @@ export function VoobDisparo({
               <p className="mt-2 text-sm text-ink">
                 {e.ligado
                   ? h.no_horario
-                    ? "Mandando a 1ª mensagem para quem está na base, uma de cada vez."
+                    ? "Mandando a 1ª mensagem para as empresas encontradas, uma de cada vez."
                     : `Volta a mandar ${quando(h.proxima_abertura)}.`
                   : estado === "pausado"
                     ? textoPausa(e.pausado_motivo)
@@ -158,7 +146,7 @@ export function VoobDisparo({
               <p className="mt-2 text-xs text-muted tabular-nums">
                 Hoje: <b className="text-ink">{n(h.enviados)}</b> de <b className="text-ink">{n(h.limite_efetivo)}</b> enviadas
                 {h.na_fila > 0 && <> · {n(h.na_fila)} na fila</>}
-                {h.limite_efetivo < h.limite && <> · limite pela metade (qualidade do número)</>} · base para chamar: <b className="text-ink">{n(cfg.base_pronta)}</b> ·{" "}
+                {h.limite_efetivo < h.limite && <> · limite pela metade (qualidade do número)</>} · encontradas para chamar: <b className="text-ink">{n(cfg.base_pronta)}</b> ·{" "}
                 <LimiteRapido key={e.limite_dia} cfg={cfg} onCfg={onCfg} />
               </p>
               {e.pausado_em && !e.ligado && <p className="mt-1 text-[11px] text-muted">Desde {quando(e.pausado_em)}.</p>}
@@ -169,7 +157,7 @@ export function VoobDisparo({
               </Button>
             ) : (
               <Button size="lg" onClick={() => setConfirmar(true)} disabled={!podeLigar} icon={<CirclePlay className="size-5" />}>
-                Ligar a prospecção
+                Ligar o Radar
               </Button>
             )}
           </div>
@@ -258,7 +246,7 @@ export function VoobDisparo({
       </Bloco>
 
       {/* Ritmo */}
-      <Bloco i={4} icone={<Clock className="size-4" />} titulo="Ritmo e freios">
+      <Bloco i={4} icone={<Clock className="size-4" />} titulo="Ritmo e proteções do número">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-5">
             <div>
@@ -270,12 +258,12 @@ export function VoobDisparo({
                   id="voob-limite"
                   type="number"
                   min={1}
-                  max={250}
+                  max={maximo}
                   value={ritmo.limite_dia}
-                  onChange={(x) => setRitmo({ ...ritmo, limite_dia: Math.max(1, Math.min(250, Number(x.target.value) || 1)) })}
+                  onChange={(x) => setRitmo({ ...ritmo, limite_dia: Math.max(1, Math.min(maximo, Number(x.target.value) || 1)) })}
                   className={cx(inputClass, "w-24 tabular-nums")}
                 />
-                {[10, 20, 30, 50].map((v) => (
+                {opcoesDoLimite(e.envios_max_dia).map((v) => (
                   <Chip key={v} ativo={ritmo.limite_dia === v} onClick={() => setRitmo({ ...ritmo, limite_dia: v })}>
                     {v}
                   </Chip>
@@ -283,7 +271,7 @@ export function VoobDisparo({
               </div>
               <p className="mt-1.5 text-xs text-muted">
                 ≈ {reais(custoEstimado(ritmo.limite_dia))} por dia na Meta ({reais(custoEstimado(ritmo.limite_dia * 22))} por mês, em 22 dias úteis). Começar com 20 e subir
-                só com a qualidade verde.
+                só com a qualidade verde.{e.envios_max_dia ? ` O máximo desta empresa é ${e.envios_max_dia} por dia.` : ""}
               </p>
             </div>
             <div>
@@ -383,51 +371,7 @@ export function VoobDisparo({
       {/* Busca automática */}
       <BlocoBuscaAuto resumo={auto.busca} i={5} onResumo={auto.setBusca} onIr={onIr} onBaseMudou={onRecarregar} />
 
-      <Modal open={confirmar !== null} onClose={() => setConfirmar(null)} title={confirmar ? `Ligar a prospecção da ${e.nome}?` : "Desligar a prospecção?"}>
-        {confirmar ? (
-          <div className="space-y-4 text-sm text-ink">
-            <ul className="list-disc space-y-1.5 pl-5">
-              <li>
-                Até <b>{n(h.limite_efetivo)}</b> mensagens por dia, {textoDias(e.dias)}, das {e.hora_inicio} às {e.hora_fim}, uma a cada {e.intervalo_min} min.
-              </li>
-              <li>
-                {ROTULO_FILTRO_SITE[filtroDoPerfil(e.perfil)].titulo} ({n(cfg.base_pronta)} na base agora).
-                {cfg.base_pronta < h.limite_efetivo && (
-                  <>
-                    {" "}
-                    <button type="button" className="font-semibold text-brand-700 underline" onClick={() => onIr("buscar")}>
-                      Buscar mais
-                    </button>
-                  </>
-                )}
-              </li>
-              <li>Pelo número final {cfg.numero?.final}, com a mensagem aprovada pela Meta. {quemAtende(e)}</li>
-              <li>≈ {reais(custoEstimado(h.limite_efetivo))} por dia na Meta.</li>
-              {cfg.numero?.teste && <li className="font-semibold text-amber-700">O número está em modo teste: só a lista de teste recebe.</li>}
-            </ul>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirmar(null)}>
-                Agora não
-              </Button>
-              <Button onClick={() => void ligar(true)} loading={ligando} icon={<CirclePlay className="size-4" />}>
-                Ligar
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4 text-sm text-ink">
-            <p>Para de pôr mensagens na fila. O que ainda não saiu hoje volta para a base e sai depois, quando ligar de novo.</p>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirmar(null)}>
-                Agora não
-              </Button>
-              <Button variant="danger" onClick={() => void ligar(false)} loading={ligando} icon={<CirclePause className="size-4" />}>
-                Desligar
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {confirmar !== null && <LigarRadar cfg={cfg} aberto desligar={!confirmar} onFechar={() => setConfirmar(null)} onCfg={onCfg} />}
     </div>
   );
 }
@@ -544,7 +488,7 @@ function TextosDasMensagens({ agente, botoes, comSite }: { agente: string; botoe
 function ComoConectar({ onIr }: { onIr: (v: View) => void }) {
   return (
     <div className="space-y-3 text-sm text-muted">
-      <p>Nenhum número na conta desta empresa ainda. Conecte o WhatsApp oficial em Primeiros passos (passo 2) e ele aparece aqui.</p>
+      <p>Nenhum número na conta desta empresa ainda. Conecte o WhatsApp oficial no Começar (passo 2) e ele aparece aqui.</p>
       <Button variant="outline" size="sm" onClick={() => onIr("comecar")}>
         Conectar o número
       </Button>

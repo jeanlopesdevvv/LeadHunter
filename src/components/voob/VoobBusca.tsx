@@ -27,14 +27,15 @@ import {
   rotuloConferida,
   termosDosSegmentos,
 } from "@/lib/voob/regras";
-import type { ConfigVoob, RespostaInsercao, ResultadoBusca, SituacaoConferida } from "@/lib/voob/tipos";
+import type { ConfigVoob, CotaEmpresa, RespostaInsercao, ResultadoBusca, SituacaoConferida } from "@/lib/voob/tipos";
 
 import { Chip, SeloSite, Titulo, n } from "./comum";
 
 /**
- * Nova prospecção da Voob (12/11/2026): escolhe o público, o Radar busca no Google (cada página = 1 consulta das grátis,
- * a mesma cota do Lavacar), mostra quem não tem site e já confere no Voob CRM quem já é cliente, lead ou já conversou.
- * O que servir vai para a base com um toque; o disparo chama de lá, 20 por dia.
+ * Buscar empresas (12/11/2026, "Nova prospecção"): escolhe o público, o Radar busca no Google (cada página = 1 consulta
+ * das grátis, a mesma cota do Lavacar, e 1 busca da cota da empresa desde 19/11/2026) e já confere no Voob CRM quem já é
+ * cliente, lead ou já conversou. O que servir vai para as encontradas com um toque; os envios chamam de lá.
+ * 19/11/2026: sem as sobras da Voob (ramos marcados, "só sem site" ligado e bairros de BH ficam em "Mais filtros").
  */
 
 export interface EstadoBusca {
@@ -48,9 +49,15 @@ export interface EstadoBusca {
 interface RespostaBusca {
   itens: ResultadoBusca[];
   nextPageToken: string | null;
-  uso: Uso;
+  /** A cota comum do Google (só para a equipe). */
+  uso?: Uso;
+  /** A cota de buscas da empresa. */
+  cotaEmpresa?: CotaEmpresa;
   aviso?: string;
 }
+
+/** Os bairros de BH só fazem sentido com BH escolhida. */
+const ehBH = (cidade: string) => /belo horizonte/i.test(cidade.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
 
 // A busca continua mesmo trocando de tela; "Parar" vale de qualquer lugar.
 let controle: AbortController | null = null;
@@ -60,6 +67,7 @@ const MOSTRAR = 150;
 export function VoobBusca({
   cfg,
   uso,
+  cota,
   onUso,
   estado,
   onEstado,
@@ -68,8 +76,11 @@ export function VoobBusca({
   onIr,
 }: {
   cfg: ConfigVoob | null;
+  /** A cota comum do Google: só para a equipe (null para o cliente). */
   uso: Uso | null;
-  onUso: (u: Uso) => void;
+  /** A cota de buscas da empresa no mês (limite null = sem teto). */
+  cota: CotaEmpresa | null;
+  onUso: (r: { uso?: Uso; cotaEmpresa?: CotaEmpresa }) => void;
   estado: EstadoBusca;
   onEstado: Dispatch<SetStateAction<EstadoBusca>>;
   onResultados: (f: (r: ResultadoBusca[]) => ResultadoBusca[]) => void;
@@ -78,12 +89,12 @@ export function VoobBusca({
 }) {
   const toast = useToast();
   const perfil = cfg?.empresa.perfil;
-  const [segmentos, setSegmentos] = useState<string[]>(perfil?.segmentos ?? ["clinicas", "imobiliarias", "servicos"]);
+  const [segmentos, setSegmentos] = useState<string[]>(perfil?.segmentos ?? []);
   const [extras, setExtras] = useState<string[]>(perfil?.termos_extras ?? []);
   const [novoTermo, setNovoTermo] = useState("");
   const [cidade, setCidade] = useState(perfil?.cidade ?? CIDADE_PADRAO);
   const [bairros, setBairros] = useState<string[]>(perfil?.bairros ?? []);
-  const [soSemSite, setSoSemSite] = useState(perfil?.so_sem_site ?? true);
+  const [soSemSite, setSoSemSite] = useState(perfil?.so_sem_site ?? false);
   // Site desatualizado (Raio-X) só entra no público quando o banco já tem a 2ª mensagem (migração do Raio-X).
   const temMensagemDoSite = cfg?.modelos.site !== undefined;
   const [comDesatualizado, setComDesatualizado] = useState(Boolean(perfil?.com_desatualizado) && temMensagemDoSite);
@@ -94,10 +105,17 @@ export function VoobBusca({
   const [gravando, setGravando] = useState(false);
 
   const termos = useMemo(() => termosDosSegmentos(segmentos, extras), [segmentos, extras]);
-  const lugares = useMemo(() => lugaresDaBusca(cidade, bairros), [cidade, bairros]);
+  const bh = ehBH(cidade);
+  const lugares = useMemo(() => lugaresDaBusca(cidade, bh ? bairros : []), [cidade, bairros, bh]);
   const tarefas = useMemo(() => planoDeBusca(termos, lugares), [termos, lugares]);
   const maximo = consultasMaximas(tarefas.length);
-  const semCota = uso ? maximo > uso.restantes : false;
+  const restaEmpresa = cota?.limite != null ? (cota.restantes ?? 0) : null;
+  const semCotaGoogle = uso ? maximo > uso.restantes : false;
+  // Passa do que resta da empresa: a busca para no meio (dá para buscar menos de uma vez).
+  const semCotaEmpresa = restaEmpresa !== null && restaEmpresa <= 0;
+  const passaDaEmpresa = restaEmpresa !== null && maximo > restaEmpresa;
+  const semCota = semCotaGoogle || semCotaEmpresa;
+  const filtrosAtivos = (soSemSite ? 1 : 0) + (bh && bairros.length ? 1 : 0);
 
   const publico = publicoDaBusca(comDesatualizado);
   const serve = (r: ResultadoBusca) => !soSemSite || publico.includes(r.siteSituacao);
@@ -130,7 +148,7 @@ export function VoobBusca({
       const site = !soSemSite ? "tanto_faz" : comDesatualizado ? "desatualizado" : "sem_site";
       void api("/api/voob/config", {
         mudancas: {
-          perfil: { ...perfil, cidade, segmentos, termos_extras: extras, bairros, so_sem_site: soSemSite, com_desatualizado: comDesatualizado, site },
+          perfil: { ...perfil, cidade, segmentos, termos_extras: extras, bairros: bh ? bairros : [], so_sem_site: soSemSite, com_desatualizado: comDesatualizado, site },
           situacoes_site: situacoesDoFiltro(site),
         },
       }).catch(() => {});
@@ -149,7 +167,7 @@ export function VoobBusca({
             return true;
           });
           onEstado((e) => ({ ...e, resultados: [...e.resultados, ...novos], aviso: r.aviso ?? e.aviso }));
-          onUso(r.uso);
+          onUso({ uso: r.uso, cotaEmpresa: r.cotaEmpresa });
           token = r.nextPageToken;
           if (!token) break;
         } catch (e) {
@@ -192,10 +210,10 @@ export function VoobBusca({
           return { ...x, situacao };
         }),
       );
-      toast(`Base: ${resumoInsercao(r.contagem)}.`, "success", (r.contagem.novo ?? 0) > 0 ? { rotulo: "Ver a base", onClick: () => onIr("leads") } : undefined);
+      toast(`Encontradas: ${resumoInsercao(r.contagem)}.`, "success", (r.contagem.novo ?? 0) > 0 ? { rotulo: "Ver as encontradas", onClick: () => onIr("leads") } : undefined);
       onBaseMudou();
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Não deu para pôr na base agora.", "error");
+      toast(e instanceof ApiError ? e.message : "Não deu para guardar agora.", "error");
     } finally {
       setGravando(false);
     }
@@ -233,8 +251,8 @@ export function VoobBusca({
   return (
     <div className="space-y-5">
       <Titulo
-        titulo="Nova prospecção"
-        texto={`Escolha quem procurar. O Radar busca no Google e já tira quem é cliente, lead ou já conversou com a ${cfg?.empresa.nome ?? "empresa"}.`}
+        titulo="Buscar empresas"
+        texto={`Escolha quem procurar. O Radar busca no Google e já tira quem é cliente, lead ou já conversou com a ${cfg?.empresa.nome ?? "empresa"}. Com o Radar ligado, ele também busca sozinho nos dias de envio.`}
       />
 
       {/* O público */}
@@ -242,7 +260,7 @@ export function VoobBusca({
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-5">
             <div>
-              <p className="text-sm font-semibold text-ink">Segmentos</p>
+              <p className="text-sm font-semibold text-ink">Que tipo de empresa</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {SEGMENTOS.map((s) => (
                   <Chip key={s.id} ativo={segmentos.includes(s.id)} onClick={() => setSegmentos((x) => alternar(x, s.id))} title={s.termos.join(", ")}>
@@ -269,7 +287,7 @@ export function VoobBusca({
                   <input
                     value={novoTermo}
                     onChange={(e) => setNovoTermo(e.target.value)}
-                    placeholder="Outro termo (ex.: pilates)"
+                    placeholder="Ex.: pizzaria, pilates"
                     maxLength={60}
                     className={cx(inputClass, "h-8 w-56 py-1 text-xs")}
                   />
@@ -278,46 +296,49 @@ export function VoobBusca({
                   </Button>
                 </form>
               </div>
-              <p className="mt-2 text-xs text-muted">{termos.length ? `${termos.length} termos: ${termos.join(", ")}.` : "Escolha pelo menos um segmento ou termo."}</p>
+              <p className="mt-2 text-xs text-muted">{termos.length ? `${termos.length} ${termos.length === 1 ? "termo" : "termos"}: ${termos.join(", ")}.` : "Escreva um tipo de empresa ou escolha um dos atalhos."}</p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="voob-cidade" className="text-sm font-semibold text-ink">
-                  Cidade
-                </label>
-                <div className="relative mt-2">
-                  <MapPin className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-                  <input id="voob-cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} className={cx(inputClass, "pl-9")} maxLength={80} />
-                </div>
+            <div className="max-w-sm">
+              <label htmlFor="voob-cidade" className="text-sm font-semibold text-ink">
+                Cidade
+              </label>
+              <div className="relative mt-2">
+                <MapPin className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+                <input id="voob-cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} className={cx(inputClass, "pl-9")} maxLength={80} />
               </div>
-              <div className="sm:pt-7">
-                <Toggle checked={soSemSite} onChange={setSoSemSite} label="Só quem não tem site" hint="Sem site ou só com rede social: é para eles a 1ª mensagem." />
-                {temMensagemDoSite && (
-                  <div className="mt-3">
-                    <Toggle
-                      checked={comDesatualizado}
-                      onChange={setComDesatualizado}
-                      label="Também site desatualizado"
-                      hint="Depois do Raio-X: quem tem site que não abre, sem versão de celular, sem cadeado ou parado no tempo recebe a mensagem do site."
-                    />
+            </div>
+
+            <details className="rounded-xl ring-1 ring-line" open={filtrosAtivos > 0 || undefined}>
+              <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-ink">
+                Mais filtros {filtrosAtivos > 0 && <span className="font-normal text-muted">· {filtrosAtivos} ligado{filtrosAtivos > 1 ? "s" : ""}</span>}
+              </summary>
+              <div className="space-y-4 px-3 pb-3">
+                <Toggle checked={soSemSite} onChange={setSoSemSite} label="Só quem não tem site" hint="Sem site ou só com rede social." />
+                {temMensagemDoSite && soSemSite && (
+                  <Toggle
+                    checked={comDesatualizado}
+                    onChange={setComDesatualizado}
+                    label="Também site desatualizado"
+                    hint="Depois do Raio-X: quem tem site que não abre, sem versão de celular, sem cadeado ou parado no tempo recebe a mensagem do site."
+                  />
+                )}
+                {bh && (
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      Bairros <span className="font-normal text-muted">(opcional: o Google mostra até 60 por busca; por bairro acha mais)</span>
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {BAIRROS_BH.map((b) => (
+                        <Chip key={b} ativo={bairros.includes(b)} onClick={() => setBairros((x) => alternar(x, b))}>
+                          {b}
+                        </Chip>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-semibold text-ink">
-                Bairros <span className="font-normal text-muted">(opcional: o Google mostra até 60 por busca; por bairro acha mais)</span>
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {BAIRROS_BH.map((b) => (
-                  <Chip key={b} ativo={bairros.includes(b)} onClick={() => setBairros((x) => alternar(x, b))}>
-                    {b}
-                  </Chip>
-                ))}
-              </div>
-            </div>
+            </details>
           </div>
 
           {/* Resumo e botão */}
@@ -328,11 +349,20 @@ export function VoobBusca({
                 <b className="text-ink">{n(tarefas.length)}</b> {tarefas.length === 1 ? "busca" : "buscas"} ({n(termos.length)} termos × {n(lugares.length)}{" "}
                 {lugares.length === 1 ? "lugar" : "lugares"}), até <b className="text-ink">{n(maximo)}</b> consultas do Google.
               </p>
+              {restaEmpresa !== null && (
+                <p className={cx("text-xs", semCotaEmpresa ? "font-semibold text-red-600" : passaDaEmpresa ? "font-semibold text-amber-700" : "text-muted")}>
+                  {semCotaEmpresa
+                    ? "As buscas deste mês acabaram. Com o Radar ligado, as empresas que já foram encontradas continuam sendo chamadas."
+                    : passaDaEmpresa
+                      ? `Restam ${n(restaEmpresa)} buscas no mês: a busca para quando acabarem. Tire termos para caber.`
+                      : `Restam ${n(restaEmpresa)} de ${n(cota?.limite ?? 0)} buscas neste mês.`}
+                </p>
+              )}
               {uso && (
-                <p className={cx("text-xs", semCota ? "font-semibold text-red-600" : "text-muted")}>
-                  {semCota
+                <p className={cx("text-xs", semCotaGoogle ? "font-semibold text-red-600" : "text-muted")}>
+                  {semCotaGoogle
                     ? `Passa das ${n(uso.restantes)} consultas grátis que restam no mês. Tire termos ou bairros.`
-                    : `Restam ${n(uso.restantes)} consultas grátis no mês (a cota é uma só para todas as empresas do Radar).`}
+                    : `Restam ${n(uso.restantes)} consultas grátis do Google no mês (a cota é uma só para todas as empresas do Radar).`}
                 </p>
               )}
             </div>
@@ -342,7 +372,7 @@ export function VoobBusca({
               </Button>
             ) : (
               <Button size="lg" onClick={() => void buscar()} disabled={!tarefas.length || semCota} icon={<Search className="size-5" />}>
-                Buscar no Google
+                Buscar empresas
               </Button>
             )}
           </div>
@@ -418,9 +448,9 @@ export function VoobBusca({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              {!cfg && <span className="text-xs text-amber-700">Sem o Voob CRM ligado, dá para ver a busca mas não pôr na base.</span>}
+              {!cfg && <span className="text-xs text-amber-700">Sem o Voob CRM ligado, dá para ver a busca mas não guardar.</span>}
               <Button onClick={() => void porNaBase()} loading={gravando} disabled={!cfg || !escolhidos.length || estado.rodando} icon={<Database className="size-4" />}>
-                Pôr {n(Math.min(500, escolhidos.length))} na base
+                Guardar {n(Math.min(500, escolhidos.length))} para chamar
               </Button>
             </div>
           </div>

@@ -9,6 +9,8 @@ export const CORES_SUGERIDAS = ["#4e9a1a", "#1d4ed8", "#0f766e", "#7c3aed", "#db
 /** Logo: imagem pequena (o Radar reduz para 128 px antes de mandar). */
 export const LOGO_MAX = 150_000;
 export const LOGO_OK = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+/** 19/11/2026: o logo que a conta já tem no Voob CRM (endereço https). */
+export const LOGO_URL = /^https:\/\/[^\s"'<>]{4,}$/;
 
 export const ROTULO_RESPONDE: Record<QuemResponde, string> = {
   ia: "A IA da Voob, no Voob CRM",
@@ -21,7 +23,8 @@ const texto = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\
 /** Confere os dados da empresa (criar ou mudar). Texto = o que está errado. */
 export function lerDadosDaEmpresa(b: Record<string, unknown>, criar: boolean): Record<string, unknown> | string {
   const d: Record<string, unknown> = {};
-  if (criar || "nome" in b) {
+  // 19/11/2026: ao criar, sem nome = o nome da conta do Voob CRM (o banco completa).
+  if ("nome" in b && !(criar && !texto(b.nome, 60))) {
     const nome = texto(b.nome, 60);
     if (nome.length < 2 || nome.length > 40) return "O nome da empresa precisa ter de 2 a 40 letras.";
     d.nome = nome;
@@ -31,6 +34,16 @@ export function lerDadosDaEmpresa(b: Record<string, unknown>, criar: boolean): R
     d.conta = b.conta;
     const cidade = texto(b.cidade, 80);
     if (cidade) d.cidade = cidade;
+    if (typeof b.pedido === "number" && Number.isInteger(b.pedido) && b.pedido > 0) d.pedido = b.pedido;
+    for (const [k, max] of [["cota_buscas_mes", 100000], ["envios_max_dia", 250]] as const) {
+      if (!(k in b)) continue;
+      const v = b[k];
+      if (v === null) d[k] = null;
+      else if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= max) d[k] = v;
+      else return k === "cota_buscas_mes" ? "Buscas por mês: de 1 a 100.000." : "Envios por dia: de 1 a 250.";
+    }
+    const oferta = texto(b.oferta, 200);
+    if (oferta) d.oferta = oferta;
   }
   if ("cor" in b) {
     if (typeof b.cor !== "string" || !/^#[0-9a-f]{6}$/i.test(b.cor)) return "Cor inválida.";
@@ -38,6 +51,7 @@ export function lerDadosDaEmpresa(b: Record<string, unknown>, criar: boolean): R
   }
   if ("logo" in b) {
     if (b.logo === null || b.logo === "") d.logo = null;
+    else if (typeof b.logo === "string" && LOGO_URL.test(b.logo) && b.logo.length <= 500) d.logo = b.logo;
     else if (typeof b.logo !== "string" || b.logo.length > LOGO_MAX || !LOGO_OK.test(b.logo)) return "O logo precisa ser uma imagem PNG, JPG ou WebP pequena.";
     else d.logo = b.logo;
   }

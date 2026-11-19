@@ -22,6 +22,8 @@ const CHAVES = new Set([
   // 13/11/2026 (white label): a marca, quem responde, quem fala e o modelo escolhido.
   "nome", "cor", "logo", "publico", "responde", "responde_sistema", "agente", "modelo_prefixo", "modelo_prefixo_site", "retomada_prefixo",
   "botao_sim", "botao_nao",
+  // 19/11/2026: o que a empresa oferece, numa frase (a IA escreve a mensagem a partir dela).
+  "oferta",
 ]);
 
 /** Muda a configuração. Corpo: { mudancas: {...} } (só as chaves conhecidas; o banco confere os valores). */

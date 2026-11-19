@@ -233,7 +233,7 @@ export const podeIrParaBase = (r: ResultadoBusca) => r.celular && r.situacao ===
 export type Tom = "brand" | "green" | "amber" | "red" | "gray" | "navy";
 
 export const STATUS: Record<StatusLead, { rotulo: string; tom: Tom; dica: string }> = {
-  novo: { rotulo: "Na base", tom: "gray", dica: "Esperando a vez. Entra na fila de um dia de envio." },
+  novo: { rotulo: "Esperando a vez", tom: "gray", dica: "Encontrada e guardada. Entra na fila de um dia de envio." },
   na_fila: { rotulo: "Na fila de hoje", tom: "brand", dica: "Sai hoje, no horário e no espaçamento combinados." },
   enviado: { rotulo: "Recebeu", tom: "navy", dica: "A primeira mensagem saiu. Ainda não respondeu." },
   respondeu: { rotulo: "Respondeu", tom: "green", dica: "Escreveu de volta: o atendimento está conversando." },
@@ -242,11 +242,13 @@ export const STATUS: Record<StatusLead, { rotulo: string; tom: Tom; dica: string
   parou: { rotulo: "Pediu para parar", tom: "red", dica: "Pediu para não receber mensagens. Conta no freio de saídas." },
   pulado: { rotulo: "Não enviado", tom: "gray", dica: "O porteiro segurou antes de sair (motivo ao lado)." },
   erro: { rotulo: "Erro no envio", tom: "red", dica: "A Meta não entregou (motivo ao lado)." },
-  descartado: { rotulo: "Descartado", tom: "gray", dica: "Tirado da base por alguém da equipe." },
+  descartado: { rotulo: "Descartado", tom: "gray", dica: "Tirado da lista por alguém da equipe." },
+  // 19/11/2026: não chamada em 30 dias; os dados do Google foram apagados (termos do Google Maps).
+  expirado: { rotulo: "Expirada", tom: "gray", dica: "Não foi chamada em 30 dias. Os dados do Google saíram (regra do Google); se aparecer de novo numa busca, volta." },
 };
 
 /** Ordem dos filtros da base. */
-export const ORDEM_STATUS: StatusLead[] = ["interessado", "respondeu", "na_fila", "novo", "enviado", "sem_interesse", "parou", "pulado", "erro", "descartado"];
+export const ORDEM_STATUS: StatusLead[] = ["interessado", "respondeu", "na_fila", "novo", "enviado", "sem_interesse", "parou", "pulado", "erro", "descartado", "expirado"];
 
 const MOTIVOS: Record<string, string> = {
   ja_e_lead: "Já é lead no CRM",
@@ -296,14 +298,14 @@ export const CONFERIDA: Record<string, { rotulo: string; tom: Tom }> = {
 export function rotuloConferida(s: ResultadoBusca["situacao"]): { rotulo: string; tom: Tom } {
   if (s.startsWith("base:")) {
     const st = s.slice(5) as StatusLead;
-    return { rotulo: `Na base · ${STATUS[st]?.rotulo ?? st}`, tom: "brand" };
+    return { rotulo: `Já encontrada · ${STATUS[st]?.rotulo ?? st}`, tom: "brand" };
   }
   return CONFERIDA[s] ?? { rotulo: s, tom: "gray" };
 }
 
 export const RESULTADO_INSERCAO: Record<string, string> = {
-  novo: "entraram na base",
-  repetido: "já estavam na base",
+  novo: "novas para chamar",
+  repetido: "já estavam guardadas",
   ja_no_crm: "já são leads no CRM",
   ja_conversa: "já conversaram com a empresa",
   cliente_ou_equipe: "são clientes ou da equipe",
@@ -361,7 +363,7 @@ export const taxaPct = (parte: number, total: number): number | null => (total >
 export function funil(p: PainelVoob) {
   const t = p.total;
   return [
-    { id: "base", rotulo: "Na base", valor: t.base + t.na_fila },
+    { id: "base", rotulo: "Para chamar", valor: t.base + t.na_fila },
     { id: "enviados", rotulo: "Receberam", valor: t.enviados },
     { id: "responderam", rotulo: "Responderam", valor: t.responderam },
     { id: "interessados", rotulo: "Querem ver", valor: t.interessados },

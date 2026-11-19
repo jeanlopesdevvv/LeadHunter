@@ -54,14 +54,16 @@ export async function iniciarBuscaVoob(empresa: string, origem: "rotina" | "manu
     if (!estado.dia_de_disparo) return nao("nao_e_dia", MOTIVO_FIM_VOOB.nao_e_dia);
   }
   if (estado.rodando) return nao("rodando", MOTIVO_FIM_VOOB.rodando);
-  if (!unidadesDaBusca(estado.perfil).length) return nao("esgotado", "falta escolher o ramo da busca (Primeiros passos, passo 5)");
+  if (!unidadesDaBusca(estado.perfil).length) return nao("esgotado", "falta escolher quem procurar (Começar, passo 1)");
   // "Buscar agora" pela tela: busca pelo menos 1 dia de disparo, mesmo com a base cheia.
   const precisa = origem === "manual" ? Math.max(quantoPrecisa(estado), estado.limite || 20) : quantoPrecisa(estado);
   if (precisa <= 0) return nao("base_cheia", MOTIVO_FIM_VOOB.base_cheia);
   const uso = await obterUso();
-  const podeGastar = consultasPermitidas(estado, uso.restantes);
+  const daEmpresa = await banco.cota(empresa).catch(() => null);
+  const podeGastar = Math.min(consultasPermitidas(estado, uso.restantes), daEmpresa?.restantes ?? Infinity);
   if (podeGastar <= 0) {
     const motivo: MotivoFimVoob = estado.consultas_hoje >= estado.config.max_consultas_dia ? "limite" : "cota";
+    if (daEmpresa?.restantes === 0) return nao("cota", `as ${daEmpresa.limite} buscas do mês desta empresa acabaram`, precisa);
     return nao(motivo, MOTIVO_FIM_VOOB[motivo], precisa);
   }
   const rodada = await banco.buscaAutoIniciar(empresa, origem, quem, precisa, podeGastar);
@@ -81,7 +83,15 @@ async function rodar(empresa: string, rodada: number, estado: EstadoBuscaAuto, p
       pagina: (p) => (cfg.mock ? buscaSimulada(p) : searchPage(p, cfg.placesApiKey)),
       reservar: async () => {
         const res = await reservarConsulta();
-        return res.ok ? { ok: true, concluir: res.concluir } : { ok: false, concluir: () => undefined };
+        if (!res.ok) return { ok: false, concluir: () => undefined };
+        // 19/11/2026: cada consulta feita conta também na cota da empresa.
+        return {
+          ok: true,
+          concluir: (feita: boolean) => {
+            res.concluir(feita);
+            if (feita) void banco.cotaRegistrar(empresa, 1);
+          },
+        };
       },
       raioX: async (urls) => {
         const saida = [];
@@ -115,7 +125,11 @@ async function rodar(empresa: string, rodada: number, estado: EstadoBuscaAuto, p
 export async function resumoBuscaVoob(empresa: string): Promise<{ estado: EstadoBuscaAuto; precisa: number; podeGastar: number; cotaRestante: number | null; cotaLimite: number }> {
   const estado = await banco.buscaAutoEstado(empresa);
   const uso = await obterUso();
-  return { estado, precisa: quantoPrecisa(estado), podeGastar: consultasPermitidas(estado, uso.restantes), cotaRestante: uso.restantes, cotaLimite: uso.limite };
+  const daEmpresa = await banco.cota(empresa).catch(() => null);
+  const podeGastar = Math.min(consultasPermitidas(estado, uso.restantes), daEmpresa?.restantes ?? Infinity);
+  // Empresa com cota própria: a tela mostra a cota dela (a comum do Google é assunto da equipe).
+  if (daEmpresa?.limite != null) return { estado, precisa: quantoPrecisa(estado), podeGastar, cotaRestante: daEmpresa.restantes, cotaLimite: daEmpresa.limite };
+  return { estado, precisa: quantoPrecisa(estado), podeGastar, cotaRestante: uso.restantes, cotaLimite: uso.limite };
 }
 
 /**

@@ -10,7 +10,7 @@ export const COOKIE_CRM = "lh_crm";
 export interface TokensCrm {
   /** access_token (JWT do Voob CRM, vale 1 h). */
   a: string;
-  /** refresh_token (renova o de cima). */
+  /** refresh_token (renova o de cima). "" = veio do menu do CRM (só o access_token): não renova, vale até vencer. */
   r: string;
   /** Quando o access_token vence (ms). */
   e: number;
@@ -37,7 +37,7 @@ export function abrirTokens(v: string | undefined | null): TokensCrm | null {
     const d = createDecipheriv("aes-256-gcm", chave(), Buffer.from(iv, "base64url"));
     d.setAuthTag(Buffer.from(tag, "base64url"));
     const t = JSON.parse(Buffer.concat([d.update(Buffer.from(corpo, "base64url")), d.final()]).toString("utf8")) as Partial<TokensCrm>;
-    if (typeof t.a !== "string" || typeof t.r !== "string" || typeof t.e !== "number" || !t.a || !t.r) return null;
+    if (typeof t.a !== "string" || typeof t.r !== "string" || typeof t.e !== "number" || !t.a) return null;
     return { a: t.a, r: t.r, e: t.e };
   } catch {
     return null;

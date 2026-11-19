@@ -16,7 +16,7 @@ import { UsoMini } from "./UsoCota";
 export type View = "comecar" | "buscar" | "resultados" | "disparo" | "automatico" | "leads" | "painel" | "historico" | "config" | "modelos";
 
 const ITEMS: { id: View; label: string; icon: typeof Search }[] = [
-  { id: "comecar", label: "Primeiros passos", icon: Rocket },
+  { id: "comecar", label: "Começar", icon: Rocket },
   { id: "buscar", label: "Nova prospecção", icon: Search },
   { id: "resultados", label: "Oportunidades", icon: ListChecks },
   { id: "disparo", label: "Disparo", icon: Send },
@@ -48,6 +48,7 @@ export function Shell({
   simulacao,
   planilhaUrl,
   uso,
+  rotuloUso,
   pessoa,
   onSair,
   children,
@@ -64,6 +65,8 @@ export function Shell({
   simulacao: boolean;
   planilhaUrl?: string;
   uso: Uso | null;
+  /** 19/11/2026: "Consultas grátis" (a cota do Google, equipe) ou "Buscas do mês" (a cota da empresa, cliente). */
+  rotuloUso?: string;
   /** Quem entrou com a própria conta (12/11/2026); vazio = senha da equipe. */
   pessoa?: string | null;
   onSair: () => void;
@@ -172,7 +175,7 @@ export function Shell({
         </nav>
         {uso && (
           <div className="mt-auto mb-4">
-            <UsoMini uso={uso} />
+            <UsoMini uso={uso} rotulo={rotuloUso} />
           </div>
         )}
         {!uso && <div className="mt-auto" />}

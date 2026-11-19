@@ -11,7 +11,7 @@ import { enderecoDoCrm } from "./pessoas";
  * (13/11/2026, white label). O Voob CRM confere tudo de novo: quem não gerencia o número daquela conta, não muda nada.
  */
 export const ENTRE_COM_A_CONTA =
-  "Para isso, entre no Radar com a sua conta do Voob CRM (e-mail e senha ou Google). Com a senha da equipe não dá.";
+  "Para isso, abra o Radar pelo menu do Voob CRM (ou entre aqui com o seu e-mail e senha do Voob CRM). Com a senha da equipe não dá.";
 
 export async function funcaoDoCrm<T>(nome: "whatsapp-modelos" | "whatsapp-oficial", corpo: Record<string, unknown>): Promise<T> {
   const cfg = getConfig();

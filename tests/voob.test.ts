@@ -80,9 +80,9 @@ describe("Radar · Voob: do Google para a base", () => {
     expect(b).toMatchObject({ telefone: "5531988880001", negocio: "Clínica Bem Estar", site_situacao: "rede_social", nota: 4.7, avaliacoes: 31, place_id: "place-1", bairro: "Savassi" });
   });
   it("nomes na tela", () => {
-    expect(rotuloConferida("base:na_fila").rotulo).toBe("Na base · Na fila de hoje");
+    expect(rotuloConferida("base:na_fila").rotulo).toBe("Já encontrada · Na fila de hoje");
     expect(rotuloConferida("ja_conversa").rotulo).toBe("Já conversou");
-    expect(resumoInsercao({ repetido: 2, novo: 5, ja_no_crm: 1 })).toBe("5 entraram na base, 2 já estavam na base, 1 já são leads no CRM");
+    expect(resumoInsercao({ repetido: 2, novo: 5, ja_no_crm: 1 })).toBe("5 novas para chamar, 2 já estavam guardadas, 1 já são leads no CRM");
     expect(resumoInsercao({})).toBe("nada mudou");
     expect(motivoLegivel("ja_e_lead")).toBe("Já é lead no CRM");
     expect(motivoLegivel("(#131049) This message was not delivered")).toMatch(/Meta segurou/);
@@ -158,7 +158,9 @@ describe("Radar · Voob: simulação do motor (mesmas regras do banco)", () => {
   it("white label: a empresa nova da simulação começa sem número; a conta tem um para escolher, e o teste liga só para o celular", () => {
     const c = sim.config("clinica-exemplo");
     expect(c.numero).toBeNull();
-    expect(c.numeros_disponiveis).toHaveLength(1);
+    // 19/11/2026: a conta tem o número do atendimento (o Radar avisa) e um só para prospecção.
+    expect(c.numeros_disponiveis).toHaveLength(2);
+    expect(c.numeros_disponiveis.map((x) => Boolean(x.atende))).toEqual([true, false]);
     expect(c.empresa.cor).toBe("#1d4ed8");
     expect(() => sim.definir("clinica-exemplo", { canal_id: "outro" })).toThrow(/não é da conta/);
     const d = sim.definir("clinica-exemplo", { canal_id: c.numeros_disponiveis[0].id });
@@ -189,5 +191,54 @@ describe("Radar · Voob: simulação do motor (mesmas regras do banco)", () => {
     expect(sim.config("clinica-exemplo").modelos.abertura?.motivo).toBe("modelo_em_analise");
     expect(sim.modeloRenomear("clinica-exemplo", m.id, "Primeira").find((x) => x.id === m.id)?.titulo).toBe("Primeira");
     expect(() => sim.modeloArquivar("clinica-exemplo", m.id, true)).toThrow(/mensagem do Radar/);
+  });
+
+  it("Radar fácil (19/11/2026): cliente começa com cota, sem aceite e sem 'quem responde' confirmado", () => {
+    const c = sim.config("clinica-exemplo");
+    expect(c.empresa.cota_buscas_mes).toBe(300);
+    expect(c.empresa.envios_max_dia).toBe(50);
+    expect(c.empresa.responde_confirmado).toBe(false);
+    expect(c.empresa.perfil.site).toBe("tanto_faz");
+    expect(c.empresa.perfil.so_sem_site).toBe(false);
+    expect(c.prontidao.find((p) => p.id === "aceite")?.ok).toBe(false);
+    expect(c.cota).toMatchObject({ limite: 300, usadas: 0, restantes: 300 });
+    expect(sim.cotaRegistrar("clinica-exemplo", 3).restantes).toBe(297);
+    // A Voob não tem teto.
+    expect(sim.cota("voob")).toMatchObject({ limite: null, restantes: null });
+    expect(sim.config("voob").prontidao.find((p) => p.id === "aceite")?.ok).toBe(true);
+  });
+
+  it("Radar fácil: ligar exige o aceite e respeita o máximo de envios; 'quem responde' fica confirmado ao escolher", () => {
+    const n0 = sim.config("clinica-exemplo").numeros_disponiveis[1].id;
+    sim.definir("clinica-exemplo", { canal_id: n0 });
+    expect(() => sim.ligar("clinica-exemplo", true)).toThrow(/aceite/);
+    expect(() => sim.definir("clinica-exemplo", { limite_dia: 80 })).toThrow(/máximo desta empresa é 50/);
+    expect(sim.definir("clinica-exemplo", { responde: "ia" }).empresa.responde_confirmado).toBe(true);
+    expect(sim.definir("clinica-exemplo", { oferta: "  Agenda online  " }).empresa.oferta).toBe("Agenda online");
+    const a = sim.aceitar("clinica-exemplo", "Marina");
+    expect(a.empresa.aceite).toMatchObject({ quem: "Marina", versao: "2026-11-19" });
+    expect(sim.ligar("clinica-exemplo", true).empresa.ligado).toBe(true);
+    // A equipe muda os limites; o limite do dia desce junto.
+    sim.definir("clinica-exemplo", { limite_dia: 40 });
+    const l = sim.limitesDefinir("clinica-exemplo", { envios_max_dia: 30, cota_buscas_mes: 1000 });
+    expect(l.empresa.limite_dia).toBe(30);
+    expect(l.empresa.cota_buscas_mes).toBe(1000);
+    expect(() => sim.limitesDefinir("clinica-exemplo", { envios_max_dia: 900 })).toThrow(/fora do permitido/);
+    expect(() => sim.limitesDefinir("clinica-exemplo", { outro: 1 })).toThrow(/desconhecido/);
+    expect(sim.limitesDefinir("clinica-exemplo", { cota_buscas_mes: null }).empresa.cota_buscas_mes).toBeNull();
+  });
+
+  it("Radar fácil: quem não tem empresa pede; a equipe vê o pedido e, ao criar a empresa da conta, a pessoa passa a ver", () => {
+    expect(sim.empresasLista(sim.CLIENTE_SEM_EMPRESA, false)).toEqual([]);
+    expect(sim.pedir(sim.CLIENTE_SEM_EMPRESA)).toEqual({ ok: true, ja_pedido: false });
+    expect(sim.pedir(sim.CLIENTE_SEM_EMPRESA)).toEqual({ ok: true, ja_pedido: true });
+    const [p] = sim.pedidosLista();
+    expect(p.contas[0].nome).toBe("Imobiliária Horizonte");
+    // Sem nome: vem o da conta.
+    const nova = sim.empresaCriar({ conta: p.contas[0].id, pedido: p.id }, "Jean");
+    expect(nova.empresa.nome).toBe("Imobiliária Horizonte");
+    expect(sim.pedidosLista()).toEqual([]);
+    expect(sim.empresasLista(sim.CLIENTE_SEM_EMPRESA, false).map((e) => e.id)).toEqual([nova.empresa.id]);
+    expect(sim.pedir(sim.CLIENTE_SEM_EMPRESA)).toEqual({ ok: true, ja_tem: true });
   });
 });

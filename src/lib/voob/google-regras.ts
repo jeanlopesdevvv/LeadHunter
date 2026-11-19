@@ -72,16 +72,27 @@ export function enderecoDoGoogle(baseCrm: string, voltaPara: string, desafio: st
   return `${baseCrm.replace(/\/+$/, "")}/auth/v1/authorize?${q}`;
 }
 
-export type ErroGoogle = "google_off" | "google_cancelado" | "google_expirou" | "google_sem_acesso" | "google_falhou" | "google_recusado";
+export type ErroGoogle =
+  | "google_off"
+  | "google_cancelado"
+  | "google_expirou"
+  | "google_sem_acesso"
+  | "google_falhou"
+  | "google_recusado"
+  // 19/11/2026: abrir o Radar pelo menu do Voob CRM.
+  | "crm_expirou"
+  | "crm_falhou";
 
 /** A mensagem da tela de entrada para cada erro da volta do Google. */
 export const MENSAGEM_GOOGLE: Record<ErroGoogle, string> = {
   google_off: "Entrar com o Google ainda não foi configurado no servidor.",
   google_cancelado: "A entrada com o Google foi cancelada. Tente de novo.",
   google_expirou: "A entrada com o Google demorou demais ou foi aberta em outro navegador. Tente de novo.",
-  google_sem_acesso: "A sua conta do Voob CRM não tem acesso ao Radar. Fale com o Jean.",
+  google_sem_acesso: "A sua conta do Voob CRM não tem acesso ao Radar. Fale com a Voob.",
   google_falhou: "Não deu para entrar com o Google agora. Tente de novo ou entre com e-mail e senha.",
   google_recusado: "O Voob CRM não aceitou essa conta do Google. Use a conta do Google ligada ao seu usuário do Voob CRM.",
+  crm_expirou: "O login do Voob CRM venceu. Abra o Radar pelo menu do Voob CRM de novo, ou entre aqui com e-mail e senha.",
+  crm_falhou: "Não deu para abrir o Radar pelo Voob CRM agora. Entre aqui com o seu e-mail e senha do Voob CRM.",
 };
 
 /** O que o Voob CRM respondeu na volta (?error=...) em um dos nossos erros. */

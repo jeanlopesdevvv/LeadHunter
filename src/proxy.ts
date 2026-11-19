@@ -12,6 +12,8 @@ const PUBLIC_PATHS = [
   // 12/11/2026: entrar com o Google (ida e volta do login do Voob CRM).
   "/api/auth/google",
   "/api/auth/google/volta",
+  // 19/11/2026: abrir o Radar pelo menu do Voob CRM (confere a origem e o token sozinho).
+  "/api/auth/crm",
   "/api/health",
   "/api/n8n/trava",
   "/api/n8n/erro",

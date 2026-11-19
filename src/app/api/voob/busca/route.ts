@@ -2,7 +2,7 @@ import { getConfig } from "@/lib/env";
 import { handleError, isString, jsonError, readJson } from "@/lib/http";
 import { searchPage } from "@/lib/places";
 import { obterUso, reservarConsulta } from "@/lib/usage";
-import { conferir, VoobError } from "@/lib/voob/banco";
+import { conferir, cota, cotaRegistrar, VoobError } from "@/lib/voob/banco";
 import { empresaAtual } from "@/lib/voob/empresa-atual";
 import { erroVoob } from "@/lib/voob/http";
 import { buscaSimulada } from "@/lib/voob/mock";
@@ -13,7 +13,8 @@ export const maxDuration = 60;
 
 /**
  * Uma página da busca da Voob no Google (até 20 empresas). Corpo: { termo, lugar, pageToken? }.
- * Gasta 1 consulta das grátis do mês (a mesma cota do Lavacar). Cada celular volta conferido no Voob CRM:
+ * Gasta 1 consulta das grátis do mês (a mesma cota do Lavacar) e, desde 19/11/2026, 1 busca da cota da empresa
+ * (300 por mês para cliente; a equipe aumenta). Cada celular volta conferido no Voob CRM:
  * já está na base? já é lead, cliente ou já conversou com a empresa?
  */
 export async function POST(request: Request) {
@@ -34,12 +35,27 @@ export async function POST(request: Request) {
   } catch (e) {
     return erroVoob(e);
   }
+  // A cota da empresa (banco sem a migração de 19/11: null, vale só a cota comum).
+  let daEmpresa = await cota(emp.id).catch(() => null);
+  if (daEmpresa?.restantes === 0) {
+    const renova = new Date(`${daEmpresa.renova}T12:00:00Z`).toLocaleDateString("pt-BR", { day: "numeric", month: "numeric" });
+    return Response.json(
+      { erro: `As ${daEmpresa.limite} buscas deste mês acabaram. Renovam em ${renova}. Para buscar mais agora, fale com a Voob.`, cota: true, cotaEmpresa: daEmpresa },
+      { status: 429 },
+    );
+  }
   const reserva = await reservarConsulta();
-  if (!reserva.ok) return Response.json({ erro: reserva.mensagem, cota: true, uso: reserva.uso }, { status: 429 });
+  if (!reserva.ok) {
+    // A cota comum do Google é assunto da equipe; o cliente vê só que hoje não deu.
+    const erro = emp.equipe ? reserva.mensagem : "A busca no Google está pausada por hoje. Tente amanhã ou fale com a Voob.";
+    return Response.json({ erro, cota: true, uso: emp.equipe ? reserva.uso : undefined }, { status: 429 });
+  }
   let pagina;
   try {
     pagina = cfg.mock ? await buscaSimulada(input) : await searchPage(input, cfg.placesApiKey);
     reserva.concluir(true);
+    const contada = await cotaRegistrar(emp.id, 1);
+    if (contada) daEmpresa = contada;
   } catch (e) {
     reserva.concluir(false);
     return handleError(e);
@@ -59,5 +75,12 @@ export async function POST(request: Request) {
   const itens: ResultadoBusca[] = abertos.map((l) =>
     resultadoDaBusca(l, l.telefoneTipo !== "celular" ? "fixo" : (conferidos.get(l.telefone) ?? (aviso ? "sem_conferir" : "novo"))),
   );
-  return Response.json({ itens, nextPageToken: pagina.nextPageToken, bruto: pagina.bruto, uso: await obterUso(), aviso: aviso || undefined });
+  return Response.json({
+    itens,
+    nextPageToken: pagina.nextPageToken,
+    bruto: pagina.bruto,
+    uso: emp.equipe ? await obterUso() : undefined,
+    cotaEmpresa: daEmpresa ?? undefined,
+    aviso: aviso || undefined,
+  });
 }

@@ -15,7 +15,9 @@ export type StatusLead =
   | "parou"
   | "pulado"
   | "erro"
-  | "descartado";
+  | "descartado"
+  /** 19/11/2026: achada no Google e nunca chamada em 30 dias (nome e telefone apagados; fica só o identificador do lugar). */
+  | "expirado";
 
 export type AcaoBase = "descartar" | "restaurar" | "priorizar" | "tirar_da_fila";
 
@@ -60,6 +62,34 @@ export interface EmpresaConfig {
   /** Teste no próprio número ligado. */
   teste?: TesteEmpresa | null;
   criado_por?: string | null;
+  // 19/11/2026 (Radar fácil, migração 20261119090000). Opcionais: o banco de antes não manda.
+  /** Buscas no Google por mês (null = sem teto próprio: usa a cota comum). */
+  cota_buscas_mes?: number | null;
+  /** Máximo de envios por dia (null = sem teto além do da Meta). */
+  envios_max_dia?: number | null;
+  /** Aceite de responsabilidade (obrigatório para ligar). */
+  aceite?: { quem: string; em: string; versao: string } | null;
+  /** Quem responde já foi escolhido (não só o padrão). */
+  responde_confirmado?: boolean;
+  /** O que a empresa oferece, em uma frase (a IA usa para escrever a 1ª mensagem). */
+  oferta?: string;
+}
+
+/** A cota de buscas da empresa no mês (19/11/2026). limite/restantes null = sem teto próprio. */
+export interface CotaEmpresa {
+  limite: number | null;
+  usadas: number;
+  restantes: number | null;
+  /** Dia em que renova (YYYY-MM-DD). */
+  renova: string;
+}
+
+/** Um pedido para usar o Radar (quem entrou sem empresa). */
+export interface PedidoRadar {
+  id: number;
+  nome: string;
+  em: string;
+  contas: { id: string; nome: string }[];
 }
 
 export type QuemResponde = "ia" | "crm" | "outro";
@@ -81,6 +111,8 @@ export interface ContaCrm {
   modulo_oficial: boolean;
   /** Já é a conta de uma empresa do Radar (nome dela). */
   empresa: string | null;
+  /** Logo da conta no CRM (https), que vira o logo da empresa. */
+  logo?: string | null;
 }
 
 /** Um modelo (template) do número da empresa, como está na cópia do Voob CRM. */
@@ -140,6 +172,8 @@ export interface NumeroDisponivel {
   final: string;
   crm: string;
   status: string;
+  /** Já atende clientes (5 ou mais conversas em 30 dias que não vieram do Radar): melhor um número só para prospecção. */
+  atende?: boolean;
 }
 
 export interface SituacaoModelo {
@@ -151,7 +185,7 @@ export interface SituacaoModelo {
 }
 
 export interface Prontidao {
-  id: "numero" | "conectado" | "modelo" | "base" | "ligado";
+  id: "numero" | "conectado" | "modelo" | "base" | "ligado" | "aceite";
   ok: boolean;
   texto: string;
 }
@@ -182,6 +216,8 @@ export interface ConfigVoob {
   prontidao: Prontidao[];
   /** Os modelos do número da empresa (migração 20261113100000). */
   modelos_conta?: ModeloConta[];
+  /** A cota de buscas do mês (migração 20261119090000). */
+  cota?: CotaEmpresa;
   /** Só na simulação (MOCK_MODE=1). */
   simulacao?: boolean;
 }
@@ -302,6 +338,8 @@ export interface PainelVoob {
     vendas?: number;
   };
   serie: DiaPainel[];
+  /** 19/11/2026: o que a Meta fez com a 1ª mensagem (migração 20261119090000). */
+  entrega?: EntregaPainel;
   ligado: boolean;
   pausado_motivo: string | null;
   pausado_em: string | null;
@@ -426,4 +464,14 @@ export interface SaudeVoob {
   sugestao: SugestaoLimite;
   /** Só na simulação. */
   simulacao?: boolean;
+}
+
+/** Entregas da 1ª mensagem (19/11/2026). limite_meta = não entregue pelo limite da Meta por pessoa (erro 131049). */
+export interface EntregaPainel {
+  entregues: number;
+  lidas: number;
+  nao_entregues: number;
+  limite_meta: number;
+  /** Achadas no Google e nunca chamadas em 30 dias (saíram da base). */
+  expirados: number;
 }

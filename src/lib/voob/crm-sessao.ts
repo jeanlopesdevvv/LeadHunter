@@ -55,6 +55,8 @@ export async function tokenDoCrm(): Promise<string | null> {
   const t = abrirTokens(jar.get(COOKIE_CRM)?.value);
   if (!t) return null;
   if (!precisaRenovar(t)) return t.a;
+  // Veio do menu do CRM (sem refresh_token): venceu, acabou (abrir pelo menu do CRM de novo renova).
+  if (!t.r) return null;
   const base = enderecoDoCrm(cfg.voobCrmDbUrl, cfg.voobCrmUrl);
   if (!base || !cfg.voobCrmAnonKey) return null;
   try {

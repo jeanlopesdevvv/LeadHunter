@@ -9,7 +9,7 @@ import { AnimatedNumber } from "@/components/motion";
 import { Button, Card, cx } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
 import { custoEstimado, custoPor, funil, reais, taxaPct, textoPausa } from "@/lib/voob/regras";
-import type { ConfigVoob, PainelVoob } from "@/lib/voob/tipos";
+import type { ConfigVoob, EntregaPainel, PainelVoob } from "@/lib/voob/tipos";
 
 import { Carregando, Indicador, Titulo, n } from "./comum";
 
@@ -51,7 +51,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
   if (!p) {
     return (
       <div className="space-y-4">
-        <Titulo titulo="Desempenho" texto="Quem recebeu, quem respondeu, quem quer ver e quem comprou, dia a dia." />
+        <Titulo titulo="Resultados" texto="Quem recebeu, quem respondeu, quem quer ver e quem comprou, dia a dia." />
         {erro ? (
           <Card className="p-5 text-sm text-muted">
             {erro || erroCfg?.mensagem}{" "}
@@ -74,7 +74,7 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
 
   return (
     <div className="space-y-5">
-      <Titulo titulo="Desempenho" texto="Quem recebeu a 1ª mensagem, quem respondeu, quem quer ver como ficaria e quem comprou. Atualiza na hora em que abre.">
+      <Titulo titulo="Resultados" texto="Quem recebeu a 1ª mensagem, quem respondeu, quem quer ver como ficaria e quem comprou. Atualiza na hora em que abre.">
         <div className="flex gap-1" role="group" aria-label="Período">
           {PERIODOS.map((d) => (
             <button
@@ -99,11 +99,11 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
 
       {semEnvio ? (
         <Card className="entrar p-6 text-sm text-muted sm:p-8" style={{ "--i": 0 } as CSSProperties}>
-          <p className="text-base font-bold text-ink">Os números aparecem aqui depois do primeiro disparo.</p>
+          <p className="text-base font-bold text-ink">Os números aparecem aqui depois das primeiras mensagens.</p>
           <p className="mt-1">
-            Na base agora: <b className="text-ink">{n(p.total.base_pronta)}</b> empresas para chamar.{" "}
-            <button className="font-semibold text-brand-700 underline" onClick={() => onIr(p.total.base_pronta ? "disparo" : "buscar")}>
-              {p.total.base_pronta ? "Ver o disparo" : "Fazer uma busca"}
+            Encontradas para chamar agora: <b className="text-ink">{n(p.total.base_pronta)}</b>.{" "}
+            <button className="font-semibold text-brand-700 underline" onClick={() => onIr(p.total.base_pronta ? "disparo" : "comecar")}>
+              {p.total.base_pronta ? "Ver os envios" : "Ir para o Começar"}
             </button>
           </p>
         </Card>
@@ -190,6 +190,8 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
             </div>
           </Card>
 
+          {p.entrega && <CartaoEntrega e={p.entrega} />}
+
           <Card className="entrar p-5 sm:p-6" style={{ "--i": 7 } as CSSProperties}>
             <GraficoEnvios
               dias={p.serie.map((d) => ({ dia: d.dia, enviados: d.enviados, segundos: d.retomadas, responderam: d.responderam, saidas: d.pararam, erros: 0 }))}
@@ -198,5 +200,46 @@ export function VoobPainel({ cfg, erroCfg, onIr }: { cfg: ConfigVoob | null; err
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Entrega pela Meta (19/11/2026): entregues, lidas e não entregues. A Meta segura mensagem de marketing para quem já
+ * recebeu muitas de outras empresas (limite por pessoa, erro 131049): não é culpa do número e não adianta repetir.
+ */
+function CartaoEntrega({ e }: { e: EntregaPainel }) {
+  const total = e.entregues + e.nao_entregues;
+  if (!total && !e.expirados) return null;
+  return (
+    <Card className="entrar p-5 sm:p-6" style={{ "--i": 7 } as CSSProperties}>
+      <p className="text-base font-bold text-ink">Entrega pela Meta</p>
+      <p className="mt-0.5 text-xs text-muted">O que aconteceu com cada mensagem depois que saiu.</p>
+      <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+        <div className="rounded-xl bg-surface p-3">
+          <p className="text-xl font-bold text-ink tabular-nums">{n(e.entregues)}</p>
+          <p className="text-xs text-muted">entregues{total ? ` · ${Math.round((e.entregues / total) * 100)}%` : ""}</p>
+        </div>
+        <div className="rounded-xl bg-surface p-3">
+          <p className="text-xl font-bold text-ink tabular-nums">{n(e.lidas)}</p>
+          <p className="text-xs text-muted">lidas</p>
+        </div>
+        <div className="rounded-xl bg-surface p-3">
+          <p className={cx("text-xl font-bold tabular-nums", e.nao_entregues ? "text-amber-700" : "text-ink")}>{n(e.nao_entregues)}</p>
+          <p className="text-xs text-muted">não entregues</p>
+        </div>
+      </div>
+      {e.limite_meta > 0 && (
+        <p className="mt-3 text-xs text-muted">
+          {n(e.limite_meta)} {e.limite_meta === 1 ? "não chegou" : "não chegaram"} porque a pessoa já recebeu muitas mensagens de marketing de outras empresas (limite da
+          Meta por pessoa). Não é problema do número e o Radar não insiste.
+        </p>
+      )}
+      {e.expirados > 0 && (
+        <p className="mt-2 text-xs text-muted">
+          {n(e.expirados)} {e.expirados === 1 ? "empresa encontrada não foi chamada" : "empresas encontradas não foram chamadas"} em 30 dias e {e.expirados === 1 ? "saiu" : "saíram"} da
+          lista (regra do Google para os dados das buscas).
+        </p>
+      )}
+    </Card>
   );
 }

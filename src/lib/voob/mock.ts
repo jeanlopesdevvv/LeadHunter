@@ -9,6 +9,8 @@ import { SERVE_PARA_ABERTURA } from "./regras";
 import type {
   AcaoBase,
   ContaCrm,
+  CotaEmpresa,
+  PedidoRadar,
   ModeloConta,
   NumeroDisponivel,
   ConfigBuscaAuto,
@@ -49,6 +51,8 @@ interface Estado {
   rodadas: RodadaBuscaAuto[];
   feitas: (FeitaBuscaVoob & { em: number; consultas: number })[];
   saudeLida: number | null;
+  /** 19/11/2026: buscas no Google feitas no mês (a cota da empresa). */
+  cotaUsadas: number;
 }
 
 /** Uma empresa da simulação: o resumo do seletor e quem vê (ids de conta do CRM simulado). */
@@ -58,10 +62,17 @@ interface EmpresaMock {
   clientes: string[];
 }
 
-const g = globalThis as unknown as { __radarVoobMock?: Map<string, Estado>; __radarVoobMockEmpresas?: EmpresaMock[]; __radarVoobMockRodada?: number };
+const g = globalThis as unknown as {
+  __radarVoobMock?: Map<string, Estado>;
+  __radarVoobMockEmpresas?: EmpresaMock[];
+  __radarVoobMockRodada?: number;
+  __radarVoobMockPedidos?: (PedidoRadar & { user: string; atendido: boolean })[];
+};
 
 /** O cliente da simulação (entra com um e-mail que tenha "cliente"). */
 export const CLIENTE_SIMULADO = "00000000-0000-4000-8000-00000000000c";
+/** Cliente da Voob ainda sem o Radar liberado (e-mail com "novo"): vê o pedido de liberação. */
+export const CLIENTE_SEM_EMPRESA = "00000000-0000-4000-8000-00000000000d";
 
 function empresasMock(): EmpresaMock[] {
   if (g.__radarVoobMockEmpresas) return g.__radarVoobMockEmpresas;
@@ -220,7 +231,12 @@ function estadoDaVoob(): Estado {
       : [],
     feitas: [],
     saudeLida: rodando ? agora - 40 * 60_000 : null,
+    cotaUsadas: 0,
   };
+  Object.assign(e.empresa, {
+    responde_confirmado: true, cota_buscas_mes: null, envios_max_dia: null, oferta: "Site, CRM e agente de IA no WhatsApp",
+    aceite: { quem: "Voob", em: iso(agora - 86_400_000), versao: "2026-11-19" },
+  });
   if (rodando) {
     e.empresa.ligado = true;
     e.empresa.ligado_em = iso(agora - 9 * DIA);
@@ -266,11 +282,17 @@ function estadoNovo(m: EmpresaMock): Estado {
     empresa: {
       ...base, id: m.resumo.id, nome: m.resumo.nome, agente: m.resumo.agente, cor: m.resumo.cor, logo: m.resumo.logo, publico: m.resumo.publico,
       modelo_prefixo: `${pref}_abertura`, modelo_prefixo_site: `${pref}_abertura`, retomada_prefixo: `${pref}_retomada`, botao_sim: "Quero ver", botao_nao: "Agora não",
-      perfil: { cidade: "Belo Horizonte, MG", segmentos: [], termos_extras: [], site: "sem_site", so_sem_site: true },
+      perfil: { cidade: "Belo Horizonte, MG", segmentos: [], termos_extras: [], site: "tanto_faz", so_sem_site: false },
+      situacoes_site: ["com_site", "desatualizado", "nao_conferido", "rede_social", "sem_site"],
       responde: "ia", responde_sistema: null, site_id: `5${String(hash(m.resumo.id) % 1e7).padStart(7, "0")}-0000-4000-8000-000000000000`, conta: m.resumo.conta, teste: null,
+      cota_buscas_mes: 300, envios_max_dia: 50, aceite: null, responde_confirmado: false, oferta: "",
     },
     numero: null,
-    numerosConta: [numero],
+    // O número que a conta já usa no atendimento (o Radar avisa) e um só para prospecção.
+    numerosConta: [
+      { ...numero, nome: `${m.resumo.conta ?? m.resumo.nome} (atendimento)` },
+      { ...numero, id: numero.id.replace(/.$/, "9"), nome: "Prospecção", final: String(Number(numero.final) + 1).slice(-4) },
+    ],
     modelos: [],
     leads: [],
     enviadosHoje: 0,
@@ -278,6 +300,7 @@ function estadoNovo(m: EmpresaMock): Estado {
     rodadas: [],
     feitas: [],
     saudeLida: null,
+    cotaUsadas: 0,
   };
 }
 
@@ -333,7 +356,7 @@ export function config(id: string): ConfigVoob {
   const pronta = e.leads.filter((l) => l.status === "novo" && e.empresa.situacoes_site.includes(l.site_situacao)).length;
   const prox = proximaAbertura(e.empresa);
   const abertura = situacaoDoModelo(e, e.empresa.modelo_prefixo);
-  const numeros: NumeroDisponivel[] = e.numerosConta.map((n) => ({ id: n.id, nome: n.nome, final: n.final, crm: n.crm ?? "", status: n.status }));
+  const numeros: NumeroDisponivel[] = e.numerosConta.map((n) => ({ id: n.id, nome: n.nome, final: n.final, crm: n.crm ?? "", status: n.status, atende: id !== "voob" && n.nome.endsWith("(atendimento)") }));
   return {
     empresa: { ...e.empresa },
     numero: e.numero ? { ...e.numero, teste: Boolean(e.empresa.teste), teste_qtd: e.empresa.teste ? 1 : 0 } : null,
@@ -358,12 +381,14 @@ export function config(id: string): ConfigVoob {
     },
     base: contagem(e.leads),
     base_pronta: pronta,
+    cota: cota(id),
     simulacao: true,
     prontidao: [
       { id: "numero", ok: Boolean(e.numero), texto: "Número escolhido" },
       { id: "conectado", ok: Boolean(e.numero?.conectado), texto: "Número conectado" },
       { id: "modelo", ok: Boolean(abertura?.ok), texto: "Primeira mensagem aprovada pela Meta" },
-      { id: "base", ok: pronta > 0, texto: "Empresas na base para chamar" },
+      { id: "base", ok: pronta > 0, texto: "Empresas encontradas para chamar" },
+      { id: "aceite", ok: Boolean(e.empresa.aceite), texto: "Aceite de responsabilidade" },
       { id: "ligado", ok: e.empresa.ligado, texto: "Radar ligado" },
     ],
   };
@@ -371,7 +396,7 @@ export function config(id: string): ConfigVoob {
 
 const CHAVES = new Set(["limite_dia", "dias", "hora_inicio", "hora_fim", "intervalo_min", "situacoes_site", "modelo_prefixo", "retomada_ligada",
   "retomada_prefixo", "retomada_dias", "botao_sim", "botao_nao", "freio_saidas_pct", "freio_minimo", "perfil", "canal_id", "agente", "modelo_prefixo_site",
-  "nome", "cor", "logo", "publico", "responde", "responde_sistema"]);
+  "nome", "cor", "logo", "publico", "responde", "responde_sistema", "oferta"]);
 
 const recusa = (texto: string) => Object.assign(new Error(texto), { code: "P0001" });
 
@@ -383,6 +408,9 @@ export function definir(id: string, m: Record<string, unknown>): ConfigVoob {
   if ("cor" in m && !/^#[0-9a-f]{6}$/i.test(String(m.cor))) throw recusa("Valor fora do permitido na configuração.");
   if ("responde" in m && !["ia", "crm", "outro"].includes(String(m.responde))) throw recusa("Valor fora do permitido na configuração.");
   if ("nome" in m && (String(m.nome ?? "").trim().length < 2 || String(m.nome).trim().length > 40)) throw recusa("O nome da empresa precisa ter de 2 a 40 letras.");
+  if ("limite_dia" in m && e.empresa.envios_max_dia && Number(m.limite_dia) > e.empresa.envios_max_dia) throw recusa(`O máximo desta empresa é ${e.empresa.envios_max_dia} mensagens por dia.`);
+  if ("responde" in m) e.empresa.responde_confirmado = true;
+  if ("oferta" in m) m = { ...m, oferta: String(m.oferta ?? "").trim().slice(0, 200) };
   const { canal_id, ...resto } = m;
   if (canal_id !== undefined) {
     const n = canal_id ? e.numerosConta.find((x) => x.id === canal_id) : null;
@@ -398,6 +426,8 @@ export function definir(id: string, m: Record<string, unknown>): ConfigVoob {
 export function ligar(id: string, ligado: boolean): ConfigVoob {
   const e = estado(id);
   if (ligado && !e.numero) throw Object.assign(new Error("Falta escolher o número da prospecção."), { code: "P0001" });
+  if (ligado && !e.empresa.aceite) throw recusa("Antes de ligar, confirme o aceite: a empresa responde pelas mensagens e por quem recebe.");
+  if (ligado && e.empresa.envios_max_dia && e.empresa.limite_dia > e.empresa.envios_max_dia) e.empresa.limite_dia = e.empresa.envios_max_dia;
   e.empresa.ligado = ligado;
   if (ligado) Object.assign(e.empresa, { ligado_em: iso(Date.now()), pausado_em: null, pausado_motivo: null });
   else {
@@ -543,6 +573,11 @@ export function painel(id: string, dias: number): PainelVoob {
       vendas: c((l) => noPeriodo(l.vendeu_em ?? null)),
     },
     serie,
+    entrega: (() => {
+      const env = c((l) => Boolean(l.enviado_em));
+      const nao = Math.round(env * 0.04);
+      return { entregues: env - nao, lidas: Math.round(env * 0.71), nao_entregues: nao, limite_meta: Math.round(nao / 2), expirados: c((l) => l.status === "expirado") };
+    })(),
     ligado: e.empresa.ligado,
     pausado_motivo: e.empresa.pausado_motivo,
     pausado_em: e.empresa.pausado_em,
@@ -722,6 +757,7 @@ export function saudeAtualizar(id: string): SaudeVoob {
 export function __reiniciarSimulacao() {
   g.__radarVoobMock = undefined;
   g.__radarVoobMockEmpresas = undefined;
+  g.__radarVoobMockPedidos = undefined;
 }
 
 // ---------------------------------------------------------------- empresas (white label), simuladas
@@ -756,7 +792,7 @@ export function empresaVer(id: string, userId: string | null, equipe: boolean): 
 const CONTAS: ContaCrm[] = [
   { id: "b6e69f06-1460-4539-8693-f4fc66b220a6", nome: "Voob Prospecção", oficial: true, modulo_oficial: true, empresa: "Voob" },
   { id: "50000000-0000-4000-8000-0000000000c1", nome: "Clínica Exemplo", oficial: true, modulo_oficial: true, empresa: "Clínica Exemplo" },
-  { id: "50000000-0000-4000-8000-0000000000c2", nome: "Imobiliária Horizonte", oficial: false, modulo_oficial: true, empresa: null },
+  { id: "50000000-0000-4000-8000-0000000000c2", nome: "Imobiliária Horizonte", oficial: false, modulo_oficial: true, empresa: null, logo: null },
   { id: "50000000-0000-4000-8000-0000000000c3", nome: "Pet Shop Patinhas", oficial: false, modulo_oficial: false, empresa: null },
 ];
 
@@ -771,10 +807,10 @@ function slug(nome: string): string {
 }
 
 export function empresaCriar(dados: Record<string, unknown>, quem: string): ConfigVoob {
-  const nome = String(dados.nome ?? "").replace(/\s+/g, " ").trim();
-  if (nome.length < 2 || nome.length > 40) throw recusa("O nome da empresa precisa ter de 2 a 40 letras.");
   const conta = CONTAS.find((c) => c.id === dados.conta);
   if (!conta) throw recusa("Escolha a conta do Voob CRM da empresa.");
+  const nome = (String(dados.nome ?? "").replace(/\s+/g, " ").trim() || conta.nome).slice(0, 40);
+  if (nome.length < 2) throw recusa("O nome da empresa precisa ter de 2 a 40 letras.");
   const cor = typeof dados.cor === "string" && dados.cor ? dados.cor : "#4e9a1a";
   if (!/^#[0-9a-f]{6}$/i.test(cor)) throw recusa("Algum dado está fora do permitido (cor, logo ou texto grande demais).");
   const base = slug(nome);
@@ -793,7 +829,70 @@ export function empresaCriar(dados: Record<string, unknown>, quem: string): Conf
   e.empresa.perfil = { ...e.empresa.perfil, cidade: String(dados.cidade ?? "").trim() || "Belo Horizonte, MG" };
   if (dados.responde) e.empresa.responde = dados.responde as "ia" | "crm" | "outro";
   if (!conta.oficial) e.numerosConta = [];
+  if (typeof dados.envios_max_dia === "number") Object.assign(e.empresa, { envios_max_dia: dados.envios_max_dia, limite_dia: Math.min(20, dados.envios_max_dia) });
+  if (typeof dados.cota_buscas_mes === "number") e.empresa.cota_buscas_mes = dados.cota_buscas_mes;
+  // O pedido de quem tem essa conta (na simulação: o cliente sem empresa, se pediu) vira atendido e ele passa a ver.
+  for (const p of pedidosMock()) {
+    if (!p.atendido && (String(p.id) === String(dados.pedido) || p.contas.some((c) => c.id === conta.id))) {
+      p.atendido = true;
+      empresasMock().find((m) => m.resumo.id === id)?.clientes.push(p.user);
+    }
+  }
   return config(id);
+}
+
+// ---------------------------------------------------------------- Radar fácil (19/11/2026), simulado
+
+export function cota(id: string): CotaEmpresa {
+  const e = estado(id);
+  const d = new Date();
+  const renova = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+  const limite = e.empresa.cota_buscas_mes ?? null;
+  return { limite, usadas: e.cotaUsadas, restantes: limite === null ? null : Math.max(0, limite - e.cotaUsadas), renova };
+}
+
+export function cotaRegistrar(id: string, n: number): CotaEmpresa {
+  estado(id).cotaUsadas += Math.max(0, n);
+  return cota(id);
+}
+
+export function aceitar(id: string, quem: string): ConfigVoob {
+  estado(id).empresa.aceite = { quem, em: iso(Date.now()), versao: "2026-11-19" };
+  return config(id);
+}
+
+export function limitesDefinir(id: string, m: Record<string, unknown>): ConfigVoob {
+  const e = estado(id);
+  for (const k of Object.keys(m)) if (k !== "cota_buscas_mes" && k !== "envios_max_dia") throw recusa(`Campo desconhecido: ${k}.`);
+  const num = (v: unknown, max: number) => {
+    if (v === null) return null;
+    const x = Number(v);
+    if (!Number.isInteger(x) || x < 1 || x > max) throw recusa("Limite fora do permitido (buscas: 1 a 100.000; envios por dia: 1 a 250).");
+    return x;
+  };
+  if ("cota_buscas_mes" in m) e.empresa.cota_buscas_mes = num(m.cota_buscas_mes, 100000);
+  if ("envios_max_dia" in m) e.empresa.envios_max_dia = num(m.envios_max_dia, 250);
+  if (e.empresa.envios_max_dia) e.empresa.limite_dia = Math.min(e.empresa.limite_dia, e.empresa.envios_max_dia);
+  e.empresa.updated_at = iso(Date.now());
+  return config(id);
+}
+
+function pedidosMock() {
+  if (!g.__radarVoobMockPedidos) g.__radarVoobMockPedidos = [];
+  return g.__radarVoobMockPedidos;
+}
+
+export function pedir(userId: string): { ok: boolean; ja_pedido?: boolean; ja_tem?: boolean } {
+  if (empresasMock().some((m) => m.clientes.includes(userId))) return { ok: true, ja_tem: true };
+  if (pedidosMock().some((p) => p.user === userId && !p.atendido)) return { ok: true, ja_pedido: true };
+  pedidosMock().push({ id: pedidosMock().length + 1, user: userId, nome: "Marina Novo", em: iso(Date.now()), contas: [{ id: CONTAS[2].id, nome: CONTAS[2].nome }], atendido: false });
+  return { ok: true, ja_pedido: false };
+}
+
+export function pedidosLista(): PedidoRadar[] {
+  return pedidosMock()
+    .filter((p) => !p.atendido)
+    .map(({ id, nome, em, contas: cs }) => ({ id, nome, em, contas: cs }));
 }
 
 export function modeloRenomear(id: string, modelo: string, titulo: string): ModeloConta[] {

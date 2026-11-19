@@ -10,6 +10,8 @@ import type { ResumoEmpresaCrm } from "@/lib/empresas";
 import type {
   AcaoBase,
   ContaCrm,
+  CotaEmpresa,
+  PedidoRadar,
   ModeloConta,
   ConfigVoob,
   EntradaBase,
@@ -198,9 +200,15 @@ export async function painel(empresa: string, dias: number): Promise<PainelVoob>
   }, false);
 }
 
-/** Login por pessoa: a conta (id do Voob CRM) é da equipe que usa o Radar? Devolve também o nome. */
-export async function pessoaDoRadar(userId: string): Promise<{ pode: boolean; nome: string | null; equipe?: boolean }> {
-  return noCrm(async (sql) => (await sql`select radar.pessoa(${userId}::uuid) as r`)[0].r as { pode: boolean; nome: string | null; equipe?: boolean }, true);
+/**
+ * Login por pessoa: a conta (id do Voob CRM) pode entrar no Radar? Devolve também o nome. Desde 19/11/2026 quem tem conta
+ * no CRM entra mesmo sem empresa ("tem_empresa": false), para pedir o Radar.
+ */
+export async function pessoaDoRadar(userId: string): Promise<{ pode: boolean; nome: string | null; equipe?: boolean; tem_empresa?: boolean }> {
+  return noCrm(
+    async (sql) => (await sql`select radar.pessoa(${userId}::uuid) as r`)[0].r as { pode: boolean; nome: string | null; equipe?: boolean; tem_empresa?: boolean },
+    true,
+  );
 }
 
 // ---------------------------------------------------------------- busca automática (migração 20261112210000)
@@ -335,6 +343,63 @@ export async function buscaAutoEmpresas(): Promise<string[]> {
     if (SEM_EMPRESAS.test(String((e as { message?: string })?.message ?? "") + " " + String((e as { code?: string })?.code ?? "")) || /busca_auto_empresas/.test(String((e as { message?: string })?.message ?? ""))) {
       return [EMPRESA_VOOB];
     }
+    throw traduzir(e);
+  }
+}
+
+// ---------------------------------------------------------------- Radar fácil (migração 20261119090000)
+
+/** A cota de buscas da empresa no mês. Banco antigo (sem a migração): null (vale só a cota comum). */
+export async function cota(empresa: string): Promise<CotaEmpresa | null> {
+  if (usarSimulacao()) return simular(() => simulado.cota(empresa));
+  try {
+    return await noCrmCru(async (sql) => ((await sql`select radar.cota(${empresa}) as r`)[0].r as CotaEmpresa | null) ?? null, true);
+  } catch (e) {
+    if (/radar\.cota|42883/.test(String((e as { message?: string })?.message ?? "") + " " + String((e as { code?: string })?.code ?? ""))) return null;
+    throw traduzir(e);
+  }
+}
+
+/** Conta buscas feitas no Google na cota da empresa. Falha não para a busca (só não conta). */
+export async function cotaRegistrar(empresa: string, n: number): Promise<CotaEmpresa | null> {
+  if (n <= 0) return null;
+  if (usarSimulacao()) return simular(() => simulado.cotaRegistrar(empresa, n));
+  try {
+    return await noCrmCru(async (sql) => ((await sql`select radar.cota_registrar(${empresa}, ${n}) as r`)[0].r as CotaEmpresa | null) ?? null, false);
+  } catch (e) {
+    console.error("[radar-voob] cota:", (e as Error)?.message ?? e);
+    return null;
+  }
+}
+
+/** Aceite de responsabilidade (obrigatório para ligar). */
+export async function aceitar(empresa: string, quem = QUEM_PADRAO): Promise<ConfigVoob> {
+  if (usarSimulacao()) return simular(() => simulado.aceitar(empresa, quem));
+  return noCrm(async (sql) => (await sql`select radar.aceitar(${empresa}, ${quem}) as r`)[0].r as ConfigVoob, false);
+}
+
+/** Limites da empresa (só a equipe): buscas por mês e máximo de envios por dia. */
+export async function limitesDefinir(empresa: string, mudancas: Record<string, unknown>, quem = QUEM_PADRAO): Promise<ConfigVoob> {
+  if (usarSimulacao()) return simular(() => simulado.limitesDefinir(empresa, mudancas));
+  return noCrm(
+    async (sql) => (await sql`select radar.limites_definir(${empresa}, ${JSON.stringify(mudancas)}::jsonb, ${quem}) as r`)[0].r as ConfigVoob,
+    false,
+  );
+}
+
+/** Quem entrou sem empresa pede para usar o Radar. */
+export async function pedir(userId: string): Promise<{ ok: boolean; ja_pedido?: boolean; ja_tem?: boolean }> {
+  if (usarSimulacao()) return simular(() => simulado.pedir(userId));
+  return noCrm(async (sql) => (await sql`select radar.pedir(${userId}::uuid) as r`)[0].r as { ok: boolean; ja_pedido?: boolean; ja_tem?: boolean }, false);
+}
+
+/** Os pedidos em aberto (só a equipe). Banco antigo: nenhum. */
+export async function pedidosLista(): Promise<PedidoRadar[]> {
+  if (usarSimulacao()) return simular(() => simulado.pedidosLista());
+  try {
+    return await noCrmCru(async (sql) => ((await sql`select radar.pedidos_lista() as r`)[0].r as PedidoRadar[]) ?? [], true);
+  } catch (e) {
+    if (/pedidos_lista|42883/.test(String((e as { message?: string })?.message ?? "") + " " + String((e as { code?: string })?.code ?? ""))) return [];
     throw traduzir(e);
   }
 }
